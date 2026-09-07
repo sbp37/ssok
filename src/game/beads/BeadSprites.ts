@@ -216,9 +216,15 @@ function paintSpecular(ctx: CanvasRenderingContext2D, type: BeadType, r: number)
   ctx.fill();
 }
 
-export function getBeadSprite(type: BeadType, color: string, radius: number, dpr: number): Sprite {
+/**
+ * @param soft  blur in css px baked into the sprite (0 = crisp). Beads seen
+ *              through gel use a softened variant; cached per bucket so the
+ *              base texture never pays for a filter at render time.
+ */
+export function getBeadSprite(type: BeadType, color: string, radius: number, dpr: number, soft = 0): Sprite {
   const r = Math.round(radius * 2) / 2;
-  const key = `${type.id}|${color}|${r}|${dpr}`;
+  const sb = Math.round(soft * 4) / 4;
+  const key = `${type.id}|${color}|${r}|${dpr}|${sb}`;
   const hit = cache.get(key);
   if (hit) return hit;
 
@@ -232,6 +238,16 @@ export function getBeadSprite(type: BeadType, color: string, radius: number, dpr
   const ctx = canvas.getContext("2d")!;
   ctx.scale(dpr, dpr);
   ctx.translate(w / 2, h / 2);
+  if (sb > 0 && "filter" in ctx) {
+    // draw the crisp sprite once, then re-draw it blurred into this canvas
+    const crisp = getBeadSprite(type, color, radius, dpr, 0);
+    ctx.filter = `blur(${sb}px)`;
+    ctx.drawImage(crisp.canvas, -crisp.w / 2, -crisp.h / 2, crisp.w, crisp.h);
+    ctx.filter = "none";
+    const sp = { canvas, w, h };
+    cache.set(key, sp);
+    return sp;
+  }
 
   shapePath(ctx, type, r);
   paintBody(ctx, type, color, r);
@@ -273,51 +289,62 @@ export function getShadowSprite(radius: number, dpr: number): Sprite {
 
 const meniscusCache = new Map<string, Sprite>();
 /**
- * Gel climbing the sides of an embedded bead: a soft light ring outside the
- * bead (the raised meniscus catches light) and a shadow crescent over the
- * bead's top edge (the gel rim shades it). Drawn *over* the bead sprite.
+ * Gel around an embedded bead, drawn *over* the bead sprite:
+ *  - a clear light ring just outside (the raised meniscus catches light)
+ *  - contact darkening outside the rim (ambient occlusion)
+ *  - gel creeping over the bead's outer edge, heaviest at the bottom, so the
+ *    bead is visibly *sunk into* the gel rather than resting on it.
  */
 export function getMeniscusSprite(radius: number, dpr: number, gel: string): Sprite {
   const r = Math.round(radius);
   const key = `${r}|${dpr}|${gel}`;
   const hit = meniscusCache.get(key);
   if (hit) return hit;
-  const w = Math.ceil(r * 2.9);
+  const w = Math.ceil(r * 3.0);
   const canvas = document.createElement("canvas");
   canvas.width = canvas.height = Math.ceil(w * dpr);
   const ctx = canvas.getContext("2d")!;
   ctx.scale(dpr, dpr);
   const c = w / 2;
-  // outer light ring
-  const ring = ctx.createRadialGradient(c, c, r * 0.98, c, c, r * 1.3);
-  ring.addColorStop(0, "rgba(255,255,255,0.0)");
-  ring.addColorStop(0.25, "rgba(255,255,255,0.3)");
-  ring.addColorStop(0.6, "rgba(255,255,255,0.1)");
+  const gelA = (a: number) => gel.replace(/[\d.]+\)$/, `${a})`);
+  // contact darkening just outside the bead
+  const ao = ctx.createRadialGradient(c, c + r * 0.1, r * 0.98, c, c + r * 0.1, r * 1.32);
+  ao.addColorStop(0, "rgba(60,50,62,0.34)");
+  ao.addColorStop(0.45, "rgba(60,50,62,0.1)");
+  ao.addColorStop(1, "rgba(60,50,62,0)");
+  ctx.fillStyle = ao;
+  ctx.fillRect(0, 0, w, w);
+  // light ring: the meniscus lip, brightest top-left
+  const ring = ctx.createRadialGradient(c - r * 0.08, c - r * 0.1, r * 1.0, c - r * 0.08, c - r * 0.1, r * 1.34);
+  ring.addColorStop(0, "rgba(255,255,255,0)");
+  ring.addColorStop(0.3, "rgba(255,255,255,0.5)");
+  ring.addColorStop(0.65, "rgba(255,255,255,0.12)");
   ring.addColorStop(1, "rgba(255,255,255,0)");
   ctx.fillStyle = ring;
   ctx.fillRect(0, 0, w, w);
-  // contact darkening just outside the bead (ambient occlusion)
-  const ao = ctx.createRadialGradient(c, c + r * 0.12, r * 0.95, c, c + r * 0.12, r * 1.18);
-  ao.addColorStop(0, "rgba(90,30,80,0.22)");
-  ao.addColorStop(0.5, "rgba(90,30,80,0.06)");
-  ao.addColorStop(1, "rgba(90,30,80,0)");
-  ctx.fillStyle = ao;
-  ctx.fillRect(0, 0, w, w);
-  // gel creeping over the bead's outer edge: the bead is *in* the gel, not on it
   ctx.save();
   ctx.beginPath();
   ctx.arc(c, c, r, 0, Math.PI * 2);
   ctx.clip();
-  const lip = ctx.createRadialGradient(c, c, r * 0.72, c, c, r * 1.02);
-  lip.addColorStop(0, gel.replace(/[\d.]+\)$/, "0)"));
-  lip.addColorStop(0.6, gel.replace(/[\d.]+\)$/, "0.14)"));
-  lip.addColorStop(1, gel.replace(/[\d.]+\)$/, "0.55)"));
+  // gel over the rim, all round
+  const lip = ctx.createRadialGradient(c, c, r * 0.7, c, c, r * 1.02);
+  lip.addColorStop(0, gelA(0));
+  lip.addColorStop(0.6, gelA(0.18));
+  lip.addColorStop(1, gelA(0.7));
   ctx.fillStyle = lip;
   ctx.fillRect(0, 0, w, w);
+  // heavier gel over the lower part – the bead sits down in the material
+  const low = ctx.createRadialGradient(c, c - r * 0.35, r * 0.55, c, c - r * 0.35, r * 1.45);
+  low.addColorStop(0, gelA(0));
+  low.addColorStop(0.6, gelA(0.1));
+  low.addColorStop(1, gelA(0.62));
+  ctx.fillStyle = low;
+  ctx.fillRect(0, 0, w, w);
+  // soft shadow under the top rim (the gel lip shades the bead)
   const cres = ctx.createRadialGradient(c, c + r * 0.55, r * 0.55, c, c + r * 0.3, r * 1.25);
-  cres.addColorStop(0, "rgba(70,20,60,0)");
-  cres.addColorStop(0.7, "rgba(70,20,60,0.04)");
-  cres.addColorStop(1, "rgba(70,20,60,0.22)");
+  cres.addColorStop(0, "rgba(60,50,62,0)");
+  cres.addColorStop(0.72, "rgba(60,50,62,0.04)");
+  cres.addColorStop(1, "rgba(60,50,62,0.22)");
   ctx.fillStyle = cres;
   ctx.fillRect(0, 0, w, w);
   ctx.restore();

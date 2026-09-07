@@ -18,6 +18,8 @@ export interface FlyPath {
   /** pop kick vector (pad-local px) applied during the first ~90ms */
   kx: number;
   ky: number;
+  /** seconds the bead hangs near the socket after the kick before flying off */
+  hang: number;
   /** pad-local position where it popped */
   px: number;
   py: number;
@@ -106,6 +108,8 @@ export interface PadOptions {
   deeper?: boolean;
   /** spread beads out (test pads) */
   spacing?: number;
+  /** force these type ids, cycling (test pads) */
+  forceTypes?: string[];
 }
 
 export function generatePad(padR: number, rng: Rng, opts: PadOptions = {}): Bead[] {
@@ -118,7 +122,8 @@ export function generatePad(padR: number, rng: Rng, opts: PadOptions = {}): Bead
   // choose types first, biggest first for packing
   const picks: { type: BeadType; radius: number }[] = [];
   for (let i = 0; i < surfaceCount; i++) {
-    const type = pickType(rng, { common: 1.25, big: 0.7, odd: 0.8 });
+    const forced = opts.forceTypes?.length ? BEAD_TYPES.find((t) => t.id === opts.forceTypes![i % opts.forceTypes!.length]) : undefined;
+    const type = forced ?? pickType(rng, { common: 1.25, big: 0.7, odd: 0.8 });
     const radius = rng.range(type.radius[0], type.radius[1]) * s;
     picks.push({ type, radius });
   }

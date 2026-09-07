@@ -39,10 +39,12 @@ export interface Dent {
 }
 
 export interface PullInfluence {
+  /** socket position (pad-local) */
   hx: number;
   hy: number;
-  ox: number;
-  oy: number;
+  /** how far the gel around the socket is pulled toward the finger */
+  sx: number;
+  sy: number;
   r: number;
 }
 
@@ -73,7 +75,7 @@ function getSocketSprite(r: number, dpr: number) {
   g.scale(dpr, dpr);
   const cx = size / 2;
   const grad = g.createRadialGradient(cx, cx + rr * 0.12, rr * 0.15, cx, cx, rr * 1.18);
-  grad.addColorStop(0, "rgba(90,40,80,0.22)");
+  grad.addColorStop(0, "rgba(70,60,70,0.22)");
   grad.addColorStop(0.6, "rgba(90,40,80,0.1)");
   grad.addColorStop(0.86, "rgba(90,40,80,0.02)");
   grad.addColorStop(0.92, "rgba(255,255,255,0.16)");
@@ -98,7 +100,7 @@ export class Gel {
   pulls: PullInfluence[] = [];
   fade = 1;
   time = 0;
-  color = { r: 240, g: 184, b: 222 };
+  color = { r: 238, g: 200, b: 226 };
 
   // base texture
   private tex: HTMLCanvasElement | null = null;
@@ -276,10 +278,10 @@ export class Gel {
       const dx = x - p.hx;
       const dy = y - p.hy;
       const d = Math.hypot(dx, dy);
-      // gel is dragged toward the bead being pulled – tent around the hole
-      const g = gauss(d, p.r * 3.6) * 0.5;
-      ox += p.ox * g;
-      oy += p.oy * g;
+      // gel holding the bead is dragged toward the finger – a tent around the socket
+      const g = gauss(d, p.r * 3.8) * 0.62;
+      ox += p.sx * g;
+      oy += p.sy * g;
     }
     for (const sh of this.shocks) {
       const dx = x - sh.x;
@@ -371,7 +373,7 @@ export class Gel {
       const x = Math.cos(a) * R * (0.3 + (i % 3) * 0.12);
       const y = Math.sin(a) * R * (0.3 + ((i + 1) % 3) * 0.12);
       const gg = g.createRadialGradient(x, y, 0, x, y, R * 0.36);
-      gg.addColorStop(0, i % 2 ? "rgba(255,255,255,0.07)" : "rgba(60,0,40,0.035)");
+      gg.addColorStop(0, i % 2 ? "rgba(255,255,255,0.07)" : "rgba(50,40,50,0.03)");
       gg.addColorStop(1, "rgba(0,0,0,0)");
       g.fillStyle = gg;
       g.fillRect(-size / 2, -size / 2, size, size);
@@ -418,7 +420,7 @@ export class Gel {
     for (let i = steps; i >= 1; i--) {
       const k = i / steps;
       this.restPath(ctx, t * k);
-      ctx.fillStyle = this.col(0.92, 0.16 + 0.2 * k);
+      ctx.fillStyle = this.col(0.9, 0.1 + 0.22 * k);
       ctx.fill();
     }
     // light leaking out of the bottom edge
@@ -451,10 +453,10 @@ export class Gel {
     this.restPath(ctx);
     // centre is thin → pale and see-through; rim is thick → deeper colour
     const body = ctx.createRadialGradient(-R * 0.1, -R * 0.15, R * 0.05, 0, 0, R * 1.08);
-    body.addColorStop(0, this.col(0.2, -0.2));
-    body.addColorStop(0.45, this.col(0.3, -0.06));
-    body.addColorStop(0.8, this.col(0.46, 0.03));
-    body.addColorStop(1, this.col(0.66, 0.13));
+    body.addColorStop(0, this.col(0.12, -0.25));
+    body.addColorStop(0.45, this.col(0.2, -0.08));
+    body.addColorStop(0.8, this.col(0.38, 0.03));
+    body.addColorStop(1, this.col(0.62, 0.12));
     ctx.fillStyle = body;
     ctx.fill();
     ctx.save();
@@ -480,8 +482,8 @@ export class Gel {
     // ── gel over the beads
     const tint = ctx.createRadialGradient(-R * 0.15, -R * 0.2, R * 0.1, 0, 0, R * 1.05);
     tint.addColorStop(0, this.col(0.05, -0.1));
-    tint.addColorStop(0.7, this.col(0.1, 0));
-    tint.addColorStop(1, this.col(0.2, 0.08));
+    tint.addColorStop(0.7, this.col(0.09, 0));
+    tint.addColorStop(1, this.col(0.18, 0.08));
     ctx.fillStyle = tint;
     ctx.fillRect(-E, -E, E * 2, E * 2);
     // inner Fresnel glow: a translucent slab's edges pick up ambient light
@@ -518,9 +520,9 @@ export class Gel {
     const ctx = c.getContext("2d")!;
     ctx.scale(dpr, dpr);
     const g = ctx.createRadialGradient(w / 2, h / 2, R * 0.5, w / 2, h / 2, R * 1.16);
-    g.addColorStop(0, "rgba(110,60,95,0.26)");
-    g.addColorStop(0.72, "rgba(110,60,95,0.08)");
-    g.addColorStop(1, "rgba(110,60,95,0)");
+    g.addColorStop(0, "rgba(75,70,78,0.2)");
+    g.addColorStop(0.72, "rgba(75,70,78,0.06)");
+    g.addColorStop(1, "rgba(75,70,78,0)");
     ctx.fillStyle = g;
     ctx.beginPath();
     ctx.ellipse(w / 2, h / 2, R * 1.14, R * 1.04, 0, 0, Math.PI * 2);
@@ -562,9 +564,9 @@ export class Gel {
     ctx.save();
     ctx.translate(this.wobble.x * 0.15, this.thick + R * 0.05);
     const g = ctx.createRadialGradient(0, 0, R * 0.5, 0, 0, R * 1.16);
-    g.addColorStop(0, "rgba(110,60,95,0.26)");
-    g.addColorStop(0.72, "rgba(110,60,95,0.08)");
-    g.addColorStop(1, "rgba(110,60,95,0)");
+    g.addColorStop(0, "rgba(75,70,78,0.2)");
+    g.addColorStop(0.72, "rgba(75,70,78,0.06)");
+    g.addColorStop(1, "rgba(75,70,78,0)");
     ctx.fillStyle = g;
     ctx.beginPath();
     ctx.ellipse(0, 0, R * 1.14, R * 1.04, 0, 0, Math.PI * 2);
@@ -624,9 +626,9 @@ export class Gel {
       const a = k * k;
       this.warp(d.x, d.y, tmp);
       const g = ctx.createRadialGradient(tmp.x, tmp.y, 0, tmp.x, tmp.y, d.r * 1.3);
-      g.addColorStop(0, `rgba(80,30,70,${0.3 * a})`);
-      g.addColorStop(0.6, `rgba(80,30,70,${0.1 * a})`);
-      g.addColorStop(1, "rgba(80,30,70,0)");
+      g.addColorStop(0, `rgba(60,50,62,${0.3 * a})`);
+      g.addColorStop(0.6, `rgba(60,50,62,${0.1 * a})`);
+      g.addColorStop(1, "rgba(60,50,62,0)");
       ctx.fillStyle = g;
       ctx.beginPath();
       ctx.arc(tmp.x, tmp.y, d.r * 1.3, 0, Math.PI * 2);
@@ -656,9 +658,9 @@ export class Gel {
       const rr = 32 * s * (0.7 + 0.3 * p);
       // the dimple: shadow pooled toward the drag direction
       const g = ctx.createRadialGradient(f.x + f.drag.x * 0.25, f.y + f.drag.y * 0.25, 0, f.x, f.y, rr);
-      g.addColorStop(0, `rgba(60,20,50,${0.24 * p})`);
-      g.addColorStop(0.55, `rgba(60,20,50,${0.08 * p})`);
-      g.addColorStop(1, "rgba(60,20,50,0)");
+      g.addColorStop(0, `rgba(55,45,58,${0.24 * p})`);
+      g.addColorStop(0.55, `rgba(55,45,58,${0.08 * p})`);
+      g.addColorStop(1, "rgba(55,45,58,0)");
       ctx.fillStyle = g;
       ctx.beginPath();
       ctx.arc(f.x, f.y, rr, 0, Math.PI * 2);

@@ -1,4 +1,5 @@
 import type { BeadMaterial, PopSound } from "../beads/BeadTypes";
+import { SampleBank, type SampleName } from "./samples";
 
 /**
  * All sound is procedural (Web Audio) – no files to load, and every hit is
@@ -11,6 +12,7 @@ class Sfx {
   private ctx: AudioContext | null = null;
   private master: GainNode | null = null;
   private noise: AudioBuffer | null = null;
+  private bank = new SampleBank();
   enabled = true;
 
   constructor() {
@@ -57,6 +59,22 @@ class Sfx {
       }
     }
     if (this.ctx?.state === "suspended") void this.ctx.resume();
+    if (this.ctx) this.bank.load(this.ctx);
+  }
+
+  /** play a recorded sample if we have one; returns false to ask for the procedural fallback */
+  private sample(name: SampleName, rate = 1, gain = 1, delay = 0) {
+    const buf = this.bank.get(name);
+    if (!buf || !this.ctx || !this.master) return false;
+    const ctx = this.ctx;
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    src.playbackRate.value = rate * this.j(0.07);
+    const g = ctx.createGain();
+    g.gain.value = gain * this.j(0.1);
+    src.connect(g).connect(this.master);
+    src.start(ctx.currentTime + delay);
+    return true;
   }
 
   private get ready() {
@@ -128,14 +146,16 @@ class Sfx {
   /** finger lands on the gel: tiny viscous "뭉" */
   press() {
     if (!this.ready) return;
-    this.burst(0.09 * this.j(0.15), 0.05 * this.j(0.2), { type: "lowpass", freq: 700, q: 0.7, attack: 0.01 });
-    this.tone("sine", 95 * this.j(0.1), 60, 0.07, 0.035);
+    if (this.sample("press", 1, 0.5)) return;
+    this.burst(0.11 * this.j(0.15), 0.045 * this.j(0.2), { type: "lowpass", freq: 520, q: 0.6, attack: 0.018 });
+    this.tone("sine", 85 * this.j(0.1), 55, 0.08, 0.03, { attack: 0.01 });
   }
 
   /** gel starting to give: faint sticky "찌익" */
   stretch(mass: number) {
     if (!this.ready) return;
-    this.burst(0.12 * this.j(0.15), 0.028 * this.j(0.2), {
+    if (this.sample("stretch", 1 / Math.pow(mass, 0.2), 0.5)) return;
+    this.burst(0.14 * this.j(0.15), 0.026 * this.j(0.2), {
       type: "bandpass",
       freq: 320 / Math.sqrt(mass),
       freq1: 900 / Math.sqrt(mass),
@@ -147,9 +167,11 @@ class Sfx {
   /** stick-slip "딱… 딱…" as the bead creeps out */
   tick(mass: number, step: number) {
     if (!this.ready) return;
-    const f = (2600 + step * 180) / Math.pow(mass, 0.35);
-    this.burst(0.018, 0.045 * this.j(0.2), { type: "bandpass", freq: f * this.j(0.08), q: 4 });
-    this.tone("sine", f * 0.5 * this.j(0.08), f * 0.35, 0.025, 0.02);
+    if (this.sample("tick", (1 + step * 0.04) / Math.pow(mass, 0.2), 0.45)) return;
+    const f = (2200 + step * 160) / Math.pow(mass, 0.35);
+    // a tiny woody click: filtered noise with a very short body, no pure tone
+    this.burst(0.014, 0.05 * this.j(0.2), { type: "bandpass", freq: f * this.j(0.08), q: 2.2 });
+    this.burst(0.03, 0.02, { type: "lowpass", freq: 900, q: 0.7 });
   }
 
   pop(kind: PopSound, mass: number, rare = false) {
@@ -157,23 +179,35 @@ class Sfx {
     const m = Math.pow(mass, 0.45);
     const jp = this.j(0.08);
     const jv = this.j(0.1);
+    const big = mass > 1.1;
+    if (kind !== "ting" && this.sample(big ? "pop_big" : "pop_small", 1 / m, 0.9)) {
+      if (rare) this.sample("rare", 1, 0.6, 0.04);
+      return;
+    }
+    // every pop = a suction release (noise, lowpassed) + a short body that drops in pitch + a soft low thump
     switch (kind) {
-      case "pok": // 뽁 – round, bubbly
-        this.tone("sine", (880 / m) * jp, (330 / m) * jp, 0.085, 0.42 * jv, { attack: 0.002 });
-        this.burst(0.025, 0.12 * jv, { freq: 1800 / m, q: 1 });
+      case "pok": // 뽁 – round
+        this.burst(0.035, 0.22 * jv, { type: "lowpass", freq: 2600 / m, freq1: 600 / m, q: 0.8, attack: 0.002 });
+        this.tone("sine", (640 / m) * jp, (240 / m) * jp, 0.07, 0.3 * jv, { attack: 0.003 });
+        this.tone("triangle", (655 / m) * jp, (250 / m) * jp, 0.05, 0.06 * jv, { attack: 0.003, filter: 1500 });
+        this.tone("sine", 140 * jp, 80, 0.06, 0.12 * jv, { attack: 0.004 });
         break;
-      case "ssok": // 쏙 – airy suction then pitch drop
-        this.burst(0.045, 0.14 * jv, { type: "highpass", freq: 1600, q: 0.7, attack: 0.004 });
-        this.tone("sine", (760 / m) * jp, (260 / m) * jp, 0.075, 0.36 * jv, { delay: 0.012 });
+      case "ssok": // 쏙 – airy suction then drop
+        this.burst(0.05, 0.16 * jv, { type: "bandpass", freq: 1800, freq1: 500, q: 0.9, attack: 0.006 });
+        this.tone("sine", (560 / m) * jp, (210 / m) * jp, 0.065, 0.26 * jv, { delay: 0.014, attack: 0.003 });
+        this.tone("sine", 130 * jp, 75, 0.06, 0.1 * jv, { delay: 0.012 });
         break;
       case "pong": // 퐁 – big, hollow
-        this.tone("sine", (520 / m) * jp, (210 / m) * jp, 0.19, 0.5 * jv, { attack: 0.004 });
-        this.tone("triangle", (1040 / m) * jp, (400 / m) * jp, 0.08, 0.12 * jv);
-        this.burst(0.04, 0.1 * jv, { type: "lowpass", freq: 1400, q: 0.8 });
+        this.burst(0.06, 0.16 * jv, { type: "lowpass", freq: 1400 / m, freq1: 400 / m, q: 0.7, attack: 0.004 });
+        this.tone("sine", (420 / m) * jp, (180 / m) * jp, 0.17, 0.42 * jv, { attack: 0.005 });
+        this.tone("triangle", (430 / m) * jp, (185 / m) * jp, 0.12, 0.08 * jv, { attack: 0.005, filter: 1200 });
+        this.tone("sine", 110 * jp, 65, 0.1, 0.16 * jv, { attack: 0.006 });
         break;
-      case "tok": // 톡 – short, hard
-        this.burst(0.022, 0.2 * jv, { freq: (3200 / m) * jp, q: 2.5 });
-        this.tone("sine", (1400 / m) * jp, (700 / m) * jp, 0.045, 0.3 * jv);
+      case "tok": // 톡 – short, hard, woody
+        this.burst(0.02, 0.24 * jv, { type: "bandpass", freq: (2600 / m) * jp, q: 1.6 });
+        this.burst(0.05, 0.1 * jv, { type: "lowpass", freq: 900, q: 0.7 });
+        this.tone("sine", (1000 / m) * jp, (520 / m) * jp, 0.04, 0.2 * jv);
+        this.tone("sine", 150 * jp, 90, 0.05, 0.1 * jv);
         break;
       case "ting": // 띵 ✦ – small bell
         this.tone("sine", 1568 * jp, 1560 * jp, 0.7, 0.28 * jv, { attack: 0.003 });
@@ -191,6 +225,8 @@ class Sfx {
   land(material: BeadMaterial, mass: number) {
     if (!this.ready) return;
     const m = Math.pow(mass, 0.4);
+    const sname: SampleName = material === "glass" ? "land_glass" : material === "metal" ? "land_metal" : material === "shell" ? "land_shell" : "land_plastic";
+    if (this.sample(sname, 1 / m, 0.8)) return;
     const jp = this.j(0.09);
     const jv = this.j(0.12);
     switch (material) {
@@ -218,9 +254,18 @@ class Sfx {
     }
   }
 
+  /** let go of a stretched bead: soft "뭉" as the gel takes it back */
+  release(mass: number) {
+    if (!this.ready) return;
+    if (this.sample("release", 1 / Math.pow(mass, 0.2), 0.5)) return;
+    this.burst(0.07, 0.05, { type: "lowpass", freq: 600, q: 0.7, attack: 0.008 });
+    this.tone("sine", 120 * this.j(0.1), 70, 0.07, 0.06, { attack: 0.006 });
+  }
+
   /** bead slipped out of your fingers: dull "뚝" */
   slipped() {
     if (!this.ready) return;
+    if (this.sample("release", 1, 0.8)) return;
     this.tone("sine", 190 * this.j(0.1), 110, 0.07, 0.3);
     this.burst(0.04, 0.08, { type: "lowpass", freq: 900, q: 0.7 });
   }

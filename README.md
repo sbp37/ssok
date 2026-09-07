@@ -19,11 +19,12 @@ pnpm preview      # 빌드 결과 미리보기 (4173)
 
 ## 테스트 / 튜닝
 
-- **`?test=5`** — 비즈 5개만 넓게 박힌 테스트 패드. 젤 누르기 → 잡기 → 늘리기 → POP → 복원 손맛을 볼 때 쓴다. (`?test=12` 처럼 개수 지정 가능)
+- **`?test=5`** — 감촉이 다른 다섯 종류(작은 비즈 · 큰 진주 · 별 · 투명 구슬 · 길쭉이)가 넓게 박힌 테스트 패드. 젤 누르기 → 잡기 → 늘리기 → POP → 복원 손맛을 비교할 때 쓴다. (`?test=12` 처럼 개수 지정 가능, 종류는 순환)
 - 브라우저 콘솔에서 `window.__ssok` 으로 Game 인스턴스에 접근할 수 있다.
   - `__ssok.debugBeads()` — 잡을 수 있는 비즈의 화면 좌표와 임계 거리(`t1`, `t2`)
   - `__ssok.gel` — 젤 상태 (fingers, wobble, shocks, R)
 - 소리는 첫 터치 이후에 켜진다(브라우저 정책). 진동은 Android Chrome에서만 동작한다.
+- **효과음 샘플 교체**: `public/sfx/manifest.json`의 `samples`에 이름 → 파일을 적고 같은 폴더에 파일을 두면 그 소리만 녹음 샘플로 바뀐다. 이름: `press, stretch, tick, pop_small, pop_big, release, land_glass, land_plastic, land_metal, land_shell, rare`. 없는 이름은 프로시저럴 소리로 폴백. 재생 때마다 pitch/volume이 ±7~10% 흔들린다.
 
 ## 구조
 
@@ -35,7 +36,8 @@ src/game/
   beads/BeadTypes.ts  비즈 카탈로그 — 촉감을 바꾸는 값은 전부 여기 (grip/pull/friction/minSpeed/mass/bounce)
   beads/Bead.ts       비즈 엔티티 + 패드 레이아웃(표면층/깊은층)
   beads/BeadSprites.ts 비즈/그림자/메니스커스 스프라이트 프리렌더
-  physics/pull.ts     붙잡힘 → 미끄러짐(stick-slip) → POP / 미끄러져 빠짐(5~8%) 상태기계
+  physics/pull.ts     붙잡힘(tension, 젤만 늘어남) → 미끄러짐(stick-slip) → POP / 미끄러져 빠짐(5~8%) 상태기계
+  audio/samples.ts    녹음 샘플 뱅크 (manifest 기반, 없으면 프로시저럴 폴백)
   physics/spring.ts   감쇠 스프링
   audio/Sfx.ts        Web Audio 프로시저럴 효과음 (매번 ±5~10% 변형)
   haptics.ts          navigator.vibrate 패턴 + ON/OFF

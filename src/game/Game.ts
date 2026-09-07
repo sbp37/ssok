@@ -38,16 +38,14 @@ class Emitter<E extends object> {
   }
 }
 
-interface Droplet {
-  x: number;
-  y: number;
+/** one thin strand of gel that follows a popped bead for ~90ms, then snaps */
+interface Thread {
   hx: number;
   hy: number;
-  vx: number;
-  vy: number;
-  r: number;
+  bead: Bead;
   t: number;
   life: number;
+  side: number;
 }
 interface Flash {
   x: number;
@@ -81,7 +79,7 @@ export class Game extends Emitter<GameEvents> {
   private pulls = new Map<number, Pull>();
   private fingers = new Map<number, FingerState>();
   private scheduled: { at: number; fn: () => void }[] = [];
-  private droplets: Droplet[] = [];
+  private threads: Thread[] = [];
   private flashes: Flash[] = [];
   private input: PointerInput;
   /** WebGL layer underneath the 2D canvas – draws only the gel mesh + its shadow */
@@ -188,12 +186,19 @@ export class Game extends Emitter<GameEvents> {
     this.pulls.clear();
     const boundary = (th: number) => this.gel.boundary(th);
     this.beads = this.testBeads
-      ? generatePad(this.gel.R, rng, { surface: this.testBeads, deeper: false, spacing: 40, boundary })
+      ? generatePad(this.gel.R, rng, {
+          surface: this.testBeads,
+          deeper: false,
+          spacing: 40,
+          boundary,
+          // three distinct hand-feels side by side, then the two odd ones
+          forceTypes: ["tiny", "pearl", "star", "marble", "long"],
+        })
       : generatePad(this.gel.R, rng, { boundary });
     this.gel.sockets = [];
     this.gel.dents = [];
     this.gel.fade = instant ? 1 : 0.15;
-    this.droplets = [];
+    this.threads = [];
     this.gel.markDirty();
   }
 
@@ -294,18 +299,24 @@ export class Game extends Emitter<GameEvents> {
     const pull = this.pulls.get(p.id);
     if (pull) {
       this.pulls.delete(p.id);
-      this.releaseBead(pull.bead);
+      this.releaseBead(pull.bead, pull);
     }
   };
 
-  private releaseBead(b: Bead) {
+  private releaseBead(b: Bead, pull?: Pull) {
     if (b.state !== "held") return;
     b.state = "embedded";
     b.off.setTarget(0, 0);
     this.gel.markDirty();
-    // let go while stretched → it snaps back and the gel shudders a bit
-    const L = Math.hypot(b.off.x, b.off.y);
-    if (L > 2) this.gel.recoil(-b.off.x * 3, -b.off.y * 3);
+    // let go while stretched → the gel takes the bead back with a small shudder
+    const sx = (pull?.stretch.x ?? 0) + b.off.x;
+    const sy = (pull?.stretch.y ?? 0) + b.off.y;
+    const L = Math.hypot(sx, sy);
+    if (L > 3) {
+      this.gel.recoil(-sx * 2.2, -sy * 2.2);
+      this.gel.shock(b.rx, b.ry, b.radius, Math.min(4, L * 0.25) * this.s);
+      sfx.release(b.type.mass);
+    }
   }
 
   private handlePullEvents(pull: Pull, id: number, events: PullEvent[]) {
@@ -352,14 +363,16 @@ export class Game extends Emitter<GameEvents> {
     b.state = "flying";
     b.lift = 1;
 
-    // kick toward the finger, then arc into the cup
+    // 0ms: freed – kicks toward the finger, hangs there ~150ms so the moment lands, then arcs into the cup
     const kick = b.type.bounce * s * (1 + Math.min(speed, 1400) / 2800);
     const start = this.toCanvas(pos.x + dx * kick, pos.y + dy * kick);
     const end = this.collector.entry;
     const mx = (start.x + end.x) / 2 + dx * 30 * s;
     const my = Math.min(start.y, end.y) - (70 + 60 * Math.random()) * s;
     const dur = (0.46 + b.type.mass * 0.11) * (0.92 + Math.random() * 0.16);
+    const hang = 0.12 + b.type.mass * 0.03;
     b.fly = {
+      hang,
       x0: start.x,
       y0: start.y,
       cx: mx,
@@ -385,27 +398,13 @@ export class Game extends Emitter<GameEvents> {
     if (!deeper) this.gel.sockets.push({ x: b.rx, y: b.ry, r: b.radius * 0.92 });
     this.gel.markDirty();
 
-    // +30ms: gel snaps back the other way, neck tears into droplets, dent appears
+    // one thin strand of gel keeps hold of the bead for ~90ms, then snaps
+    this.threads.push({ hx: b.rx, hy: b.ry, bead: b, t: 0, life: 0.09, side: Math.random() < 0.5 ? -1 : 1 });
+    // +30ms: gel snaps back the other way, dent appears
     this.schedule(0.03, () => {
       const m = Math.pow(b.type.mass, 0.6);
       this.gel.recoil(-dx * 95 * s * m, -dy * 95 * s * m);
       this.gel.addDent(b.rx, b.ry, b.radius * 1.15, 1.6 + b.type.mass * 0.3);
-      const n = 2 + Math.round(Math.random() * 2);
-      for (let i = 0; i < n; i++) {
-        const ang = Math.atan2(dy, dx) + (Math.random() - 0.5) * 1.2;
-        const sp = (90 + Math.random() * 120) * s;
-        this.droplets.push({
-          x: pos.x + dx * b.radius * 0.6,
-          y: pos.y + dy * b.radius * 0.6,
-          hx: b.rx,
-          hy: b.ry,
-          vx: Math.cos(ang) * sp,
-          vy: Math.sin(ang) * sp,
-          r: (1.5 + Math.random() * 2) * s,
-          t: 0,
-          life: 0.22 + Math.random() * 0.1,
-        });
-      }
     });
     // +40ms: the gel around the hole bulges outward and rings down – neighbours ride it
     this.schedule(0.04, () => this.gel.shock(b.rx, b.ry, b.radius, 5 * s * Math.pow(b.type.mass, 0.5)));
@@ -440,7 +439,7 @@ export class Game extends Emitter<GameEvents> {
   }
 
   private endChallenge() {
-    for (const p of this.pulls.values()) this.releaseBead(p.bead);
+    for (const p of this.pulls.values()) this.releaseBead(p.bead, p);
     this.pulls.clear();
     this.grabEnabled = false;
     const result = this.challenge.result();
@@ -477,7 +476,7 @@ export class Game extends Emitter<GameEvents> {
     this.gel.pulls.length = 0;
     for (const p of this.pulls.values()) {
       const b = p.bead;
-      this.gel.pulls.push({ hx: b.rx, hy: b.ry, ox: b.off.x, oy: b.off.y, r: b.radius });
+      this.gel.pulls.push({ hx: b.rx, hy: b.ry, sx: p.stretch.x + b.off.x * 0.5, sy: p.stretch.y + b.off.y * 0.5, r: b.radius });
     }
 
     // springs: two substeps for stability at 30fps dips
@@ -511,7 +510,7 @@ export class Game extends Emitter<GameEvents> {
       if (b.state === "flying" && b.fly) {
         const f = b.fly;
         f.t += dt;
-        if (f.t >= f.dur) {
+        if (f.t >= f.hang + f.dur) {
           b.state = "collected";
           const vx = (f.x1 - f.cx) * 2;
           const vy = (f.y1 - f.cy) * 2;
@@ -524,17 +523,10 @@ export class Game extends Emitter<GameEvents> {
 
     this.collector.step(dt);
 
-    for (let i = this.droplets.length - 1; i >= 0; i--) {
-      const d = this.droplets[i];
-      d.t += dt;
-      // fly out, then get yanked back into the hole
-      const k = d.t / d.life;
-      const pull = 2600 * k;
-      d.vx += (d.hx - d.x) * pull * dt - d.vx * 6 * dt;
-      d.vy += (d.hy - d.y) * pull * dt - d.vy * 6 * dt;
-      d.x += d.vx * dt;
-      d.y += d.vy * dt;
-      if (d.t >= d.life) this.droplets.splice(i, 1);
+    for (let i = this.threads.length - 1; i >= 0; i--) {
+      const th = this.threads[i];
+      th.t += dt;
+      if (th.t >= th.life || th.bead.state !== "flying") this.threads.splice(i, 1);
     }
     for (let i = this.flashes.length - 1; i >= 0; i--) {
       this.flashes[i].t += dt;
@@ -622,18 +614,10 @@ export class Game extends Emitter<GameEvents> {
     gel.drawSurface(ctx);
     // beads being pulled: hole + neck + the bead lifting out
     for (const p of this.pulls.values()) {
-      this.drawNeck(ctx, p.bead);
+      this.drawNeck(ctx, p.bead, p);
       this.drawEmbedded(ctx, p.bead, true);
     }
-    if (this.droplets.length) {
-      ctx.fillStyle = gel.col(0.9, -0.1);
-      for (const d of this.droplets) {
-        const k = 1 - d.t / d.life;
-        ctx.beginPath();
-        ctx.arc(d.x, d.y, d.r * (0.4 + 0.6 * k), 0, Math.PI * 2);
-        ctx.fill();
-      }
-    }
+    for (const th of this.threads) this.drawThread(ctx, th);
     for (const f of this.flashes) {
       const k = f.t / 0.55;
       const a = (1 - k) * 0.7;
@@ -692,14 +676,15 @@ export class Game extends Emitter<GameEvents> {
     ctx.globalAlpha = alpha * (0.55 + lift * 0.35);
     ctx.drawImage(sh.canvas, x - sh.w / 2 + lift * 4 * this.s, y - sh.h / 2 + b.radius * (0.18 + lift * 0.5), sh.w, sh.h);
 
-    const sp = getBeadSprite(b.type, b.color, b.radius, dpr);
+    // seen through gel → a softened sprite variant (blur baked in, cached); crisp once it lifts out
+    const sp = getBeadSprite(b.type, b.color, b.radius, dpr, base ? (0.45 + depth * 0.6) * this.s : 0);
     ctx.save();
     ctx.translate(x, y);
     ctx.rotate(b.rot);
     ctx.scale(scale, scale);
     if (!above) {
       // refraction ghost: the gel bends the bead's outline a hair
-      ctx.globalAlpha = alpha * 0.22;
+      ctx.globalAlpha = alpha * 0.2;
       ctx.drawImage(sp.canvas, -sp.w / 2 + 1.2 * this.s, -sp.h / 2 + 1.4 * this.s, sp.w, sp.h);
     }
     ctx.globalAlpha = alpha;
@@ -732,145 +717,240 @@ export class Game extends Emitter<GameEvents> {
     ctx.globalAlpha = 1;
   }
 
-  /** the gel that clings to a bead being pulled – tents up, thins into a neck, strings, tears */
-  private drawNeck(ctx: CanvasRenderingContext2D, b: Bead) {
-    const ox = b.off.x;
-    const oy = b.off.y;
-    const L = Math.hypot(ox, oy);
-    const p = clamp(b.lift, 0, 1);
-    const r = b.radius;
+  /**
+   * The gel holding a bead that is being pulled. Driven by *tension* and the
+   * gel stretch vector, not by how far the bead has moved – in the grip stage
+   * the bead sits still while the meniscus goes oval toward the finger and the
+   * surface tents; only in the slip stage does a thinning neck appear.
+   */
+  private drawNeck(ctx: CanvasRenderingContext2D, b: Bead, pull: Pull) {
     const gel = this.gel;
+    const r = b.radius;
+    const s = this.s;
+    const T = pull.tension;
+    const P = pull.progress;
+    if (T < 0.02) return;
     gel.warp(b.rx, b.ry, this.tmp);
     const hx = this.tmp.x;
     const hy = this.tmp.y;
-    // stretched hole: dark inside, widening with the pull
-    const holeR = r * (1.0 + 0.18 * p);
-    const hole = ctx.createRadialGradient(hx, hy, holeR * 0.2, hx, hy, holeR * 1.15);
-    hole.addColorStop(0, `rgba(70,20,60,${0.32 + 0.1 * p})`);
-    hole.addColorStop(0.75, `rgba(70,20,60,${0.12})`);
-    hole.addColorStop(1, "rgba(70,20,60,0)");
-    ctx.fillStyle = hole;
-    ctx.beginPath();
-    ctx.arc(hx, hy, holeR * 1.15, 0, Math.PI * 2);
-    ctx.fill();
-    if (L < 0.8) return;
-    const ux = ox / L;
-    const uy = oy / L;
+    const stx = pull.stretch.x;
+    const sty = pull.stretch.y;
+    const L = Math.hypot(stx, sty);
+    const ux = L > 0.5 ? stx / L : pull.dirX;
+    const uy = L > 0.5 ? sty / L : pull.dirY;
     const nx = -uy;
     const ny = ux;
-    const bx = hx + ox;
-    const by = hy + oy;
-    // tent: the surface around the hole is lifted toward the bead – shade the far side, light the near side
-    const tentR = r * (2.2 + 1.2 * p);
-    const tg = ctx.createRadialGradient(hx - ux * r * 0.3, hy - uy * r * 0.3, r * 0.6, hx, hy, tentR);
-    tg.addColorStop(0, `rgba(60,10,50,${0.16 * p})`);
-    tg.addColorStop(0.5, `rgba(60,10,50,${0.06 * p})`);
-    tg.addColorStop(1, "rgba(60,10,50,0)");
-    ctx.fillStyle = tg;
+    const bx = hx + b.off.x;
+    const by = hy + b.off.y;
+    const offL = Math.hypot(b.off.x, b.off.y);
+
+    // ── tent: surface around the socket lifted toward the finger.
+    // dark on the far side (steep, in shadow), bright bulge on the near side.
+    const tentR = r * (2.0 + 1.4 * T + 0.8 * P);
+    const far = ctx.createRadialGradient(hx - ux * r * 0.6, hy - uy * r * 0.6, r * 0.4, hx - ux * r * 0.3, hy - uy * r * 0.3, tentR);
+    far.addColorStop(0, `rgba(55,45,58,${0.2 * T})`);
+    far.addColorStop(0.5, `rgba(55,45,58,${0.07 * T})`);
+    far.addColorStop(1, "rgba(55,45,58,0)");
+    ctx.fillStyle = far;
     ctx.beginPath();
     ctx.arc(hx, hy, tentR, 0, Math.PI * 2);
     ctx.fill();
-    const lg0 = ctx.createRadialGradient(hx + ux * r * 0.8, hy + uy * r * 0.8, 0, hx + ux * r * 0.8, hy + uy * r * 0.8, tentR * 0.8);
-    lg0.addColorStop(0, `rgba(255,255,255,${0.22 * p})`);
-    lg0.addColorStop(1, "rgba(255,255,255,0)");
-    ctx.fillStyle = lg0;
+    const nearX = hx + ux * (r * 0.9 + L * 0.8);
+    const nearY = hy + uy * (r * 0.9 + L * 0.8);
+    const near = ctx.createRadialGradient(nearX, nearY, 0, nearX, nearY, tentR * 0.75);
+    near.addColorStop(0, `rgba(255,255,255,${0.26 * T})`);
+    near.addColorStop(0.5, `rgba(255,255,255,${0.08 * T})`);
+    near.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.fillStyle = near;
     ctx.beginPath();
-    ctx.arc(hx, hy, tentR, 0, Math.PI * 2);
+    ctx.arc(nearX, nearY, tentR * 0.75, 0, Math.PI * 2);
     ctx.fill();
 
-    // neck: concave sides, thinnest near the bead
-    const w0 = r * (1.05 + 0.15 * p);
-    const w1 = r * (0.92 - 0.6 * p);
-    const wm = r * (0.9 - 0.78 * p);
-    const mx = hx + ox * 0.55;
-    const my = hy + oy * 0.55;
-    const neck = () => {
-      ctx.beginPath();
-      ctx.moveTo(hx + nx * w0, hy + ny * w0);
-      ctx.quadraticCurveTo(mx + nx * wm, my + ny * wm, bx + nx * w1, by + ny * w1);
-      ctx.arc(bx, by, w1, Math.atan2(ny, nx), Math.atan2(-ny, -nx), true);
-      ctx.quadraticCurveTo(mx - nx * wm, my - ny * wm, hx - nx * w0, hy - ny * w0);
-      ctx.closePath();
-    };
-    // shadow the raised gel casts onto the pad
+    // ── oval meniscus: the gel lip gripping the bead is dragged a little toward the finger.
+    // Soft gradient rings (no hard strokes) drawn in a scaled space so they are elliptical.
+    const cx = hx + ux * L * 0.3 + b.off.x * 0.35;
+    const cy = hy + uy * L * 0.3 + b.off.y * 0.35;
+    const across = r * (1.12 - 0.1 * P);
+    const along = across + L * 0.42 + offL * 0.3;
+    const rot = Math.atan2(uy, ux);
     ctx.save();
-    ctx.translate(2 * this.s + p * 4, 3 * this.s + p * 6);
-    neck();
-    ctx.fillStyle = `rgba(70,20,60,${0.22 + p * 0.14})`;
+    ctx.translate(cx, cy);
+    ctx.rotate(rot);
+    ctx.scale(along / across, 1);
+    // glossy stretched surface just outside the bead
+    const gloss = ctx.createRadialGradient(0, 0, across * 0.8, 0, 0, across * 1.5);
+    gloss.addColorStop(0, `rgba(255,255,255,${0.1 + 0.12 * T})`);
+    gloss.addColorStop(0.5, `rgba(255,255,255,${0.05 * T})`);
+    gloss.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.fillStyle = gloss;
+    ctx.beginPath();
+    ctx.arc(0, 0, across * 1.5, 0, Math.PI * 2);
+    ctx.fill();
+    // contact shadow ring outside the lip
+    const ao = ctx.createRadialGradient(0, 0, across * 1.02, 0, 0, across * 1.42);
+    ao.addColorStop(0, `rgba(55,45,58,${0.26 + 0.12 * T})`);
+    ao.addColorStop(0.45, `rgba(55,45,58,${0.08 + 0.04 * T})`);
+    ao.addColorStop(1, "rgba(55,45,58,0)");
+    ctx.fillStyle = ao;
+    ctx.beginPath();
+    ctx.arc(0, 0, across * 1.42, 0, Math.PI * 2);
+    ctx.fill();
+    // the lip: bright thin ring, brighter toward the finger
+    const lip = ctx.createRadialGradient(0, 0, across * 0.94, 0, 0, across * 1.22);
+    lip.addColorStop(0, "rgba(255,255,255,0)");
+    lip.addColorStop(0.35, `rgba(255,255,255,${0.42 + 0.3 * T})`);
+    lip.addColorStop(0.7, `rgba(255,255,255,${0.12 + 0.08 * T})`);
+    lip.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.fillStyle = lip;
+    ctx.beginPath();
+    ctx.arc(0, 0, across * 1.22, 0, Math.PI * 2);
+    ctx.fill();
+    // finger-side of the lip catches more light
+    const side = ctx.createLinearGradient(-across, 0, across, 0);
+    side.addColorStop(0, "rgba(255,255,255,0)");
+    side.addColorStop(0.6, "rgba(255,255,255,0)");
+    side.addColorStop(1, `rgba(255,255,255,${0.35 * T})`);
+    ctx.fillStyle = side;
+    ctx.beginPath();
+    ctx.arc(0, 0, across * 1.22, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
-    // body of the neck: stretched gel seen edge-on is a *thicker* light path → more colour, not less
-    neck();
-    ctx.fillStyle = gel.col(0.88, 0.1);
+
+    // ── socket: dark, deepens with pull
+    const holeR = r * (0.92 + 0.22 * P);
+    const hole = ctx.createRadialGradient(hx, hy, holeR * 0.15, hx, hy, holeR * 1.1);
+    hole.addColorStop(0, `rgba(55,45,58,${0.18 + 0.2 * T + 0.14 * P})`);
+    hole.addColorStop(0.7, `rgba(55,45,58,${0.08 + 0.06 * P})`);
+    hole.addColorStop(1, "rgba(55,45,58,0)");
+    ctx.fillStyle = hole;
+    ctx.beginPath();
+    ctx.arc(hx, hy, holeR * 1.1, 0, Math.PI * 2);
     ctx.fill();
-    // cylindrical shading across the neck: lit edge → dark edge
-    const lg = ctx.createLinearGradient(mx + nx * w0, my + ny * w0, mx - nx * w0, my - ny * w0);
-    lg.addColorStop(0, "rgba(255,255,255,0.55)");
-    lg.addColorStop(0.3, "rgba(255,255,255,0.12)");
-    lg.addColorStop(0.65, "rgba(60,10,50,0.08)");
-    lg.addColorStop(1, "rgba(60,10,50,0.32)");
-    ctx.fillStyle = lg;
-    ctx.fill();
-    // specular line along the lit edge
-    ctx.beginPath();
-    ctx.moveTo(hx + nx * w0 * 0.85, hy + ny * w0 * 0.85);
-    ctx.quadraticCurveTo(mx + nx * wm * 0.9, my + ny * wm * 0.9, bx + nx * w1 * 0.9, by + ny * w1 * 0.9);
-    ctx.strokeStyle = `rgba(255,255,255,${0.6 + 0.2 * p})`;
-    ctx.lineWidth = 1.4;
-    ctx.stroke();
-    // darker contour on the shaded side so the neck reads as a raised form
-    ctx.beginPath();
-    ctx.moveTo(hx - nx * w0, hy - ny * w0);
-    ctx.quadraticCurveTo(mx - nx * wm, my - ny * wm, bx - nx * w1, by - ny * w1);
-    ctx.strokeStyle = `rgba(90,30,80,${0.4 + 0.25 * p})`;
-    ctx.lineWidth = 1.3;
-    ctx.stroke();
-    // the neck's own contact shadow where it meets the pad, on the shaded side
-    ctx.beginPath();
-    ctx.moveTo(hx - nx * w0 * 1.15, hy - ny * w0 * 1.15);
-    ctx.quadraticCurveTo(mx - nx * wm * 1.5, my - ny * wm * 1.5, bx - nx * w1 * 1.4, by - ny * w1 * 1.4);
-    ctx.strokeStyle = `rgba(90,30,80,${0.12 + 0.1 * p})`;
-    ctx.lineWidth = 3.5;
-    ctx.stroke();
+
+    // ── neck (slip stage): a concave bridge from the lip to the bead that thins as it goes
+    if (offL > r * 0.35) {
+      const w0 = across * (1.0 + 0.08 * P);
+      const w1 = r * (0.9 - 0.62 * P);
+      const wm = r * (0.86 - 0.74 * P);
+      const mx = hx + b.off.x * 0.55;
+      const my = hy + b.off.y * 0.55;
+      const neck = () => {
+        ctx.beginPath();
+        ctx.moveTo(hx + nx * w0, hy + ny * w0);
+        ctx.quadraticCurveTo(mx + nx * wm, my + ny * wm, bx + nx * w1, by + ny * w1);
+        ctx.arc(bx, by, w1, Math.atan2(ny, nx), Math.atan2(-ny, -nx), true);
+        ctx.quadraticCurveTo(mx - nx * wm, my - ny * wm, hx - nx * w0, hy - ny * w0);
+        ctx.closePath();
+      };
+      ctx.save();
+      ctx.translate(2 * s + P * 4, 3 * s + P * 6);
+      neck();
+      ctx.fillStyle = `rgba(55,45,58,${0.2 + P * 0.14})`;
+      ctx.fill();
+      ctx.restore();
+      neck();
+      ctx.fillStyle = gel.col(0.88, 0.1);
+      ctx.fill();
+      const lg = ctx.createLinearGradient(mx + nx * w0, my + ny * w0, mx - nx * w0, my - ny * w0);
+      lg.addColorStop(0, "rgba(255,255,255,0.55)");
+      lg.addColorStop(0.3, "rgba(255,255,255,0.12)");
+      lg.addColorStop(0.65, "rgba(55,45,58,0.08)");
+      lg.addColorStop(1, "rgba(55,45,58,0.32)");
+      ctx.fillStyle = lg;
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(hx + nx * w0 * 0.85, hy + ny * w0 * 0.85);
+      ctx.quadraticCurveTo(mx + nx * wm * 0.9, my + ny * wm * 0.9, bx + nx * w1 * 0.9, by + ny * w1 * 0.9);
+      ctx.strokeStyle = `rgba(255,255,255,${0.6 + 0.2 * P})`;
+      ctx.lineWidth = 1.4;
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(hx - nx * w0, hy - ny * w0);
+      ctx.quadraticCurveTo(mx - nx * wm, my - ny * wm, bx - nx * w1, by - ny * w1);
+      ctx.strokeStyle = `rgba(70,55,72,${0.4 + 0.25 * P})`;
+      ctx.lineWidth = 1.3;
+      ctx.stroke();
+    }
     // gel still clinging to the back of the bead
     ctx.save();
     ctx.beginPath();
-    ctx.arc(bx, by, r * (1 + 0.12 * p), 0, Math.PI * 2);
+    ctx.arc(bx, by, r * (1 + 0.12 * P), 0, Math.PI * 2);
     ctx.clip();
     const cg = ctx.createRadialGradient(bx - ux * r * 0.9, by - uy * r * 0.9, 0, bx - ux * r * 0.9, by - uy * r * 0.9, r * 1.4);
-    cg.addColorStop(0, gel.col(0.75 * (1 - p * 0.6), -0.1));
+    cg.addColorStop(0, gel.col(0.7 * (1 - P * 0.6), -0.1));
     cg.addColorStop(1, gel.col(0, 0));
     ctx.fillStyle = cg;
     ctx.fillRect(bx - r * 2, by - r * 2, r * 4, r * 4);
     ctx.restore();
   }
 
-  private drawFlying(ctx: CanvasRenderingContext2D, b: Bead) {
+  /** the last strand of gel between socket and a just-popped bead: thins for ~90ms and snaps */
+  private drawThread(ctx: CanvasRenderingContext2D, th: Thread) {
+    const b = th.bead;
+    if (!b.fly) return;
+    const k = th.t / th.life;
+    const p = this.flyPos(b);
+    const bx = p.x - this.padCx;
+    const by = (p.y - this.padCy) / this.gel.tilt;
+    this.gel.warp(th.hx, th.hy, this.tmp);
+    const hx = this.tmp.x;
+    const hy = this.tmp.y;
+    const dx = bx - hx;
+    const dy = by - hy;
+    const L = Math.hypot(dx, dy) || 1;
+    const nx = -dy / L;
+    const ny = dx / L;
+    // sags sideways a little before it lets go
+    const sag = th.side * (2 + 5 * k) * this.s * (1 - k * 0.5);
+    ctx.beginPath();
+    ctx.moveTo(hx, hy);
+    ctx.quadraticCurveTo((hx + bx) / 2 + nx * sag, (hy + by) / 2 + ny * sag, bx - (dx / L) * b.radius * 0.7, by - (dy / L) * b.radius * 0.7);
+    ctx.strokeStyle = this.gel.col(0.85 * (1 - k * k), 0.08);
+    ctx.lineWidth = Math.max(0.4, (2.2 - 1.9 * k) * this.s);
+    ctx.lineCap = "round";
+    ctx.stroke();
+    ctx.strokeStyle = `rgba(255,255,255,${0.5 * (1 - k)})`;
+    ctx.lineWidth = 0.6;
+    ctx.stroke();
+  }
+
+  /** screen position of a flying bead: kick → hang near the socket → arc to the cup */
+  private flyPos(b: Bead) {
     const f = b.fly!;
     const KICK = 0.09;
-    let x: number, y: number;
     if (f.t < KICK) {
       const k = easeOutCubic(f.t / KICK);
-      const c = this.toCanvas(f.px + f.kx * k, f.py + f.ky * k);
-      x = c.x;
-      y = c.y;
-    } else {
-      const t = clamp((f.t - KICK) / (f.dur - KICK), 0, 1);
-      const e = t * t * (2 - t) * 0.5 + t * 0.5; // slight ease-in for weight
-      const mt = 1 - e;
-      x = mt * mt * f.x0 + 2 * mt * e * f.cx + e * e * f.x1;
-      y = mt * mt * f.y0 + 2 * mt * e * f.cy + e * e * f.y1;
+      return this.toCanvas(f.px + f.kx * k, f.py + f.ky * k);
     }
+    if (f.t < f.hang) {
+      // hangs where it landed, drifting back a hair and bobbing once – time to feel the pop
+      const u = (f.t - KICK) / (f.hang - KICK);
+      const back = -0.14 * Math.sin(u * Math.PI);
+      return this.toCanvas(f.px + f.kx * (1 + back), f.py + f.ky * (1 + back) - Math.sin(u * Math.PI) * 3 * this.s);
+    }
+    const t = clamp((f.t - f.hang) / f.dur, 0, 1);
+    const e = t * t * (2 - t) * 0.5 + t * 0.5;
+    const mt = 1 - e;
+    return {
+      x: mt * mt * f.x0 + 2 * mt * e * f.cx + e * e * f.x1,
+      y: mt * mt * f.y0 + 2 * mt * e * f.cy + e * e * f.y1,
+    };
+  }
+
+  private drawFlying(ctx: CanvasRenderingContext2D, b: Bead) {
+    const f = b.fly!;
+    const { x, y } = this.flyPos(b);
     const dpr = this.dpr;
+    const flyT = clamp((f.t - f.hang) / f.dur, 0, 1);
     const sh = getShadowSprite(b.radius, dpr);
     ctx.globalAlpha = 0.35;
-    ctx.drawImage(sh.canvas, x - sh.w / 2, y - sh.h / 2 + b.radius * 1.2, sh.w, sh.h);
+    ctx.drawImage(sh.canvas, x - sh.w / 2, y - sh.h / 2 + b.radius * (0.6 + flyT * 0.6), sh.w, sh.h);
     ctx.globalAlpha = 1;
     const sp = getBeadSprite(b.type, b.color, b.radius, dpr);
     ctx.save();
     ctx.translate(x, y);
-    ctx.rotate(b.rot + f.spin * f.t);
-    const sc = 1.08 - Math.min(f.t / f.dur, 1) * 0.28; // shrinks as it "falls" into the cup
+    ctx.rotate(b.rot + f.spin * Math.max(0, f.t - f.hang));
+    const sc = 1.12 - flyT * 0.3; // lifted while it hangs, shrinks as it "falls" into the cup
     ctx.scale(sc, sc);
     ctx.drawImage(sp.canvas, -sp.w / 2, -sp.h / 2, sp.w, sp.h);
     ctx.restore();
