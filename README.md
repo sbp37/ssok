@@ -41,7 +41,7 @@ src/game/
   physics/spring.ts   감쇠 스프링
   audio/Sfx.ts        Web Audio 프로시저럴 효과음 (매번 ±5~10% 변형)
   haptics.ts          navigator.vibrate 패턴 + ON/OFF
-  collector/Collector.ts  수집통 + 간단한 구슬 물리
+  collector/Collector.ts  수집통 + 구슬 물리 (가라앉으면 실제로 sleep, 새 비즈가 닿은 2~4개만 잠깐 깨움)
   modes/Challenge.ts  30초 챌린지 상태 (점수/콤보)
   storage/records.ts  로컬 최고기록. RankingProvider 인터페이스만 정의 (가짜 랭킹 없음)
 src/ui/               React 오버레이 (HUD, 힌트, 결과, 토글) — 최소한만

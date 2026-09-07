@@ -10,12 +10,50 @@ interface Item {
   r: number;
   rot: number;
   vrot: number;
-  asleep: number;
+  /** settled: excluded from gravity, separation and rotation until something wakes it */
+  sleeping: boolean;
+  /** seconds spent slow enough to count as settling */
+  settleT: number;
+  /** position at the start of the frame – settling is judged on real movement */
+  px: number;
+  py: number;
+  prot: number;
+  /** seconds spent in contact with something – a bead jammed in a full jar is put to sleep anyway */
+  awakeT: number;
+  /** touched the floor or another bead this frame */
+  touched: boolean;
+  /** how many sleeping neighbours this item may still wake (only a falling bead has any) */
+  wakeBudget: number;
 }
 
 /**
- * Small transparent cup, bottom-right. Collected beads get a cheap circle
- * physics so they roll and settle; only the newest ~28 stay awake.
+ * Settling is judged on how far a bead actually moved, not on its velocity:
+ * a bead resting in a pile still gets a fresh tick of gravity every frame that
+ * the contact then cancels, so its velocity never reads as zero even though it
+ * is visibly still. (px/s, rad/s)
+ */
+const SLEEP_MOVE = 14;
+const SLEEP_SPIN = 0.8;
+/** how long it must stay that still before it snaps to a full stop */
+const SLEEP_DELAY = 0.15;
+/** overlap this small is left alone – correcting it forever is what makes a pile simmer */
+const SLOP = 0.4;
+/**
+ * Hard stop. A nearly full jar is a jammed pack of discs; a bead can creep
+ * along the pile indefinitely without ever meeting the stillness test. The jar
+ * going quiet matters more than the last millimetre of realism, so anything
+ * still awake after this simply lies down.
+ */
+const MAX_AWAKE = 0.5;
+
+/**
+ * Small transparent cup, bottom-right.
+ *
+ * A bead drops in, nudges the two or three beads it actually lands on, and
+ * everything is still again within ~half a second. Settled beads are properly
+ * asleep — no gravity, no separation, no rotation — so the jar never simmers
+ * on its own; only an incoming bead can wake a few neighbours, and only the
+ * ones it touches.
  */
 export class Collector {
   x = 0;
@@ -24,7 +62,7 @@ export class Collector {
   h = 76;
   items: Item[] = [];
   count = 0;
-  /** squash impulse when something lands */
+  /** jar squash when something lands, 0..1, gone in ~200ms */
   bump = 0;
 
   layout(x: number, y: number, w: number, h: number) {
@@ -44,6 +82,23 @@ export class Collector {
     this.count = 0;
   }
 
+  /** true while anything is still moving – lets callers skip the step entirely */
+  get settled() {
+    if (this.bump > 0) return false;
+    for (const it of this.items) if (!it.sleeping) return false;
+    return true;
+  }
+
+  private wake(it: Item, vx = 0, vy = 0, vrot = 0) {
+    it.sleeping = false;
+    it.settleT = 0;
+    it.awakeT = 0;
+    it.touched = false;
+    it.vx += vx;
+    it.vy += vy;
+    it.vrot += vrot;
+  }
+
   add(bead: Bead, vx: number, vy: number) {
     const r = Math.min(bead.radius * 0.72, this.w * 0.14);
     this.items.push({
@@ -55,78 +110,156 @@ export class Collector {
       r,
       rot: bead.rot,
       vrot: (Math.random() - 0.5) * 6,
-      asleep: 0,
+      sleeping: false,
+      settleT: 0,
+      awakeT: 0,
+      touched: false,
+      px: 0,
+      py: 0,
+      prot: 0,
+      // only what it lands on gets disturbed, and only a handful
+      wakeBudget: 4,
     });
     this.count++;
     this.bump = 1;
-    // nudge neighbours: tiny roll
-    for (const it of this.items) if (it !== this.items[this.items.length - 1]) it.vx += (Math.random() - 0.5) * 18;
     if (this.items.length > 60) this.items.splice(0, this.items.length - 60);
   }
 
   step(dt: number) {
-    this.bump = Math.max(0, this.bump - dt * 6);
+    this.bump = Math.max(0, this.bump - dt * 5); // ~200ms
+    const items = this.items;
+    // nothing to do once every bead has settled
+    let anyAwake = false;
+    for (const it of items)
+      if (!it.sleeping) {
+        anyAwake = true;
+        break;
+      }
+    if (!anyAwake) return;
+
     const g = 1500;
     const floor = this.y + this.h - 5;
     const left = this.x + 6;
     const right = this.x + this.w - 6;
-    const awake = this.items.slice(-28);
-    for (const it of awake) {
+
+    // 1. integrate the awake ones
+    for (const it of items) {
+      if (it.sleeping) continue;
+      it.px = it.x;
+      it.py = it.y;
+      it.prot = it.rot;
+      it.touched = false;
       it.vy += g * dt;
       it.x += it.vx * dt;
       it.y += it.vy * dt;
       it.rot += it.vrot * dt;
-      it.vx *= 0.985;
-      it.vrot *= 0.97;
+      it.vx *= 0.9;
+      it.vrot *= 0.9;
       if (it.y + it.r > floor) {
+        it.touched = true;
         it.y = floor - it.r;
-        it.vy *= -0.18;
-        it.vx *= 0.8;
-        if (Math.abs(it.vy) < 20) it.vy = 0;
+        it.vy *= -0.15;
+        it.vx *= 0.7;
+        if (Math.abs(it.vy) < 30) it.vy = 0;
       }
       if (it.x - it.r < left) {
         it.x = left + it.r;
-        it.vx *= -0.4;
+        it.vx *= -0.35;
       }
       if (it.x + it.r > right) {
         it.x = right - it.r;
-        it.vx *= -0.4;
+        it.vx *= -0.35;
       }
     }
-    // separation
-    for (let i = 0; i < awake.length; i++) {
-      const a = awake[i];
-      for (let j = 0; j < this.items.length; j++) {
-        const b = this.items[j];
+
+    // 2. contacts, one pass. Resolve the overlap *and* the normal velocity —
+    //    without the velocity half, gravity keeps piling into a bead that rests
+    //    on another one and it can never settle. A sleeping bead is immovable:
+    //    the awake one slides off it. Landing on one wakes it, but only a few,
+    //    only on a real impact, and only softly.
+    for (const a of items) {
+      if (a.sleeping) continue;
+      for (const b of items) {
         if (a === b) continue;
         const dx = b.x - a.x;
         const dy = b.y - a.y;
         const d = Math.hypot(dx, dy) || 0.01;
         const min = a.r + b.r;
-        if (d < min) {
-          const push = (min - d) * 0.5;
-          const nx = dx / d;
-          const ny = dy / d;
+        if (d >= min) continue;
+        const nx = dx / d;
+        const ny = dy / d;
+        const overlap = min - d;
+        a.touched = true;
+        if (!b.sleeping) b.touched = true;
+        // closing speed along the contact normal (positive = a moving into b)
+        const vn = b.sleeping
+          ? a.vx * nx + a.vy * ny
+          : (a.vx - b.vx) * nx + (a.vy - b.vy) * ny;
+        // only push out the part beyond the slop, and only most of the way
+        const corr = Math.max(0, overlap - SLOP) * 0.8;
+        if (b.sleeping) {
+          a.x -= nx * corr;
+          a.y -= ny * corr;
+          if (vn > 0) {
+            const j = vn * 1.06; // kill it, with a whisper of bounce
+            a.vx -= nx * j;
+            a.vy -= ny * j;
+            // sliding across the contact bleeds into spin, and is damped
+            const tv = -ny * a.vx + nx * a.vy;
+            a.vrot += tv * 0.0025;
+            a.vx -= -ny * tv * 0.5;
+            a.vy -= nx * tv * 0.5;
+          }
+          // a real landing, not a graze → shift that neighbour a little
+          if (a.wakeBudget > 0 && vn > 30) {
+            a.wakeBudget--;
+            this.wake(b, nx * 13, ny * 4, (Math.random() - 0.5) * 0.8);
+          }
+        } else {
+          const push = corr * 0.5;
           a.x -= nx * push;
           a.y -= ny * push;
-          if (awake.includes(b)) {
-            b.x += nx * push;
-            b.y += ny * push;
+          b.x += nx * push;
+          b.y += ny * push;
+          if (vn > 0) {
+            const j = vn * 0.54;
+            a.vx -= nx * j;
+            a.vy -= ny * j;
+            b.vx += nx * j;
+            b.vy += ny * j;
+            a.vrot += (-ny * a.vx + nx * a.vy) * 0.0025;
           }
-          a.vx -= nx * push * 6;
-          a.vy -= ny * push * 6;
-          a.vrot += nx * 0.4;
         }
       }
-      if (a.y + a.r > floor) a.y = floor - a.r;
-      if (a.x - a.r < left) a.x = left + a.r;
-      if (a.x + a.r > right) a.x = right - a.r;
+    }
+
+    // 3. clamp, then settle: slow for long enough → hard stop
+    for (const it of items) {
+      if (it.sleeping) continue;
+      if (it.y + it.r > floor) it.y = floor - it.r;
+      if (it.x - it.r < left) it.x = left + it.r;
+      if (it.x + it.r > right) it.x = right - it.r;
+      const moved = Math.hypot(it.x - it.px, it.y - it.py) / dt;
+      const spun = Math.abs(it.rot - it.prot) / dt;
+      const still = moved < SLEEP_MOVE && spun < SLEEP_SPIN;
+      it.settleT = still ? it.settleT + dt : 0;
+      // only count time once it is actually resting on something; a bead still
+      // falling in from the top must not be frozen in mid-air
+      it.awakeT = it.touched ? it.awakeT + dt : 0;
+      if (it.settleT >= SLEEP_DELAY || it.awakeT >= MAX_AWAKE) {
+        it.vx = 0;
+        it.vy = 0;
+        it.vrot = 0;
+        it.sleeping = true;
+        it.wakeBudget = 0;
+      }
     }
   }
 
   draw(ctx: CanvasRenderingContext2D, dpr: number) {
     const { x, y, w, h } = this;
-    const sq = 1 + this.bump * 0.04;
+    // gentle, quick squash; ease it out so the tail is invisible
+    const sq = 1 + this.bump * this.bump * 0.016;
     ctx.save();
     ctx.translate(x + w / 2, y + h);
     ctx.scale(1 / Math.sqrt(sq), sq);
