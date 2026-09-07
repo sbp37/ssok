@@ -116,6 +116,24 @@ export function shapePath(ctx: CanvasRenderingContext2D, type: BeadType, r: numb
       ctx.rect(-r * 0.15 + sw / 2, r * 0.82, r * 0.24, sw * 0.8);
       break;
     }
+    case "crown": {
+      // five-point crown band with a rounded base
+      const w = r * 0.95;
+      ctx.moveTo(-w, r * 0.55);
+      ctx.lineTo(-w, -r * 0.1);
+      for (let i = 0; i < 5; i++) {
+        const x0 = -w + (i / 5) * 2 * w;
+        const x1 = -w + ((i + 0.5) / 5) * 2 * w;
+        const x2 = -w + ((i + 1) / 5) * 2 * w;
+        ctx.lineTo(x1, -r * (i === 2 ? 0.9 : 0.6));
+        ctx.lineTo(x2, -r * 0.1);
+        void x0;
+      }
+      ctx.lineTo(w, r * 0.55);
+      ctx.quadraticCurveTo(0, r * 0.75, -w, r * 0.55);
+      ctx.closePath();
+      break;
+    }
     case "cherry": {
       const cr = r * 0.62;
       ctx.moveTo(-r * 0.4 + cr, r * 0.25);
@@ -162,7 +180,7 @@ function paintBody(ctx: CanvasRenderingContext2D, type: BeadType, color: string,
   ctx.fillStyle = g;
   ctx.fill();
 
-  if (type.id === "rainbow" && "createConicGradient" in ctx) {
+  if ((type.id === "rainbow" || type.id === "holostar") && "createConicGradient" in ctx) {
     const c = (ctx as CanvasRenderingContext2D & {
       createConicGradient: (a: number, x: number, y: number) => CanvasGradient;
     }).createConicGradient(-0.6, r * 0.1, r * 0.1);
@@ -229,6 +247,21 @@ function paintFace(ctx: CanvasRenderingContext2D, type: BeadType, r: number) {
     ctx.beginPath();
     ctx.arc(r * 0.56, -r * 0.4, r * 0.06, 0, Math.PI * 2);
     ctx.fill();
+    return;
+  }
+  if (type.shape === "crown") {
+    // three little jewels
+    const cols = ["#ff6fa3", "#6fbfff", "#6fe0ae"];
+    cols.forEach((c, i) => {
+      ctx.fillStyle = c;
+      ctx.beginPath();
+      ctx.arc((i - 1) * r * 0.5, r * 0.2, r * 0.13, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "rgba(255,255,255,0.8)";
+      ctx.beginPath();
+      ctx.arc((i - 1) * r * 0.5 - r * 0.04, r * 0.16, r * 0.045, 0, Math.PI * 2);
+      ctx.fill();
+    });
     return;
   }
   if (type.shape !== "smile") return;

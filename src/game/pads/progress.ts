@@ -1,4 +1,5 @@
-import { PADS, padById, type PadType } from "./PadTypes";
+import { PADS, VARIANTS, applyVariant, padById, type PadType } from "./PadTypes";
+import { VARIANT_CHANCE } from "../rewards/rates";
 
 /**
  * Which pad comes next, and what has been opened. Deliberately small: a fixed
@@ -10,11 +11,25 @@ export interface NextPadProvider {
 }
 
 export class SequenceProvider implements NextPadProvider {
-  constructor(private order: readonly string[] = PADS.map((p) => p.id)) {}
+  constructor(
+    private order: readonly string[] = PADS.map((p) => p.id),
+    private rand: () => number = Math.random,
+  ) {}
   next(currentId: string | null) {
-    if (!currentId) return padById(this.order[0])!;
-    const i = this.order.indexOf(currentId);
-    return padById(this.order[(i + 1) % this.order.length])!;
+    const baseId = currentId ? currentId.split(":")[0] : null;
+    let base: PadType;
+    if (!baseId) base = padById(this.order[0])!;
+    else base = padById(this.order[(this.order.indexOf(baseId) + 1) % this.order.length])!;
+    // once in a while the next pad is a variant – rolled here, once, so the
+    // NEXT tease and the pad that actually opens agree
+    const vs = VARIANTS[base.id] ?? [];
+    const r = this.rand();
+    const superV = vs.find((v) => v.tier === "super");
+    const rareV = vs.find((v) => v.tier === "rare");
+    if (superV && r < VARIANT_CHANCE.super) return applyVariant(base, superV);
+    if (rareV && r < VARIANT_CHANCE.super + VARIANT_CHANCE.rare) return applyVariant(base, rareV);
+    if (!rareV && superV && r < VARIANT_CHANCE.super + VARIANT_CHANCE.rare) return applyVariant(base, superV);
+    return base;
   }
 }
 
@@ -63,6 +78,10 @@ export class PadProgress {
   get current() {
     return padById(this.data.current)!;
   }
+  /** how many pads have been emptied in total */
+  get completedCount() {
+    return this.data.finished;
+  }
   get finished() {
     return this.data.finished;
   }
@@ -87,13 +106,7 @@ export class PadProgress {
   }
 }
 
-/**
- * The first four pads flow freely. From then on, every other new pad is
- * offered behind the (mock) rewarded unlock – the player has felt the toy and
- * seen it change shape before anything asks for their attention.
- */
-export function isGated(progress: PadProgress, next: PadType) {
-  if (progress.isOpened(next.id)) return false;
-  if (progress.finished < 4) return false;
-  return (progress.finished - 4) % 2 === 0;
+/** a variant pad is the only thing an ad is ever offered for – and it can always be skipped */
+export function isRareVariant(p: PadType) {
+  return !!p.tier;
 }

@@ -1,6 +1,6 @@
 import { Spring, Spring2, springParams } from "../physics/spring";
 import { Rng } from "../util/math";
-import { BEAD_TYPES, HIDDEN_TYPES, RARITY_WEIGHT, type BeadType, type Rarity } from "./BeadTypes";
+import { BEAD_TYPES, HIDDEN_TYPES, RARITY_WEIGHT, ULTRA_TYPES, type BeadType, type Rarity } from "./BeadTypes";
 
 export type BeadState = "embedded" | "held" | "flying" | "collected" | "gone";
 
@@ -120,6 +120,8 @@ export interface PadOptions {
   rareCenterChance?: number;
   /** hidden object type id: one big bead buried deep near the middle */
   hiddenObject?: string;
+  /** chance that one ordinary deep bead is secretly an ultra-rare object */
+  ultraChance?: number;
 }
 
 export function generatePad(padR: number, rng: Rng, opts: PadOptions = {}): Bead[] {
@@ -195,7 +197,7 @@ export function generatePad(padR: number, rng: Rng, opts: PadOptions = {}): Bead
 
   // the hidden object: one big deep bead under a slot near the middle, replacing that slot's deeper bead
   if (opts.hiddenObject) {
-    const ht = HIDDEN_TYPES.find((t) => t.id === opts.hiddenObject);
+    const ht = HIDDEN_TYPES.find((t) => t.id === opts.hiddenObject) ?? ULTRA_TYPES.find((t) => t.id === opts.hiddenObject);
     if (ht) {
       const surface = beads.filter((b) => b.layer === 0);
       const near = surface
@@ -210,6 +212,19 @@ export function generatePad(padR: number, rng: Rng, opts: PadOptions = {}): Bead
         hb.hidden = true;
         beads.push(hb);
       }
+    }
+  }
+  // once in a very long while an ordinary deep bead is something else entirely
+  if (opts.ultraChance && rng.chance(opts.ultraChance)) {
+    const deep = beads.filter((b) => b.layer === 1 && !b.hidden);
+    if (deep.length) {
+      const b = rng.pick(deep);
+      const ut = rng.pick(ULTRA_TYPES);
+      b.type = ut;
+      b.color = rng.pick(ut.colors);
+      b.radius = Math.max(b.radius, rng.range(ut.radius[0], ut.radius[1]) * s * 0.8);
+      b.rot = 0;
+      b.hidden = true;
     }
   }
   return beads;

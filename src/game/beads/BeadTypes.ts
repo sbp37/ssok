@@ -5,9 +5,9 @@
  * Distances are in px at a reference pad radius of 170px and are scaled by
  * the live pad size, so a small 360px phone and a tablet feel the same.
  */
-export type BeadShape = "circle" | "star" | "heart" | "flower" | "oval" | "disc" | "smile" | "cherry" | "eye" | "key" | "duck";
+export type BeadShape = "circle" | "star" | "heart" | "flower" | "oval" | "disc" | "smile" | "cherry" | "eye" | "key" | "duck" | "crown";
 export type BeadMaterial = "plastic" | "glass" | "pearl" | "metal" | "shell";
-export type Rarity = "common" | "big" | "odd" | "special" | "rare" | "hidden";
+export type Rarity = "common" | "big" | "odd" | "special" | "rare" | "hidden" | "ultra";
 export type PopSound = "pok" | "ssok" | "pong" | "tok" | "ting";
 
 export interface BeadType {
@@ -303,6 +303,7 @@ export const RARITY_WEIGHT: Record<Rarity, number> = {
   special: 7,
   rare: 3,
   hidden: 0, // never rolled – placed on purpose by the pad
+  ultra: 0, // never rolled – tiny fixed chance handled by the layout
 };
 
 /**
@@ -332,4 +333,12 @@ export const HIDDEN_TYPES: readonly BeadType[] = [
   hidden({ id: "bigglass", name: "아주 큰 유리알", shape: "circle", material: "glass", radius: [25, 27], colors: ["#dbeeff"], mass: 2.8, sound: "pong" }),
 ];
 
-export const byId = (id: string) => BEAD_TYPES.find((t) => t.id === id) ?? HIDDEN_TYPES.find((t) => t.id === id)!;
+/** Ultra-rare: 0.5~1%, any pad, once in a blue moon. "뭐야 이거?" – never a jackpot. */
+export const ULTRA_TYPES: readonly BeadType[] = [
+  { ...hidden({ id: "crown", name: "왕관 비즈", shape: "crown", material: "metal", radius: [23, 25], colors: ["#f2c94c"], mass: 2.2, sound: "ting" }), rarity: "ultra" },
+  { ...hidden({ id: "holostar", name: "홀로그램 별", shape: "star", material: "glass", radius: [23, 25], colors: ["#e8f4ff"], mass: 1.6, sound: "ting" }), rarity: "ultra" },
+  { ...hidden({ id: "bigduck", name: "대왕 투명 오리", shape: "duck", material: "glass", radius: [27, 29], colors: ["#fff6d0"], mass: 2.4, sound: "pong" }), rarity: "ultra" },
+];
+
+export const byId = (id: string) =>
+  BEAD_TYPES.find((t) => t.id === id) ?? HIDDEN_TYPES.find((t) => t.id === id) ?? ULTRA_TYPES.find((t) => t.id === id)!;

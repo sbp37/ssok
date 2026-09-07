@@ -65,7 +65,7 @@ export function NextPanel({
     <div className="next" style={{ opacity: 0.55 + 0.45 * emphasis, transform: `scale(${0.94 + 0.06 * emphasis})` }}>
       <div className="next-label">NEXT</div>
       <PadSilhouette pad={pad} size={64} />
-      <div className="next-q">{gated && emphasis >= 1 && pad.hiddenObject ? "안에 큰 게 들어있다…" : "???"}</div>
+      <div className="next-q">{gated ? (pad.tier === "super" ? "희귀 패드가 지나가고 있어 ✦✦" : "희귀 패드가 지나가고 있어 ✦") : "???"}</div>
     </div>
   );
 }

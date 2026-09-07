@@ -11,7 +11,11 @@ import { sfx } from "./audio/Sfx";
 import { haptics } from "./haptics";
 import { clamp, easeOutCubic, rng } from "./util/math";
 import { PADS, padById, type PadType } from "./pads/PadTypes";
-import { MockRewardedProvider, PadProgress, SequenceProvider, isGated, type NextPadProvider, type RewardedUnlockProvider } from "./pads/progress";
+import { MockRewardedProvider, PadProgress, SequenceProvider, isRareVariant, type NextPadProvider, type RewardedUnlockProvider } from "./pads/progress";
+import { HIDDEN_POOLS, ULTRA_SURFACE_CHANCE } from "./rewards/rates";
+import { TreasureStore, treasureKind, type TreasureKind } from "./rewards/treasure";
+import { DiamondStore, type MissionView } from "./rewards/diamonds";
+import type { BeadType } from "./beads/BeadTypes";
 
 export type Mode = "free" | "challenge";
 
@@ -26,6 +30,10 @@ export interface GameEvents {
   /** free mode: how much of the current pad has been emptied */
   progress: { emptied: number; remaining: number; total: number };
   padChange: { pad: PadType };
+  /** a rare bead / hidden object / ultra landed in the treasure box */
+  treasure: { type: BeadType; kind: TreasureKind; isNew: boolean; count: number; padName: string };
+  /** a mission just completed → one (mock) diamond */
+  diamond: { mission: MissionView; diamonds: number };
 }
 
 type Listener<T> = (payload: T) => void;
@@ -36,7 +44,9 @@ class Emitter<E extends object> {
     let s = this.map.get(k);
     if (!s) this.map.set(k, (s = new Set()));
     s.add(fn as Listener<never>);
-    return () => s!.delete(fn as Listener<never>);
+    return () => {
+      s!.delete(fn as Listener<never>);
+    };
   }
   emit<K extends keyof E>(k: K, payload: E[K]) {
     this.map.get(k)?.forEach((fn) => (fn as Listener<E[K]>)(payload));
@@ -102,6 +112,12 @@ export class Game extends Emitter<GameEvents> {
   progressStore = new PadProgress();
   nextProvider: NextPadProvider = new SequenceProvider();
   rewarded: RewardedUnlockProvider = new MockRewardedProvider();
+  treasure = new TreasureStore();
+  diamonds = new DiamondStore();
+  /** the pad after this one – rolled once when this pad opens so NEXT and the door agree */
+  private pendingNext: PadType | null = null;
+  /** while > time, the buried object is shown clearly (the "살짝 보기" hint) */
+  private peekUntil = -1;
   private padTotal = 0;
   private ro: ResizeObserver;
   private tmp = { x: 0, y: 0 };
@@ -133,6 +149,7 @@ export class Game extends Emitter<GameEvents> {
     const forced = padById(new URLSearchParams(location.search).get("pad") ?? "");
     this.gel.setShape(forced ?? this.progressStore.current);
     this.newPad(true);
+    this.pendingNext = this.nextProvider.next(this.pad.id);
     this.last = performance.now();
     this.raf = requestAnimationFrame(this.frame);
   }
@@ -185,6 +202,11 @@ export class Game extends Emitter<GameEvents> {
   private get s() {
     return this.gel.R / REF_PAD_R;
   }
+  /** where treasures fly to: the treasure-box button, top right */
+  get treasureEntry() {
+    return { x: this.w - 46, y: 96 };
+  }
+
   private toLocal(x: number, y: number) {
     return { x: x - this.padCx, y: (y - this.padCy) / this.gel.tilt };
   }
@@ -216,9 +238,11 @@ export class Game extends Emitter<GameEvents> {
           raritySkew: preset.raritySkew,
           typeSkew: preset.typeSkew,
           rareCenterChance: preset.rareCenterChance,
-          hiddenObject: this.pad.hiddenObject,
+          hiddenObject: this.rollHidden(),
+          ultraChance: ULTRA_SURFACE_CHANCE,
         });
     this.padTotal = this.beads.length;
+    this.peekUntil = -1;
     this.gel.sockets = [];
     this.gel.dents = [];
     this.gel.fade = instant ? 1 : 0.15;
@@ -254,23 +278,57 @@ export class Game extends Emitter<GameEvents> {
     return this.gel.pad;
   }
 
-  /** the pad that comes after this one */
-  get nextPad(): PadType {
-    return this.nextProvider.next(this.pad.id);
+  /** what this pad hides this time, from its weighted pool (never the same twice for sure) */
+  private rollHidden(): string | undefined {
+    const pool = HIDDEN_POOLS[this.pad.variantOf ?? this.pad.id];
+    if (!pool?.length) return undefined;
+    return rng.weighted(pool, (e) => e.w).id;
   }
 
-  /** is the next pad behind the (mock) rewarded unlock? */
-  get nextGated() {
-    return isGated(this.progressStore, this.nextPad);
+  /** the pad that comes after this one (rolled once per pad) */
+  get nextPad(): PadType {
+    if (!this.pendingNext) this.pendingNext = this.nextProvider.next(this.pad.id);
+    return this.pendingNext;
+  }
+
+  /** is the next pad a rare variant passing by? (the only thing an ad is offered for) */
+  get nextIsRare() {
+    return isRareVariant(this.nextPad);
+  }
+
+  /** the buried object of the current pad, and whether it has never been found before */
+  get hiddenInfo() {
+    const b = this.beads.find((x) => x.hidden && (x.state === "embedded" || x.state === "held"));
+    if (!b) return null;
+    return { type: b.type, isNew: !this.treasure.has(b.type.id) };
+  }
+
+  /** show the buried object clearly for a moment (after "광고 보고 살짝 보기") */
+  peekHidden(seconds = 1.8) {
+    this.peekUntil = this.time + seconds;
+    this.gel.markDirty();
+    this.schedule(seconds + 0.02, () => this.gel.markDirty());
   }
 
   /** switch to a pad: reshape the gel, fresh beads, keep the cup */
-  openPad(pad: PadType) {
+  openPad(pad: PadType, opts: { viaAd?: boolean } = {}) {
+    if (opts.viaAd) {
+      this.diamonds.noteAdWatched();
+      const done = this.diamonds.advance("ads2");
+      if (done) this.emit("diamond", { mission: done, diamonds: this.diamonds.diamonds });
+    }
     this.progressStore.open(pad);
     this.gel.setShape(pad);
     this.newPad();
+    this.pendingNext = this.nextProvider.next(pad.id);
     this.emit("padChange", { pad });
     this.emitProgress();
+  }
+
+  /** let a rare variant pass: open the plain version of that pad instead */
+  openNextPlain() {
+    const base = padById(this.nextPad.id)!;
+    this.openPad(base);
   }
 
   private emitProgress() {
@@ -424,9 +482,11 @@ export class Game extends Emitter<GameEvents> {
     b.lift = 1;
 
     // 0ms: freed – kicks toward the finger, hangs there ~150ms so the moment lands, then arcs into the cup
+    // (treasures arc up to the treasure box instead)
     const kick = b.type.bounce * s * (1 + Math.min(speed, 1400) / 2800);
     const start = this.toCanvas(pos.x + dx * kick, pos.y + dy * kick);
-    const end = this.collector.entry;
+    const kind = treasureKind(b.type);
+    const end = kind ? this.treasureEntry : this.collector.entry;
     const mx = (start.x + end.x) / 2 + dx * 30 * s;
     const my = Math.min(start.y, end.y) - (70 + 60 * Math.random()) * s;
     const dur = (0.46 + b.type.mass * 0.11) * (0.92 + Math.random() * 0.16);
@@ -449,9 +509,10 @@ export class Game extends Emitter<GameEvents> {
     };
 
     // t = 0: sound + haptic land exactly with the release
-    sfx.pop(b.type.sound, b.type.mass, rare);
-    if (rare) this.schedule(0.05, () => haptics.rare());
+    sfx.pop(b.type.sound, b.type.mass, rare || !!kind);
+    if (kind) this.schedule(0.05, () => haptics.rare());
     else haptics.pop(b.type.mass);
+    if (kind === "ultra") this.schedule(0.12, () => sfx.chime(true));
 
     // the socket is empty from now on
     const deeper = this.beads.find((o) => o.slot === b.slot && o.layer === 1 && o.state === "embedded" && o !== b);
@@ -471,7 +532,7 @@ export class Game extends Emitter<GameEvents> {
     // +120ms: the bead underneath rises to the surface
     if (deeper) this.schedule(0.12, () => (deeper.depth.target = 0));
 
-    if (rare) this.flashes.push({ x: pos.x, y: pos.y, t: 0 });
+    if (kind) this.flashes.push({ x: pos.x, y: pos.y, t: 0 });
 
     // scoring
     let score = b.type.score;
@@ -497,6 +558,8 @@ export class Game extends Emitter<GameEvents> {
       if (this.mode === "challenge" && this.challenge.running) this.schedule(0.35, () => this.newPad());
       else {
         this.progressStore.complete(this.pad.id);
+        const done = this.diamonds.advance("pads3");
+        if (done) this.schedule(0.9, () => this.emit("diamond", { mission: done, diamonds: this.diamonds.diamonds }));
         this.schedule(0.4, () => this.emit("padEmpty", undefined));
       }
     }
@@ -576,10 +639,21 @@ export class Game extends Emitter<GameEvents> {
         f.t += dt;
         if (f.t >= f.hang + f.dur) {
           b.state = "collected";
-          const vx = (f.x1 - f.cx) * 2;
-          const vy = (f.y1 - f.cy) * 2;
-          this.collector.add(b, vx, vy);
-          sfx.land(b.type.material, b.type.mass);
+          const kind = treasureKind(b.type);
+          if (kind) {
+            const isNew = this.treasure.add(b.type.id);
+            sfx.land("glass", b.type.mass * 0.6);
+            this.emit("treasure", { type: b.type, kind, isNew, count: this.treasure.count(b.type.id), padName: this.pad.name });
+            if (kind !== "rare") {
+              const done = this.diamonds.advance("hidden2");
+              if (done) this.emit("diamond", { mission: done, diamonds: this.diamonds.diamonds });
+            }
+          } else {
+            const vx = (f.x1 - f.cx) * 2;
+            const vy = (f.y1 - f.cy) * 2;
+            this.collector.add(b, vx, vy);
+            sfx.land(b.type.material, b.type.mass);
+          }
           b.fly = undefined;
         }
       }
@@ -720,7 +794,9 @@ export class Game extends Emitter<GameEvents> {
           // the hidden object is bigger than the bead sitting on it: its edges show
           // around the host, fading in as the pad empties – "what's that in there?"
           if (b.hidden) {
-            ctx.globalAlpha = 0.12 + 0.55 * clamp(emptied * 1.4, 0, 1);
+            const vis = this.pad.hiddenVisibility ?? 1;
+            const peek = this.time < this.peekUntil;
+            ctx.globalAlpha = peek ? 0.85 : (0.12 + 0.55 * clamp(emptied * 1.4, 0, 1)) * vis;
             this.drawEmbedded(ctx, b, false, true);
             ctx.globalAlpha = 1;
           }
@@ -1024,7 +1100,8 @@ export class Game extends Emitter<GameEvents> {
     ctx.save();
     ctx.translate(x, y);
     ctx.rotate(b.rot + f.spin * Math.max(0, f.t - f.hang));
-    const sc = 1.12 - flyT * 0.3; // lifted while it hangs, shrinks as it "falls" into the cup
+    const toBox = !!treasureKind(b.type);
+    const sc = 1.12 - flyT * (toBox ? 0.55 : 0.3); // lifted while it hangs, shrinks as it "falls" into the cup / box
     ctx.scale(sc, sc);
     ctx.drawImage(sp.canvas, -sp.w / 2, -sp.h / 2, sp.w, sp.h);
     ctx.restore();

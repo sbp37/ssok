@@ -53,12 +53,59 @@ export interface PadType {
   /** overall grip multiplier for the pad */
   grip: number;
   beads: BeadPreset;
-  /** bead type id hidden deep in the pad, larger than the rest, revealed as the pad empties */
+  /**
+   * hidden object actually buried this time (rolled from HIDDEN_POOLS when the
+   * pad is opened – the same pad hides different things on different visits)
+   */
   hiddenObject?: string;
   /** what the NEXT preview hints at */
   hint?: { color: string; label: string };
   /** emoji-free tiny glyph for the 3-choice hook later */
   glyph: string;
+  /** set on a rolled variant: which base pad it is and how rare */
+  variantOf?: string;
+  tier?: "rare" | "super";
+  /** how visible the buried object is (1 = default; <1 harder to spot) */
+  hiddenVisibility?: number;
+}
+
+/**
+ * Pad variants: the same toy, once in a while, a little different – a touch
+ * more transparent, a few more rare beads, a slightly different grip. One
+ * idea per variant, never a new rule set.
+ */
+export interface PadVariant {
+  id: string;
+  name: string;
+  tier: "rare" | "super";
+  patch: Partial<Pick<PadType, "gelColor" | "transparency" | "grip" | "softness" | "hiddenVisibility" | "hint">> & {
+    raritySkew?: Partial<Record<Rarity, number>>;
+  };
+}
+
+export const VARIANTS: Record<string, PadVariant[]> = {
+  cloud: [{ id: "glasscloud", name: "유리 구름", tier: "rare", patch: { gelColor: { r: 222, g: 232, b: 246 }, transparency: 1.35, raritySkew: { rare: 1.8 } } }],
+  flower: [{ id: "pearlflower", name: "펄 꽃", tier: "rare", patch: { gelColor: { r: 244, g: 236, b: 246 }, transparency: 0.9, raritySkew: { rare: 1.6, special: 1.4 }, hiddenVisibility: 0.7 } }],
+  donut: [{ id: "sugardonut", name: "슈가 도넛", tier: "rare", patch: { gelColor: { r: 248, g: 240, b: 236 }, transparency: 0.95, grip: 0.92, raritySkew: { rare: 1.6 } } }],
+  paw: [{ id: "milkypaw", name: "밀키 발바닥", tier: "rare", patch: { gelColor: { r: 248, g: 226, b: 232 }, transparency: 0.85, raritySkew: { rare: 1.7 }, hiddenVisibility: 0.7 } }],
+  ribbon: [{ id: "glassribbon", name: "유리 리본", tier: "rare", patch: { gelColor: { r: 230, g: 236, b: 248 }, transparency: 1.4, grip: 0.95, raritySkew: { rare: 1.8 } } }],
+  shell: [{ id: "pearlshell", name: "펄 조개", tier: "rare", patch: { gelColor: { r: 246, g: 240, b: 244 }, transparency: 0.85, raritySkew: { rare: 1.6, big: 1.3 }, hiddenVisibility: 0.6 } }],
+  cherry: [{ id: "jellycherry", name: "젤리 체리", tier: "rare", patch: { gelColor: { r: 250, g: 190, b: 196 }, transparency: 1.3, softness: 1.15, raritySkew: { rare: 1.6 } } }],
+  star: [{ id: "rainbowstar", name: "무지개 별", tier: "super", patch: { gelColor: { r: 226, g: 220, b: 248 }, transparency: 1.25, raritySkew: { rare: 2.6, special: 1.5 }, hint: { color: "#ffe9ff", label: "???" } } }],
+};
+
+/** merge a variant onto its base pad */
+export function applyVariant(base: PadType, v: PadVariant): PadType {
+  const { raritySkew, ...rest } = v.patch;
+  return {
+    ...base,
+    ...rest,
+    id: `${base.id}:${v.id}`,
+    name: v.name,
+    variantOf: base.id,
+    tier: v.tier,
+    beads: { ...base.beads, raritySkew: { ...(base.beads.raritySkew ?? {}), ...(raritySkew ?? {}) } },
+  };
 }
 
 const TAU = Math.PI * 2;
@@ -86,7 +133,6 @@ export const PADS: readonly PadType[] = [
     wobble: 1.1,
     grip: 0.92,
     beads: { surface: 52, raritySkew: { common: 1.3, big: 0.7 } },
-    hiddenObject: "bigglass",
     hint: { color: "#cfe8ff", label: "유리알" },
   },
   {
@@ -109,7 +155,6 @@ export const PADS: readonly PadType[] = [
     },
     grip: 1,
     beads: { surface: 50, typeSkew: { flower: 4 }, raritySkew: { special: 1.6 } },
-    hiddenObject: "candystar",
     hint: { color: "#fff0b8", label: "별사탕" },
   },
   {
@@ -127,7 +172,6 @@ export const PADS: readonly PadType[] = [
     wobble: 1,
     grip: 1,
     beads: { surface: 46, raritySkew: { big: 1.2 } },
-    hiddenObject: "key",
     hint: { color: "#f3d27a", label: "열쇠" },
   },
   {
@@ -151,7 +195,6 @@ export const PADS: readonly PadType[] = [
     resistance: (xn, yn) => (yn < -0.55 ? 0.8 : Math.hypot(xn, yn) < 0.4 ? 1.12 : 1),
     grip: 1,
     beads: { surface: 48, typeSkew: { heart: 2 } },
-    hiddenObject: "eye",
     hint: { color: "#d9e7f5", label: "눈알" },
   },
   {
@@ -175,7 +218,6 @@ export const PADS: readonly PadType[] = [
     resistance: (xn) => (Math.abs(xn) < 0.28 ? 1.28 : Math.abs(xn) > 0.65 ? 0.88 : 1),
     grip: 1,
     beads: { surface: 46, rareCenterChance: 0.55, typeSkew: { gold: 2.5 } },
-    hiddenObject: "bigopal",
     hint: { color: "#f2e6ff", label: "오팔" },
   },
   {
@@ -196,7 +238,6 @@ export const PADS: readonly PadType[] = [
     wobble: 0.9,
     grip: 1.02,
     beads: { surface: 46, typeSkew: { pearl: 3, shell: 2 }, raritySkew: { big: 1.4 } },
-    hiddenObject: "bigpearl",
     hint: { color: "#ffffff", label: "진주" },
   },
   {
@@ -215,7 +256,6 @@ export const PADS: readonly PadType[] = [
     coupling: 1,
     grip: 1,
     beads: { surface: 44, typeSkew: { cherry: 3 } },
-    hiddenObject: "minicherry",
     hint: { color: "#e2445c", label: "체리" },
   },
   {
@@ -238,12 +278,12 @@ export const PADS: readonly PadType[] = [
     },
     grip: 1,
     beads: { surface: 48, typeSkew: { star: 3 } },
-    hiddenObject: "duck",
     hint: { color: "#fff6c8", label: "오리" },
   },
 ];
 
-export const padById = (id: string) => PADS.find((p) => p.id === id);
+/** base pad by id ("shell" or a variant id "shell:pearlshell" → the shell) */
+export const padById = (id: string) => PADS.find((p) => p.id === id.split(":")[0]);
 
 /** draw a pad's silhouette (with hole) centred at (0,0), radius R, into ctx */
 export function silhouettePath(ctx: CanvasRenderingContext2D, pad: PadType, R: number, n = 96) {
