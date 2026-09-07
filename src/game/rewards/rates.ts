@@ -1,6 +1,6 @@
 /**
- * Every tunable reward number lives here. Nothing in this file is a real
- * currency: diamonds are a mock until a points provider exists.
+ * Every tunable reward number lives here. Rewards are things to *find*
+ * (rare beads, buried objects) – there is no currency in this game.
  */
 
 /** weighted hidden-object pool per pad: the same pad never reliably hides the same thing */
@@ -76,11 +76,3 @@ export const ULTRA_SURFACE_CHANCE = 0.006;
 
 /** pad variant rolls, applied when the next pad is chosen */
 export const VARIANT_CHANCE = { rare: 0.07, super: 0.012 };
-
-/** daily missions, each worth one diamond */
-export const MISSIONS = [
-  { id: "pads3", label: "패드 3개 비우기", goal: 3 },
-  { id: "hidden2", label: "숨은 보물 2개 찾기", goal: 2 },
-  { id: "ads2", label: "광고로 다음 패드 2회 바로 열기", goal: 2 },
-] as const;
-export type MissionId = (typeof MISSIONS)[number]["id"];

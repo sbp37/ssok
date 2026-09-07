@@ -217,7 +217,7 @@ export const PADS: readonly PadType[] = [
     // the knot holds on hardest, the wings are thin and easy
     resistance: (xn) => (Math.abs(xn) < 0.28 ? 1.28 : Math.abs(xn) > 0.65 ? 0.88 : 1),
     grip: 1,
-    beads: { surface: 46, rareCenterChance: 0.55, typeSkew: { gold: 2.5 } },
+    beads: { surface: 46, rareCenterChance: 0.09, typeSkew: { gold: 2.5 } },
     hint: { color: "#f2e6ff", label: "오팔" },
   },
   {

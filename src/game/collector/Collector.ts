@@ -64,6 +64,12 @@ export class Collector {
   count = 0;
   /** jar squash when something lands, 0..1, gone in ~200ms */
   bump = 0;
+  /** >0 while the jar is being tidied for a new pad (seconds elapsed) */
+  private dismissT = -1;
+  static readonly DISMISS = 0.28;
+  /** beads are drawn a bit smaller than on the pad – it reads as depth, and a pad's worth fits */
+  static readonly BEAD_SCALE = 0.55;
+  static readonly MAX_ITEMS = 90;
 
   layout(x: number, y: number, w: number, h: number) {
     this.x = x;
@@ -84,7 +90,7 @@ export class Collector {
 
   /** true while anything is still moving – lets callers skip the step entirely */
   get settled() {
-    if (this.bump > 0) return false;
+    if (this.bump > 0 || this.dismissing) return false;
     for (const it of this.items) if (!it.sleeping) return false;
     return true;
   }
@@ -99,8 +105,22 @@ export class Collector {
     it.vrot += vrot;
   }
 
+  /** tidy the jar away over ~280ms (beads sink a little and fade), then clear */
+  dismiss() {
+    if (this.items.length === 0) return;
+    this.dismissT = 0;
+  }
+  get dismissing() {
+    return this.dismissT >= 0;
+  }
+
   add(bead: Bead, vx: number, vy: number) {
-    const r = Math.min(bead.radius * 0.72, this.w * 0.14);
+    if (this.dismissing) {
+      // a straggler landing mid-tidy: finish the tidy first
+      this.items = [];
+      this.dismissT = -1;
+    }
+    const r = Math.min(bead.radius * Collector.BEAD_SCALE, this.w * 0.11);
     this.items.push({
       bead,
       x: this.x + this.w / 2 + (Math.random() - 0.5) * this.w * 0.5,
@@ -122,11 +142,19 @@ export class Collector {
     });
     this.count++;
     this.bump = 1;
-    if (this.items.length > 60) this.items.splice(0, this.items.length - 60);
+    if (this.items.length > Collector.MAX_ITEMS) this.items.splice(0, this.items.length - Collector.MAX_ITEMS);
   }
 
   step(dt: number) {
     this.bump = Math.max(0, this.bump - dt * 5); // ~200ms
+    if (this.dismissT >= 0) {
+      this.dismissT += dt;
+      if (this.dismissT >= Collector.DISMISS) {
+        this.items = [];
+        this.dismissT = -1;
+      }
+      return;
+    }
     const items = this.items;
     // nothing to do once every bead has settled
     let anyAwake = false;
@@ -287,19 +315,23 @@ export class Collector {
     ctx.save();
     path();
     ctx.clip();
-    // beads
+    // beads (while tidying: they sink ~10px and fade – no shake, no spin)
+    const k = this.dismissT >= 0 ? Math.min(1, this.dismissT / Collector.DISMISS) : 0;
+    const sink = k * k * 10;
+    const fade = 1 - k;
     for (const it of this.items) {
       const sh = getShadowSprite(it.r, dpr);
-      ctx.globalAlpha = 0.5;
-      ctx.drawImage(sh.canvas, it.x - sh.w / 2, it.y - sh.h / 2 + it.r * 0.35, sh.w, sh.h);
-      ctx.globalAlpha = 1;
+      ctx.globalAlpha = 0.5 * fade;
+      ctx.drawImage(sh.canvas, it.x - sh.w / 2, it.y - sh.h / 2 + it.r * 0.35 + sink, sh.w, sh.h);
+      ctx.globalAlpha = fade;
       const sp = getBeadSprite(it.bead.type, it.bead.color, it.r, dpr);
       ctx.save();
-      ctx.translate(it.x, it.y);
+      ctx.translate(it.x, it.y + sink);
       ctx.rotate(it.rot);
       ctx.drawImage(sp.canvas, -sp.w / 2, -sp.h / 2, sp.w, sp.h);
       ctx.restore();
     }
+    ctx.globalAlpha = 1;
     // glass tint over beads
     const g = ctx.createLinearGradient(x, y, x + w, y + h);
     g.addColorStop(0, "rgba(255,255,255,0.28)");

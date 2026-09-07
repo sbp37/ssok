@@ -301,7 +301,9 @@ export const RARITY_WEIGHT: Record<Rarity, number> = {
   big: 20,
   odd: 10,
   special: 7,
-  rare: 3,
+  // ≈0.56 plain rares per pad, P(≥1) ≈ 0.43 (measured over 480 generated pads): a rare should be
+  // an "어? 나왔다" roughly every other pad, not a fixture of every pad
+  rare: 0.8,
   hidden: 0, // never rolled – placed on purpose by the pad
   ultra: 0, // never rolled – tiny fixed chance handled by the layout
 };

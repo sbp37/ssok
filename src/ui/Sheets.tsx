@@ -3,6 +3,8 @@ import type { Game } from "../game/Game";
 import { getBeadSprite } from "../game/beads/BeadSprites";
 import type { BeadType } from "../game/beads/BeadTypes";
 import { TREASURE_TYPES } from "../game/rewards/treasure";
+import { haptics } from "../game/haptics";
+import { sfx } from "../game/audio/Sfx";
 
 /** small bottom sheet – the only kind of "screen" the game has */
 export function Sheet({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
@@ -62,42 +64,42 @@ export function TreasureSheet({ game, onClose }: { game: Game; onClose: () => vo
   );
 }
 
-export function DiamondSheet({ game, onClose }: { game: Game; onClose: () => void }) {
-  const [, tick] = useState(0);
-  const [mock, setMock] = useState(false);
-  useEffect(() => game.diamonds.subscribe(() => tick((n) => n + 1)), [game]);
-  const n = game.diamonds.diamonds;
+/** sound / haptics live here, off the main screen */
+export function SettingsSheet({ onClose }: { onClose: () => void }) {
+  const [soundOn, setSoundOn] = useState(sfx.enabled);
+  const [hapticsOn, setHapticsOn] = useState(haptics.enabled);
   return (
-    <Sheet title="내 다이아" onClose={onClose}>
-      <div className="dia-big">💎 {n}</div>
-      <button className="btn" onClick={() => setMock(true)} disabled={n === 0}>
-        포인트로 바꾸기
-      </button>
-      {mock && (
-        <div className="mock-note">
-          <div>{n}P 받을 수 있어요</div>
-          <small>실제 포인트 연동은 준비 중이에요. 지금은 지급되지 않아요.</small>
-        </div>
-      )}
-      <div className="sheet-foot">다이아는 오늘 미션으로만 모을 수 있어요.</div>
-    </Sheet>
-  );
-}
-
-export function TodaySheet({ game, onClose }: { game: Game; onClose: () => void }) {
-  const [, tick] = useState(0);
-  useEffect(() => game.diamonds.subscribe(() => tick((n) => n + 1)), [game]);
-  return (
-    <Sheet title="오늘" onClose={onClose}>
-      <ul className="missions">
-        {game.diamonds.missions().map((m) => (
-          <li key={m.id} className={m.done ? "done" : ""}>
-            <span className="m-label">{m.label}</span>
-            <span className="m-prog">{m.done ? "💎 받음" : `${m.progress}/${m.goal} · 💎 1`}</span>
-          </li>
-        ))}
+    <Sheet title="설정" onClose={onClose}>
+      <ul className="settings">
+        <li>
+          <span>소리</span>
+          <button
+            className={"switch" + (soundOn ? " on" : "")}
+            aria-pressed={soundOn}
+            onClick={() => {
+              sfx.unlock();
+              sfx.setEnabled(!soundOn);
+              setSoundOn(!soundOn);
+            }}
+          >
+            <i />
+          </button>
+        </li>
+        <li>
+          <span>진동</span>
+          <button
+            className={"switch" + (hapticsOn ? " on" : "")}
+            aria-pressed={hapticsOn}
+            onClick={() => {
+              haptics.setEnabled(!hapticsOn);
+              setHapticsOn(!hapticsOn);
+              if (!hapticsOn) haptics.press();
+            }}
+          >
+            <i />
+          </button>
+        </li>
       </ul>
-      <div className="sheet-foot">매일 바뀌어요. 다이아는 여기서만.</div>
     </Sheet>
   );
 }

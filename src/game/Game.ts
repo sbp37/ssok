@@ -14,7 +14,6 @@ import { PADS, padById, type PadType } from "./pads/PadTypes";
 import { MockRewardedProvider, PadProgress, SequenceProvider, isRareVariant, type NextPadProvider, type RewardedUnlockProvider } from "./pads/progress";
 import { HIDDEN_POOLS, ULTRA_SURFACE_CHANCE } from "./rewards/rates";
 import { TreasureStore, treasureKind, type TreasureKind } from "./rewards/treasure";
-import { DiamondStore, type MissionView } from "./rewards/diamonds";
 import type { BeadType } from "./beads/BeadTypes";
 
 export type Mode = "free" | "challenge";
@@ -32,8 +31,6 @@ export interface GameEvents {
   padChange: { pad: PadType };
   /** a rare bead / hidden object / ultra landed in the treasure box */
   treasure: { type: BeadType; kind: TreasureKind; isNew: boolean; count: number; padName: string };
-  /** a mission just completed → one (mock) diamond */
-  diamond: { mission: MissionView; diamonds: number };
 }
 
 type Listener<T> = (payload: T) => void;
@@ -113,7 +110,6 @@ export class Game extends Emitter<GameEvents> {
   nextProvider: NextPadProvider = new SequenceProvider();
   rewarded: RewardedUnlockProvider = new MockRewardedProvider();
   treasure = new TreasureStore();
-  diamonds = new DiamondStore();
   /** the pad after this one – rolled once when this pad opens so NEXT and the door agree */
   private pendingNext: PadType | null = null;
   /** while > time, the buried object is shown clearly (the "살짝 보기" hint) */
@@ -180,9 +176,10 @@ export class Game extends Emitter<GameEvents> {
     this.gel.R = Math.min(this.w * 0.43, this.h * 0.305);
     this.padCx = this.w / 2;
     this.padCy = this.h * 0.455;
-    const cw = clamp(this.w * 0.26, 84, 112);
-    const ch = cw * 0.78;
-    this.collector.layout(this.w - cw - 14, this.h - ch - 26, cw, ch);
+    // a proper jar: ~31% of the width, taller than wide, sitting just above the ad slot
+    const cw = clamp(this.w * 0.31, 112, 136);
+    const ch = cw * 1.08;
+    this.collector.layout(this.w - cw - 14, this.h - ch - 14, cw, ch);
     if (oldR > 0 && Math.abs(oldR - this.gel.R) > 0.5 && this.beads.length) {
       const k = this.gel.R / oldR;
       for (const b of this.beads) {
@@ -310,13 +307,12 @@ export class Game extends Emitter<GameEvents> {
     this.schedule(seconds + 0.02, () => this.gel.markDirty());
   }
 
-  /** switch to a pad: reshape the gel, fresh beads, keep the cup */
-  openPad(pad: PadType, opts: { viaAd?: boolean } = {}) {
-    if (opts.viaAd) {
-      this.diamonds.noteAdWatched();
-      const done = this.diamonds.advance("ads2");
-      if (done) this.emit("diamond", { mission: done, diamonds: this.diamonds.diamonds });
-    }
+  /**
+   * switch to a pad: reshape the gel, fresh beads. The jar holds *this pad's*
+   * beads, so it is tidied away now – briefly, not wiped in one frame.
+   */
+  openPad(pad: PadType) {
+    this.collector.dismiss();
     this.progressStore.open(pad);
     this.gel.setShape(pad);
     this.newPad();
@@ -558,8 +554,6 @@ export class Game extends Emitter<GameEvents> {
       if (this.mode === "challenge" && this.challenge.running) this.schedule(0.35, () => this.newPad());
       else {
         this.progressStore.complete(this.pad.id);
-        const done = this.diamonds.advance("pads3");
-        if (done) this.schedule(0.9, () => this.emit("diamond", { mission: done, diamonds: this.diamonds.diamonds }));
         this.schedule(0.4, () => this.emit("padEmpty", undefined));
       }
     }
@@ -644,10 +638,6 @@ export class Game extends Emitter<GameEvents> {
             const isNew = this.treasure.add(b.type.id);
             sfx.land("glass", b.type.mass * 0.6);
             this.emit("treasure", { type: b.type, kind, isNew, count: this.treasure.count(b.type.id), padName: this.pad.name });
-            if (kind !== "rare") {
-              const done = this.diamonds.advance("hidden2");
-              if (done) this.emit("diamond", { mission: done, diamonds: this.diamonds.diamonds });
-            }
           } else {
             const vx = (f.x1 - f.cx) * 2;
             const vy = (f.y1 - f.cy) * 2;

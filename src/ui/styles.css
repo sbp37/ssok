@@ -29,13 +29,39 @@ body,
   overscroll-behavior: none;
 }
 
+:root {
+  /* the bottom banner's height, set once here; the ad SDK's real size goes here later */
+  --ad-banner-height: 56px;
+}
 .stage {
   position: fixed;
   inset: 0;
+  display: flex;
+  flex-direction: column;
   background: radial-gradient(120% 90% at 50% 40%, #f7f6f4 0%, var(--bg) 60%, #ecebe9 100%);
 }
-/* only the game canvases fill the stage – icon canvases in sheets/panels size themselves */
-.stage > canvas {
+/* the game lives here; nothing of it reaches under the ad slot */
+.playfield {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.ad-slot {
+  flex: 0 0 auto;
+  height: calc(var(--ad-banner-height) + env(safe-area-inset-bottom, 0px));
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-top: 1px solid rgba(43, 39, 48, 0.06);
+  background: rgba(255, 255, 255, 0.35);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  color: var(--ink-faint);
+  user-select: none;
+}
+/* only the game canvases fill the playfield – icon canvases in sheets/panels size themselves */
+.playfield > canvas {
   position: absolute;
   inset: 0;
   width: 100%;
@@ -48,7 +74,8 @@ body,
   position: absolute;
   inset: 0;
   pointer-events: none;
-  padding: calc(env(safe-area-inset-top, 0px) + 14px) 18px calc(env(safe-area-inset-bottom, 0px) + 18px);
+  /* bottom: 12px of air above the ad slot, so no button ever sits on the banner */
+  padding: calc(env(safe-area-inset-top, 0px) + 14px) 18px 14px;
   display: flex;
   flex-direction: column;
 }
@@ -105,26 +132,6 @@ body,
     opacity: 0;
   }
 }
-.toggles {
-  display: flex;
-  gap: 6px;
-}
-.toggles button {
-  font: inherit;
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--ink-soft);
-  background: rgba(255, 255, 255, 0.55);
-  border: 1px solid rgba(43, 39, 48, 0.08);
-  border-radius: 999px;
-  padding: 6px 10px;
-  cursor: pointer;
-}
-.toggles button.off {
-  color: var(--ink-faint);
-  text-decoration: line-through;
-  background: transparent;
-}
 
 /* centre hint */
 .hint {
@@ -143,35 +150,6 @@ body,
   opacity: 0;
 }
 
-.rare {
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: calc(env(safe-area-inset-top, 0px) + 66px);
-  text-align: center;
-  font-size: 13px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  color: #b1699a;
-  animation: rareIn 1.3s ease-out forwards;
-}
-@keyframes rareIn {
-  0% {
-    opacity: 0;
-    transform: translateY(6px);
-  }
-  15% {
-    opacity: 1;
-    transform: translateY(0);
-  }
-  75% {
-    opacity: 1;
-  }
-  100% {
-    opacity: 0;
-  }
-}
-
 /* bottom area */
 .bottom {
   margin-top: auto;
@@ -179,8 +157,8 @@ body,
   flex-direction: column;
   align-items: flex-start;
   gap: 10px;
-  /* leave the right side to the collector cup */
-  padding-right: 34%;
+  /* leave the right side to the jar */
+  padding-right: 40%;
   min-height: 64px;
 }
 .btn {
@@ -373,12 +351,92 @@ body,
 /* top-right cluster */
 .right {
   display: flex;
-  flex-direction: column;
-  align-items: flex-end;
+  align-items: center;
   gap: 6px;
 }
-.toggles.top .pill {
-  font-size: 12px;
+.pill.tiny {
+  padding: 5px 8px;
+  font-size: 13px;
+  line-height: 1;
+  opacity: 0.6;
+}
+.pill.blink {
+  animation: blink 0.4s ease-out;
+}
+@keyframes blink {
+  30% {
+    background: #fff;
+    box-shadow: 0 0 0 3px rgba(217, 119, 159, 0.14);
+  }
+}
+.glimmer {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 69%; /* just under the pad, never over the beads */
+  text-align: center;
+  font-size: 13px;
+  font-weight: 500;
+  color: rgba(80, 40, 70, 0.5);
+  letter-spacing: 0.02em;
+  animation: glimmerIn 2.6s ease-out forwards;
+  pointer-events: none;
+}
+@keyframes glimmerIn {
+  0% {
+    opacity: 0;
+  }
+  15%,
+  75% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+.settings {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.settings li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #fff;
+  border-radius: 12px;
+  padding: 11px 12px;
+  border: 1px solid rgba(43, 39, 48, 0.06);
+  font-size: 14px;
+}
+.switch {
+  width: 42px;
+  height: 24px;
+  border-radius: 999px;
+  border: none;
+  background: rgba(43, 39, 48, 0.15);
+  position: relative;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.switch i {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  background: #fff;
+  transition: transform 0.2s;
+}
+.switch.on {
+  background: var(--ink);
+}
+.switch.on i {
+  transform: translateX(18px);
 }
 .pill {
   font: inherit;
@@ -452,9 +510,7 @@ body,
   box-shadow: 0 6px 22px rgba(43, 39, 48, 0.12);
   animation-duration: 2.6s;
 }
-.toast.diamond {
-  color: #3d7fb8;
-}
+
 @keyframes toastIn {
   0% {
     opacity: 0;
@@ -473,38 +529,6 @@ body,
 }
 
 /* hint hook (small, under the count) */
-.hint-hook {
-  position: absolute;
-  left: 18px;
-  top: calc(env(safe-area-inset-top, 0px) + 62px);
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  color: var(--ink-soft);
-  max-width: 62%;
-  animation: btnIn 0.5s ease-out;
-}
-.mini {
-  font: inherit;
-  font-size: 12px;
-  font-weight: 600;
-  color: #fff;
-  background: var(--ink);
-  border: none;
-  border-radius: 999px;
-  padding: 6px 10px;
-  cursor: pointer;
-}
-.mini.ghost {
-  color: var(--ink-soft);
-  background: rgba(255, 255, 255, 0.7);
-  border: 1px solid rgba(43, 39, 48, 0.08);
-}
-.mini:disabled {
-  opacity: 0.6;
-}
 
 /* sheets */
 .sheet-wrap {
@@ -586,53 +610,7 @@ body,
   color: var(--ink-soft);
   min-height: 13px;
 }
-.dia-big {
-  font-size: 34px;
-  font-weight: 700;
-  margin: 6px 0 14px;
-}
-.mock-note {
-  margin-top: 12px;
-  padding: 10px 12px;
-  border-radius: 12px;
-  background: rgba(61, 127, 184, 0.08);
-  font-size: 14px;
-  font-weight: 600;
-  color: #3d7fb8;
-}
-.mock-note small {
-  display: block;
-  margin-top: 3px;
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--ink-soft);
-}
-.missions {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.missions li {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  background: #fff;
-  border-radius: 12px;
-  padding: 11px 12px;
-  border: 1px solid rgba(43, 39, 48, 0.06);
-  font-size: 14px;
-}
-.missions li.done {
-  opacity: 0.55;
-}
-.m-prog {
-  font-size: 12px;
-  color: var(--ink-soft);
-  font-variant-numeric: tabular-nums;
-}
+
 .btn:disabled {
   opacity: 0.5;
 }
