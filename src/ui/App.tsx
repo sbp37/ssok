@@ -4,12 +4,15 @@ import type { ChallengeResult } from "../game/modes/Challenge";
 import { haptics } from "../game/haptics";
 import { sfx } from "../game/audio/Sfx";
 import { useCountUp } from "./useCountUp";
+import { NextPanel } from "./NextPanel";
+import type { PadType } from "../game/pads/PadTypes";
 
 type Phase = "intro" | "free" | "challenge" | "result";
 
 export function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const gameRef = useRef<Game | null>(null);
+  const timers = useRef<number[]>([]);
   const [phase, setPhase] = useState<Phase>("intro");
   const [hintHidden, setHintHidden] = useState(false);
   const [showChallenge, setShowChallenge] = useState(false);
@@ -21,6 +24,13 @@ export function App() {
   const [result, setResult] = useState<{ r: ChallengeResult; isBest: boolean; best: ChallengeResult | null } | null>(null);
   const [hapticsOn, setHapticsOn] = useState(haptics.enabled);
   const [soundOn, setSoundOn] = useState(sfx.enabled);
+  // pad flow (free mode)
+  const [emptied, setEmptied] = useState(0);
+  const [nextPad, setNextPad] = useState<PadType | null>(null);
+  const [gated, setGated] = useState(false);
+  /** "" → playing · "done" → "다 비웠다." · "ready" → the open button */
+  const [flow, setFlow] = useState<"" | "done" | "ready">("");
+  const [watching, setWatching] = useState(false);
 
   useEffect(() => {
     const canvas = canvasRef.current!;
@@ -56,10 +66,30 @@ export function App() {
         setResult({ r: result, isBest, best });
         setPhase("result");
       }),
-      game.on("padEmpty", () => setPadEmpty(true)),
+      game.on("padEmpty", () => {
+        setPadEmpty(true);
+        setNextPad(game.nextPad);
+        setGated(game.nextGated);
+        // hold the empty pad for a beat, then say it quietly, then offer the door
+        const t1 = window.setTimeout(() => setFlow("done"), 550);
+        const t2 = window.setTimeout(() => setFlow("ready"), 1550);
+        timers.current.push(t1, t2);
+      }),
+      game.on("progress", ({ emptied }) => {
+        setEmptied(emptied);
+        if (emptied >= 0.68) setNextPad(game.nextPad);
+      }),
+      game.on("padChange", () => {
+        setEmptied(0);
+        setPadEmpty(false);
+        setFlow("");
+        setNextPad(null);
+      }),
     ];
+    setNextPad(null);
     return () => {
       offs.forEach((off) => off());
+      timers.current.forEach((t) => window.clearTimeout(t));
       game.destroy();
       gameRef.current = null;
     };
@@ -76,9 +106,25 @@ export function App() {
     setPulled(0);
     setPadEmpty(false);
   };
-  const newPad = () => {
-    gameRef.current?.newPad();
-    setPadEmpty(false);
+  const openNext = () => {
+    const g = gameRef.current;
+    if (!g) return;
+    sfx.unlock();
+    g.openPad(g.nextPad);
+  };
+  /** gated: "지금 열기" → (mock) rewarded → open. "나중에" → a pad you already know instead. */
+  const openWithReward = async () => {
+    const g = gameRef.current;
+    if (!g || watching) return;
+    setWatching(true);
+    const ok = await g.rewarded.watch();
+    setWatching(false);
+    if (ok) g.openPad(g.nextPad);
+  };
+  const openLater = () => {
+    const g = gameRef.current;
+    if (!g) return;
+    g.openPad(g.progressStore.fallback(g.nextPad.id));
   };
 
   const inChallenge = phase === "challenge";
@@ -137,16 +183,29 @@ export function App() {
           </div>
         )}
 
-        {padEmpty && phase === "free" && (
-          <div className="center-btn">
-            <button className="btn ghost" onClick={newPad}>
-              새 패드
-            </button>
-          </div>
-        )}
+        {phase === "free" && padEmpty && flow !== "" && <div className="done">다 비웠다.</div>}
 
         <div className="bottom">
-          {phase === "free" && showChallenge && (
+          {phase === "free" && nextPad && (emptied >= 0.68 || padEmpty) && (
+            <NextPanel pad={nextPad} emphasis={padEmpty ? 1 : 0} gated={gated} />
+          )}
+          {phase === "free" && padEmpty && flow === "ready" && nextPad && !gated && (
+            <button className="btn" onClick={openNext}>
+              다음 패드 열기
+            </button>
+          )}
+          {phase === "free" && padEmpty && flow === "ready" && nextPad && gated && (
+            <div className="gate">
+              <button className="btn" onClick={openWithReward} disabled={watching}>
+                {watching ? "잠깐…" : "지금 열기"}
+                <small>광고 1회</small>
+              </button>
+              <button className="link" onClick={openLater}>
+                나중에
+              </button>
+            </div>
+          )}
+          {phase === "free" && showChallenge && !padEmpty && (
             <button className="btn" onClick={start}>
               30초 도전
             </button>

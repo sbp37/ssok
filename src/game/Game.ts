@@ -10,6 +10,8 @@ import { records } from "./storage/records";
 import { sfx } from "./audio/Sfx";
 import { haptics } from "./haptics";
 import { clamp, easeOutCubic, rng } from "./util/math";
+import { PADS, padById, type PadType } from "./pads/PadTypes";
+import { MockRewardedProvider, PadProgress, SequenceProvider, isGated, type NextPadProvider, type RewardedUnlockProvider } from "./pads/progress";
 
 export type Mode = "free" | "challenge";
 
@@ -21,6 +23,9 @@ export interface GameEvents {
   challengeEnd: { result: ChallengeResult; isBest: boolean; best: ChallengeResult | null };
   padEmpty: undefined;
   slipped: undefined;
+  /** free mode: how much of the current pad has been emptied */
+  progress: { emptied: number; remaining: number; total: number };
+  padChange: { pad: PadType };
 }
 
 type Listener<T> = (payload: T) => void;
@@ -93,6 +98,11 @@ export class Game extends Emitter<GameEvents> {
   private firstPopDone = false;
   private freePulled = 0;
   private tickAcc = 0;
+  /** pads */
+  progressStore = new PadProgress();
+  nextProvider: NextPadProvider = new SequenceProvider();
+  rewarded: RewardedUnlockProvider = new MockRewardedProvider();
+  private padTotal = 0;
   private ro: ResizeObserver;
   private tmp = { x: 0, y: 0 };
   /** `?test=5` → sparse 5-bead pad for tuning the hand-feel */
@@ -120,6 +130,8 @@ export class Game extends Emitter<GameEvents> {
     this.ro = new ResizeObserver(() => this.resize());
     this.ro.observe(canvas);
     this.resize();
+    const forced = padById(new URLSearchParams(location.search).get("pad") ?? "");
+    this.gel.setShape(forced ?? this.progressStore.current);
     this.newPad(true);
     this.last = performance.now();
     this.raf = requestAnimationFrame(this.frame);
@@ -185,16 +197,28 @@ export class Game extends Emitter<GameEvents> {
     for (const p of this.pulls.values()) this.releaseBead(p.bead);
     this.pulls.clear();
     const boundary = (th: number) => this.gel.boundary(th);
+    const hole = this.gel.hasHole ? (th: number) => this.gel.holeAt(th) : undefined;
+    const preset = this.pad.beads;
     this.beads = this.testBeads
       ? generatePad(this.gel.R, rng, {
           surface: this.testBeads,
           deeper: false,
           spacing: 40,
           boundary,
+          hole,
           // three distinct hand-feels side by side, then the two odd ones
           forceTypes: ["tiny", "pearl", "star", "marble", "long"],
         })
-      : generatePad(this.gel.R, rng, { boundary });
+      : generatePad(this.gel.R, rng, {
+          boundary,
+          hole,
+          surface: preset.surface,
+          raritySkew: preset.raritySkew,
+          typeSkew: preset.typeSkew,
+          rareCenterChance: preset.rareCenterChance,
+          hiddenObject: this.pad.hiddenObject,
+        });
+    this.padTotal = this.beads.length;
     this.gel.sockets = [];
     this.gel.dents = [];
     this.gel.fade = instant ? 1 : 0.15;
@@ -218,15 +242,48 @@ export class Game extends Emitter<GameEvents> {
     this.freePulled = 0;
     this.newPad();
     this.collector.clear();
+    this.emit("padChange", { pad: this.pad });
+    this.emitProgress();
   }
 
   get best() {
     return records.getBest("challenge30");
   }
 
+  get pad(): PadType {
+    return this.gel.pad;
+  }
+
+  /** the pad that comes after this one */
+  get nextPad(): PadType {
+    return this.nextProvider.next(this.pad.id);
+  }
+
+  /** is the next pad behind the (mock) rewarded unlock? */
+  get nextGated() {
+    return isGated(this.progressStore, this.nextPad);
+  }
+
+  /** switch to a pad: reshape the gel, fresh beads, keep the cup */
+  openPad(pad: PadType) {
+    this.progressStore.open(pad);
+    this.gel.setShape(pad);
+    this.newPad();
+    this.emit("padChange", { pad });
+    this.emitProgress();
+  }
+
+  private emitProgress() {
+    const remaining = this.remainingCount();
+    const total = this.padTotal || 1;
+    this.emit("progress", { emptied: 1 - remaining / total, remaining, total });
+  }
+
+  static readonly PADS = PADS;
+
   /** screen-space positions of currently grabbable beads (debug / e2e) */
   debugBeads() {
-    const out: { id: number; x: number; y: number; r: number; type: string; layer: number; t1: number; t2: number }[] = [];
+    const out: { id: number; x: number; y: number; r: number; type: string; layer: number; hidden: boolean; t1: number; t2: number }[] = [];
     for (const b of this.beads) {
       if (b.state !== "embedded") continue;
       if (b.layer === 1 && this.beads.some((o) => o.slot === b.slot && o.layer === 0 && o.state !== "collected" && o.state !== "gone" && o.state !== "flying")) continue;
@@ -235,7 +292,7 @@ export class Game extends Emitter<GameEvents> {
       const c = this.toCanvas(this.tmp.x, this.tmp.y);
       const s = this.s;
       const deep = b.layer === 1 ? 1.25 : 1;
-      out.push({ id: b.id, x: c.x, y: c.y, r: b.radius, type: b.type.id, layer: b.layer, t1: b.type.grip * s * deep, t2: b.type.grip * s * deep + b.type.pull * s * (b.layer === 1 ? 1.35 : 1) });
+      out.push({ id: b.id, x: c.x, y: c.y, r: b.radius, type: b.type.id, layer: b.layer, hidden: !!b.hidden, t1: b.type.grip * s * deep, t2: b.type.grip * s * deep + b.type.pull * s * (b.layer === 1 ? 1.35 : 1) });
     }
     return out;
   }
@@ -258,7 +315,8 @@ export class Game extends Emitter<GameEvents> {
       const p = beadPos(b);
       this.gel.warp(p.x, p.y, this.tmp);
       const foot = b.type.shape === "oval" ? b.radius * (b.type.aspect ?? 1.7) * 0.78 : b.radius;
-      const d = Math.hypot(this.tmp.x - lx, this.tmp.y - ly);
+      // accept the bead where it is drawn *or* where it rests – the gel may still be ringing from a pop
+      const d = Math.min(Math.hypot(this.tmp.x - lx, this.tmp.y - ly), Math.hypot(p.x - lx, p.y - ly));
       if (d < foot + tol && d < bestD) {
         bestD = d;
         best = b;
@@ -279,7 +337,9 @@ export class Game extends Emitter<GameEvents> {
     const b = this.topBeadAt(l.x, l.y);
     if (b) {
       b.state = "held";
-      this.pulls.set(p.id, new Pull(b, l.x, l.y, this.gel.R, () => rng.next()));
+      const R = this.gel.R;
+      const resist = this.pad.grip * (this.pad.resistance?.(b.rx / R, b.ry / R) ?? 1);
+      this.pulls.set(p.id, new Pull(b, l.x, l.y, R, () => rng.next(), resist));
       this.gel.markDirty(); // the bead leaves the base texture while held
     }
   };
@@ -431,10 +491,14 @@ export class Game extends Emitter<GameEvents> {
       this.firstPopDone = true;
       this.emit("firstPop", undefined);
     }
+    if (this.mode === "free") this.emitProgress();
 
     if (this.remainingCount() === 0) {
       if (this.mode === "challenge" && this.challenge.running) this.schedule(0.35, () => this.newPad());
-      else this.schedule(0.4, () => this.emit("padEmpty", undefined));
+      else {
+        this.progressStore.complete(this.pad.id);
+        this.schedule(0.4, () => this.emit("padEmpty", undefined));
+      }
     }
   }
 
@@ -643,6 +707,7 @@ export class Game extends Emitter<GameEvents> {
     for (const s of gel.sockets) gel.drawSocket(ctx, s.x, s.y, s.r);
     const covered = new Set<number>();
     for (const b of this.beads) if (b.layer === 0 && (b.state === "embedded" || b.state === "held")) covered.add(b.slot);
+    const emptied = this.padTotal ? 1 - this.remainingCount() / this.padTotal : 0;
     for (let layer = 1 as 0 | 1; layer >= 0; layer = (layer - 1) as 0 | 1) {
       for (const b of this.beads) {
         if (b.layer !== layer) continue;
@@ -651,7 +716,16 @@ export class Game extends Emitter<GameEvents> {
           continue;
         }
         if (b.state !== "embedded") continue;
-        if (layer === 1 && covered.has(b.slot)) continue;
+        if (layer === 1 && covered.has(b.slot)) {
+          // the hidden object is bigger than the bead sitting on it: its edges show
+          // around the host, fading in as the pad empties – "what's that in there?"
+          if (b.hidden) {
+            ctx.globalAlpha = 0.12 + 0.55 * clamp(emptied * 1.4, 0, 1);
+            this.drawEmbedded(ctx, b, false, true);
+            ctx.globalAlpha = 1;
+          }
+          continue;
+        }
         this.drawEmbedded(ctx, b, false, true);
       }
     }
@@ -668,7 +742,7 @@ export class Game extends Emitter<GameEvents> {
     const scale = (1 - depth * 0.22) * (1 + lift * 0.2);
     const x = this.tmp.x;
     const y = this.tmp.y + depth * 3 * this.s - lift * 3 * this.s;
-    const alpha = above ? 1 : 1 - depth * 0.55;
+    const alpha = (above ? 1 : 1 - depth * 0.5) * ctx.globalAlpha;
     const dpr = this.dpr;
 
     // shadow: tighter when embedded, lifts & offsets as the bead comes out
@@ -677,7 +751,7 @@ export class Game extends Emitter<GameEvents> {
     ctx.drawImage(sh.canvas, x - sh.w / 2 + lift * 4 * this.s, y - sh.h / 2 + b.radius * (0.18 + lift * 0.5), sh.w, sh.h);
 
     // seen through gel → a softened sprite variant (blur baked in, cached); crisp once it lifts out
-    const sp = getBeadSprite(b.type, b.color, b.radius, dpr, base ? (0.45 + depth * 0.6) * this.s : 0);
+    const sp = getBeadSprite(b.type, b.color, b.radius, dpr, base ? (0.3 + depth * 0.6) * this.s : 0);
     ctx.save();
     ctx.translate(x, y);
     ctx.rotate(b.rot);

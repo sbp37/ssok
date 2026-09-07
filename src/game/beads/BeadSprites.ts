@@ -28,7 +28,15 @@ function rgba(hex: string, a: number, mix = 0, to: [number, number, number] = [2
   return `rgba(${R},${G},${B},${a})`;
 }
 const lighten = (hex: string, t: number, a = 1) => rgba(hex, a, t, [255, 255, 255]);
-const darken = (hex: string, t: number, a = 1) => rgba(hex, a, t, [40, 20, 40]);
+/** darker *same hue* – mixing toward brown made every bead muddy */
+const darken = (hex: string, t: number, a = 1) => {
+  const [r, g, b] = hexToRgb(hex);
+  const k = 1 - t * 0.8;
+  // pull slightly toward the hue's saturated version so shadows stay colourful
+  const mx = Math.max(r, g, b) || 1;
+  const sat = (c: number) => c + (c - mx * 0.5) * 0.15;
+  return `rgba(${Math.round(Math.max(0, sat(r) * k))},${Math.round(Math.max(0, sat(g) * k))},${Math.round(Math.max(0, sat(b) * k))},${a})`;
+};
 
 export function shapePath(ctx: CanvasRenderingContext2D, type: BeadType, r: number) {
   ctx.beginPath();
@@ -84,6 +92,30 @@ export function shapePath(ctx: CanvasRenderingContext2D, type: BeadType, r: numb
       ctx.arc(0, 0, r * 0.45, 0, Math.PI * 2);
       break;
     }
+    case "eye":
+      ctx.arc(0, 0, r, 0, Math.PI * 2);
+      break;
+    case "duck": {
+      // body + head, one silhouette
+      ctx.ellipse(-r * 0.1, r * 0.25, r * 0.85, r * 0.55, 0, 0, Math.PI * 2);
+      ctx.moveTo(r * 0.45 + r * 0.42, -r * 0.3);
+      ctx.arc(r * 0.45, -r * 0.3, r * 0.42, 0, Math.PI * 2);
+      break;
+    }
+    case "key": {
+      // ring head + shaft with two teeth
+      ctx.moveTo(-r * 0.15 + r * 0.42, -r * 0.45);
+      ctx.arc(-r * 0.15, -r * 0.45, r * 0.42, 0, Math.PI * 2);
+      const sw = r * 0.16;
+      ctx.moveTo(-r * 0.15 - sw / 2, -r * 0.1);
+      ctx.lineTo(-r * 0.15 + sw / 2, -r * 0.1);
+      ctx.lineTo(-r * 0.15 + sw / 2, r * 0.95);
+      ctx.lineTo(-r * 0.15 - sw / 2, r * 0.95);
+      ctx.closePath();
+      ctx.rect(-r * 0.15 + sw / 2, r * 0.55, r * 0.32, sw * 0.8);
+      ctx.rect(-r * 0.15 + sw / 2, r * 0.82, r * 0.24, sw * 0.8);
+      break;
+    }
     case "cherry": {
       const cr = r * 0.62;
       ctx.moveTo(-r * 0.4 + cr, r * 0.25);
@@ -113,9 +145,9 @@ function paintBody(ctx: CanvasRenderingContext2D, type: BeadType, color: string,
     g.addColorStop(1, rgba(color, 1, 0.35, [190, 200, 230]));
   } else if (m === "glass") {
     g = ctx.createRadialGradient(-r * 0.25, -r * 0.3, r * 0.05, 0, 0, r);
-    g.addColorStop(0, lighten(color, 0.75, 0.55));
-    g.addColorStop(0.55, rgba(color, 0.62));
-    g.addColorStop(1, darken(color, 0.25, 0.9));
+    g.addColorStop(0, lighten(color, 0.7, 0.7));
+    g.addColorStop(0.55, rgba(color, 0.82));
+    g.addColorStop(1, darken(color, 0.25, 0.95));
   } else if (m === "shell") {
     g = ctx.createRadialGradient(-r * 0.3, -r * 0.3, r * 0.1, 0, 0, r);
     g.addColorStop(0, "#ffffff");
@@ -165,6 +197,40 @@ function paintBody(ctx: CanvasRenderingContext2D, type: BeadType, color: string,
 }
 
 function paintFace(ctx: CanvasRenderingContext2D, type: BeadType, r: number) {
+  if (type.shape === "eye") {
+    // iris + pupil + glint
+    const ir = ctx.createRadialGradient(0, 0, r * 0.1, 0, 0, r * 0.52);
+    ir.addColorStop(0, "#5b8fd6");
+    ir.addColorStop(0.7, "#3b6bb0");
+    ir.addColorStop(1, "#2a4f86");
+    ctx.fillStyle = ir;
+    ctx.beginPath();
+    ctx.arc(0, 0, r * 0.52, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#1c1a22";
+    ctx.beginPath();
+    ctx.arc(0, 0, r * 0.24, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "rgba(255,255,255,0.9)";
+    ctx.beginPath();
+    ctx.arc(-r * 0.14, -r * 0.16, r * 0.09, 0, Math.PI * 2);
+    ctx.fill();
+    return;
+  }
+  if (type.shape === "duck") {
+    ctx.fillStyle = "#f0a640";
+    ctx.beginPath();
+    ctx.moveTo(r * 0.82, -r * 0.34);
+    ctx.lineTo(r * 1.08, -r * 0.24);
+    ctx.lineTo(r * 0.82, -r * 0.14);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = "rgba(60,50,40,0.8)";
+    ctx.beginPath();
+    ctx.arc(r * 0.56, -r * 0.4, r * 0.06, 0, Math.PI * 2);
+    ctx.fill();
+    return;
+  }
   if (type.shape !== "smile") return;
   ctx.fillStyle = "rgba(70,50,40,0.85)";
   ctx.beginPath();
@@ -309,8 +375,8 @@ export function getMeniscusSprite(radius: number, dpr: number, gel: string): Spr
   const gelA = (a: number) => gel.replace(/[\d.]+\)$/, `${a})`);
   // contact darkening just outside the bead
   const ao = ctx.createRadialGradient(c, c + r * 0.1, r * 0.98, c, c + r * 0.1, r * 1.32);
-  ao.addColorStop(0, "rgba(60,50,62,0.34)");
-  ao.addColorStop(0.45, "rgba(60,50,62,0.1)");
+  ao.addColorStop(0, "rgba(60,50,62,0.26)");
+  ao.addColorStop(0.45, "rgba(60,50,62,0.08)");
   ao.addColorStop(1, "rgba(60,50,62,0)");
   ctx.fillStyle = ao;
   ctx.fillRect(0, 0, w, w);
@@ -329,15 +395,15 @@ export function getMeniscusSprite(radius: number, dpr: number, gel: string): Spr
   // gel over the rim, all round
   const lip = ctx.createRadialGradient(c, c, r * 0.7, c, c, r * 1.02);
   lip.addColorStop(0, gelA(0));
-  lip.addColorStop(0.6, gelA(0.18));
-  lip.addColorStop(1, gelA(0.7));
+  lip.addColorStop(0.62, gelA(0.1));
+  lip.addColorStop(1, gelA(0.5));
   ctx.fillStyle = lip;
   ctx.fillRect(0, 0, w, w);
   // heavier gel over the lower part – the bead sits down in the material
   const low = ctx.createRadialGradient(c, c - r * 0.35, r * 0.55, c, c - r * 0.35, r * 1.45);
   low.addColorStop(0, gelA(0));
-  low.addColorStop(0.6, gelA(0.1));
-  low.addColorStop(1, gelA(0.62));
+  low.addColorStop(0.62, gelA(0.06));
+  low.addColorStop(1, gelA(0.42));
   ctx.fillStyle = low;
   ctx.fillRect(0, 0, w, w);
   // soft shadow under the top rim (the gel lip shades the bead)

@@ -5,9 +5,9 @@
  * Distances are in px at a reference pad radius of 170px and are scaled by
  * the live pad size, so a small 360px phone and a tablet feel the same.
  */
-export type BeadShape = "circle" | "star" | "heart" | "flower" | "oval" | "disc" | "smile" | "cherry";
+export type BeadShape = "circle" | "star" | "heart" | "flower" | "oval" | "disc" | "smile" | "cherry" | "eye" | "key" | "duck";
 export type BeadMaterial = "plastic" | "glass" | "pearl" | "metal" | "shell";
-export type Rarity = "common" | "big" | "odd" | "special" | "rare";
+export type Rarity = "common" | "big" | "odd" | "special" | "rare" | "hidden";
 export type PopSound = "pok" | "ssok" | "pong" | "tok" | "ting";
 
 export interface BeadType {
@@ -41,9 +41,10 @@ export interface BeadType {
   aspect?: number;
 }
 
-const PASTEL = ["#8ec7f0", "#f6a8c9", "#b8a2e6", "#9fd8b4", "#f6e08a", "#f8b98b", "#ffffff", "#f19ab0"];
-const GLASS = ["#a9d6f5", "#bfe3d2", "#f5c6d9", "#d9c9f2", "#f9e2a6"];
-const MATTE_BIG = ["#f0a4bd", "#a4c8f0", "#c9b6ec", "#f6d18a", "#a8dcc1"];
+// candy tones: clearly coloured, still soft – they have to stay pretty under a layer of gel
+const PASTEL = ["#6fbfff", "#ff8fc4", "#b08cff", "#6fe0ae", "#ffe05c", "#ffab6a", "#ffffff", "#ff7fa8", "#5fd8e8"];
+const GLASS = ["#7fcdff", "#8ff0d0", "#ffa6d2", "#c3a8ff", "#ffe48a", "#a0f0ff"];
+const MATTE_BIG = ["#ff92bc", "#7fb8ff", "#bf9dff", "#ffcf4d", "#7fe0c0", "#ff9d7a"];
 
 export const BEAD_TYPES: readonly BeadType[] = [
   // ─── common (60%) ───────────────────────────────────────────────
@@ -125,7 +126,7 @@ export const BEAD_TYPES: readonly BeadType[] = [
     rarity: "odd",
     score: 1,
     radius: [13, 15.5],
-    colors: ["#f6e08a", "#f8b4c8", "#a9d6f5", "#ffffff"],
+    colors: ["#ffdf5c", "#ffa2c6", "#8fd0ff", "#ffffff"],
     grip: 11,
     pull: 30,
     friction: 0.45,
@@ -144,7 +145,7 @@ export const BEAD_TYPES: readonly BeadType[] = [
     score: 1,
     radius: [10, 12.5],
     aspect: 1.75,
-    colors: ["#bfe3d2", "#f5c6d9", "#a9d6f5", "#d9c9f2"],
+    colors: ["#8ff0d0", "#ffa6d2", "#7fcdff", "#c3a8ff"],
     grip: 11,
     pull: 28,
     friction: 0.4,
@@ -180,7 +181,7 @@ export const BEAD_TYPES: readonly BeadType[] = [
     rarity: "special",
     score: 3,
     radius: [12, 14.5],
-    colors: ["#f48fb1", "#f5c6d9", "#e57399"],
+    colors: ["#ff6fa3", "#ffa6d2", "#ff5c8f"],
     grip: 11,
     pull: 26,
     friction: 0.4,
@@ -197,7 +198,7 @@ export const BEAD_TYPES: readonly BeadType[] = [
     rarity: "special",
     score: 3,
     radius: [13, 15.5],
-    colors: ["#f8c8dc", "#d9c9f2", "#fff2b3", "#cfe9f7"],
+    colors: ["#ffb3d6", "#c9b0ff", "#fff0a0", "#a8dcff"],
     grip: 12,
     pull: 28,
     friction: 0.4,
@@ -215,7 +216,7 @@ export const BEAD_TYPES: readonly BeadType[] = [
     rarity: "special",
     score: 3,
     radius: [11, 13],
-    colors: ["#f9dd6b"],
+    colors: ["#ffe057"],
     grip: 10,
     pull: 24,
     friction: 0.3,
@@ -249,7 +250,7 @@ export const BEAD_TYPES: readonly BeadType[] = [
     rarity: "special",
     score: 3,
     radius: [10, 12.5],
-    colors: ["#e8c15a"],
+    colors: ["#f5c542"],
     grip: 11,
     pull: 26,
     friction: 0.4,
@@ -301,6 +302,34 @@ export const RARITY_WEIGHT: Record<Rarity, number> = {
   odd: 10,
   special: 7,
   rare: 3,
+  hidden: 0, // never rolled – placed on purpose by the pad
 };
 
-export const byId = (id: string) => BEAD_TYPES.find((t) => t.id === id)!;
+/**
+ * Hidden objects: one per pad, larger than any bead, buried deep and only
+ * glimpsed as the pad empties. Not worth points – worth a "what is that?".
+ */
+const hidden = (t: Omit<BeadType, "rarity" | "score" | "grip" | "pull" | "friction" | "minSpeed" | "bounce"> & Partial<BeadType>): BeadType => ({
+  rarity: "hidden",
+  score: 0,
+  grip: 18,
+  pull: 46,
+  friction: 0.6,
+  minSpeed: 200,
+  bounce: 22,
+  ...t,
+});
+
+export const HIDDEN_TYPES: readonly BeadType[] = [
+  hidden({ id: "bigpearl", name: "큰 진주", shape: "circle", material: "pearl", radius: [24, 26], colors: ["#fbf6f2"], mass: 2.6, sound: "pong" }),
+  hidden({ id: "minicherry", name: "미니 체리", shape: "cherry", material: "plastic", radius: [19, 21], colors: ["#d9384f"], mass: 1.6, sound: "ssok" }),
+  hidden({ id: "duck", name: "작은 투명 오리", shape: "duck", material: "glass", radius: [21, 23], colors: ["#fff3c2"], mass: 1.5, sound: "pok" }),
+  hidden({ id: "key", name: "금색 열쇠", shape: "key", material: "metal", radius: [22, 24], colors: ["#e6c25c"], mass: 2.2, sound: "tok" }),
+  hidden({ id: "eye", name: "눈알 비즈", shape: "eye", material: "glass", radius: [20, 22], colors: ["#ffffff"], mass: 1.7, sound: "pok" }),
+  hidden({ id: "candystar", name: "별사탕", shape: "star", material: "plastic", radius: [22, 24], colors: ["#fff0b8", "#ffd8e6", "#d8f0ff"], mass: 1.4, sound: "tok" }),
+  hidden({ id: "smallshell", name: "작은 조개", shape: "disc", material: "shell", radius: [21, 23], colors: ["#f5eef0"], mass: 1.5, sound: "tok" }),
+  hidden({ id: "bigopal", name: "오팔", shape: "circle", material: "pearl", radius: [21, 23], colors: ["#f4eefc"], mass: 2, sound: "ting" }),
+  hidden({ id: "bigglass", name: "아주 큰 유리알", shape: "circle", material: "glass", radius: [25, 27], colors: ["#dbeeff"], mass: 2.8, sound: "pong" }),
+];
+
+export const byId = (id: string) => BEAD_TYPES.find((t) => t.id === id) ?? HIDDEN_TYPES.find((t) => t.id === id)!;

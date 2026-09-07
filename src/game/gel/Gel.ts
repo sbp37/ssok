@@ -1,5 +1,6 @@
 import { Spring, Spring2, springParams } from "../physics/spring";
 import { gauss } from "../util/math";
+import { PADS, type PadType } from "../pads/PadTypes";
 
 /**
  * The gel pad.
@@ -92,6 +93,18 @@ export class Gel {
   tilt = 0.94;
   readonly N = 96;
   restR: number[] = [];
+  /** inner hole radius multipliers (empty = no hole) */
+  holeR: number[] = [];
+  pad: PadType = PADS[0];
+  /** physical multipliers from the PadType */
+  soft = 1;
+  stretchK = 1;
+  wobbleK = 1;
+  coupling = 0;
+  thickK = 1;
+  transparency = 1;
+  centerThick = false;
+  private shapeSeed = Math.random() * 1000;
   fingers = new Map<number, Finger>();
   wobble = new Spring2(wobbleP.k, wobbleP.damping);
   shocks: Shock[] = [];
@@ -128,25 +141,45 @@ export class Gel {
   }
 
   constructor(seed = Math.random() * 1000) {
-    // cloud / flower silhouette: 5 soft lobes, uneven, plus low-frequency wobble
+    this.shapeSeed = seed;
+    this.setShape(PADS[0]);
+  }
+
+  /** Build the outline (and hole) from a PadType and take over its physical parameters. */
+  setShape(pad: PadType) {
+    this.pad = pad;
+    const seed = this.shapeSeed;
     const p1 = seed,
       p2 = seed * 1.7,
-      p3 = seed * 0.3,
-      p4 = seed * 2.3;
+      p3 = seed * 0.3;
+    const noise = pad.noise ?? 0.02;
+    this.restR = [];
+    this.holeR = [];
     for (let i = 0; i < this.N; i++) {
       const th = (i / this.N) * Math.PI * 2;
-      const lobeAmp = 0.072 + 0.022 * Math.sin(th + p4);
-      const n =
-        lobeAmp * Math.cos(th * 5 + p1) +
-        0.026 * Math.sin(th * 2 + p2) +
-        0.014 * Math.sin(th * 3 + p3) +
-        0.006 * Math.sin(th * 11 + p2);
-      this.restR.push(1 + n);
+      const n = noise * (Math.sin(th * 2 + p2) + 0.6 * Math.sin(th * 3 + p3) + 0.3 * Math.sin(th * 11 + p1));
+      this.restR.push(pad.outline(th) + n);
+      if (pad.hole) this.holeR.push(pad.hole(th) + n * 0.3);
     }
+    this.color = { ...pad.gelColor };
+    this.soft = pad.softness;
+    this.stretchK = pad.stretch;
+    this.wobbleK = pad.wobble;
+    this.coupling = pad.coupling ?? 0;
+    this.thickK = pad.thickness;
+    this.transparency = pad.transparency;
+    this.centerThick = !!pad.centerThick;
+    this.shadowR = -1;
+    this.grainR = -1;
+    this.dirty = true;
+  }
+
+  get hasHole() {
+    return this.holeR.length > 0;
   }
 
   get thick() {
-    return this.R * 0.085;
+    return this.R * 0.085 * this.thickK;
   }
 
   /** rest boundary radius multiplier at angle θ */
@@ -159,8 +192,21 @@ export class Gel {
     return this.restR[i] * (1 - k) + this.restR[j] * k;
   }
 
+  /** hole radius multiplier at angle θ (0 when the pad has no hole) */
+  holeAt(th: number) {
+    if (!this.holeR.length) return 0;
+    const u = ((th % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
+    const f = (u / (Math.PI * 2)) * this.N;
+    const i = Math.floor(f) % this.N;
+    const j = (i + 1) % this.N;
+    const k = f - Math.floor(f);
+    return this.holeR[i] * (1 - k) + this.holeR[j] * k;
+  }
+
   inside(x: number, y: number) {
-    return Math.hypot(x, y) < this.R * this.boundary(Math.atan2(y, x));
+    const th = Math.atan2(y, x);
+    const d = Math.hypot(x, y);
+    return d < this.R * this.boundary(th) && d > this.R * this.holeAt(th);
   }
 
   markDirty() {
@@ -266,11 +312,11 @@ export class Gel {
       const dy = y - f.y;
       const d = Math.hypot(dx, dy) + 1e-4;
       // dimple: contact pushes material outward in a ring, the centre sinks (not shown in-plane)
-      const push = f.press.x * 7 * s * gauss(d, 36 * s) * (1 - gauss(d, 10 * s));
+      const push = f.press.x * 7 * s * this.soft * gauss(d, 36 * s) * (1 - gauss(d, 10 * s));
       ox += (dx / d) * push;
       oy += (dy / d) * push;
-      // drag: the surface sticks to the finger; steep falloff, ~150px reach
-      const g = gauss(d, 72 * s) * 0.66;
+      // drag: the surface sticks to the finger; steep falloff, ~150px reach (further on stretchy pads)
+      const g = gauss(d, 72 * s * this.stretchK) * 0.66 * this.soft;
       ox += f.drag.x * g;
       oy += f.drag.y * g;
     }
@@ -279,9 +325,15 @@ export class Gel {
       const dy = y - p.hy;
       const d = Math.hypot(dx, dy);
       // gel holding the bead is dragged toward the finger – a tent around the socket
-      const g = gauss(d, p.r * 3.8) * 0.62;
+      const g = gauss(d, p.r * 3.8 * this.stretchK) * 0.62 * this.soft;
       ox += p.sx * g;
       oy += p.sy * g;
+      // the pull is felt faintly across the whole pad (cherry: the other lobe sways a hair)
+      if (this.coupling > 0) {
+        const far = 1 - gauss(d, p.r * 5);
+        ox += p.sx * 0.08 * this.coupling * far;
+        oy += p.sy * 0.08 * this.coupling * far;
+      }
     }
     for (const sh of this.shocks) {
       const dx = x - sh.x;
@@ -292,8 +344,8 @@ export class Gel {
       oy += (dy / d) * g;
     }
     const rr = Math.hypot(x, y) / R;
-    ox += this.wobble.x * (0.2 + rr * 0.7);
-    oy += this.wobble.y * (0.2 + rr * 0.7);
+    ox += this.wobble.x * (0.2 + rr * 0.7) * this.wobbleK;
+    oy += this.wobble.y * (0.2 + rr * 0.7) * this.wobbleK;
     out.x = ox;
     out.y = oy;
     return out;
@@ -313,23 +365,28 @@ export class Gel {
 
   // ─── paths ────────────────────────────────────────────────────
   /** rest outline (no warp) – used for the base texture */
-  private restPath(ctx: CanvasRenderingContext2D, dy = 0, scale = 1) {
+  private restPath(ctx: CanvasRenderingContext2D, dy = 0, scale = 1, withHole = true) {
     ctx.beginPath();
     const n = this.N;
-    const pt = (i: number) => {
-      const th = (i / n) * Math.PI * 2;
-      const r = this.R * this.restR[i % n] * scale;
-      return { x: Math.cos(th) * r, y: Math.sin(th) * r + dy };
+    const loop = (arr: number[], sc: number) => {
+      const pt = (i: number) => {
+        const th = (i / n) * Math.PI * 2;
+        const r = this.R * arr[i % n] * sc;
+        return { x: Math.cos(th) * r, y: Math.sin(th) * r + dy };
+      };
+      let p0 = pt(n - 1);
+      let p1 = pt(0);
+      ctx.moveTo((p0.x + p1.x) / 2, (p0.y + p1.y) / 2);
+      for (let i = 0; i < n; i++) {
+        p0 = pt(i);
+        p1 = pt(i + 1);
+        ctx.quadraticCurveTo(p0.x, p0.y, (p0.x + p1.x) / 2, (p0.y + p1.y) / 2);
+      }
+      ctx.closePath();
     };
-    let p0 = pt(n - 1);
-    let p1 = pt(0);
-    ctx.moveTo((p0.x + p1.x) / 2, (p0.y + p1.y) / 2);
-    for (let i = 0; i < n; i++) {
-      p0 = pt(i);
-      p1 = pt(i + 1);
-      ctx.quadraticCurveTo(p0.x, p0.y, (p0.x + p1.x) / 2, (p0.y + p1.y) / 2);
-    }
-    ctx.closePath();
+    loop(this.restR, scale);
+    // the hole shrinks when the outline is inset (scale<1) → grow it by the same amount
+    if (withHole && this.holeR.length) loop(this.holeR, 2 - scale);
   }
 
   /** live outline (warped) – used to clip dynamic overlays */
@@ -337,24 +394,28 @@ export class Gel {
     ctx.beginPath();
     const n = this.N;
     const tmp = this.tmp;
-    const pts: number[] = [];
-    for (let i = 0; i < n; i++) {
-      const th = (i / n) * Math.PI * 2;
-      const r = this.R * this.restR[i];
-      this.warp(Math.cos(th) * r, Math.sin(th) * r, tmp);
-      pts.push(tmp.x, tmp.y);
-    }
-    let ax = pts[(n - 1) * 2],
-      ay = pts[(n - 1) * 2 + 1];
-    ctx.moveTo((ax + pts[0]) / 2, (ay + pts[1]) / 2);
-    for (let i = 0; i < n; i++) {
-      ax = pts[i * 2];
-      ay = pts[i * 2 + 1];
-      const bx = pts[((i + 1) % n) * 2];
-      const by = pts[((i + 1) % n) * 2 + 1];
-      ctx.quadraticCurveTo(ax, ay, (ax + bx) / 2, (ay + by) / 2);
-    }
-    ctx.closePath();
+    const loop = (arr: number[]) => {
+      const pts: number[] = [];
+      for (let i = 0; i < n; i++) {
+        const th = (i / n) * Math.PI * 2;
+        const r = this.R * arr[i];
+        this.warp(Math.cos(th) * r, Math.sin(th) * r, tmp);
+        pts.push(tmp.x, tmp.y);
+      }
+      let ax = pts[(n - 1) * 2],
+        ay = pts[(n - 1) * 2 + 1];
+      ctx.moveTo((ax + pts[0]) / 2, (ay + pts[1]) / 2);
+      for (let i = 0; i < n; i++) {
+        ax = pts[i * 2];
+        ay = pts[i * 2 + 1];
+        const bx = pts[((i + 1) % n) * 2];
+        const by = pts[((i + 1) % n) * 2 + 1];
+        ctx.quadraticCurveTo(ax, ay, (ax + bx) / 2, (ay + by) / 2);
+      }
+      ctx.closePath();
+    };
+    loop(this.restR);
+    if (this.holeR.length) loop(this.holeR);
   }
 
   // ─── base texture ─────────────────────────────────────────────
@@ -421,7 +482,7 @@ export class Gel {
       const k = i / steps;
       this.restPath(ctx, t * k);
       ctx.fillStyle = this.col(0.9, 0.1 + 0.22 * k);
-      ctx.fill();
+      ctx.fill("evenodd");
     }
     // light leaking out of the bottom edge
     ctx.save();
@@ -438,35 +499,54 @@ export class Gel {
     ctx.globalCompositeOperation = "destination-out";
     this.restPath(ctx);
     ctx.fillStyle = "#000";
-    ctx.fill();
+    ctx.fill("evenodd");
     ctx.restore();
     // a thin darker seam where the wall meets the surface (visible through the top)
     ctx.save();
     this.restPath(ctx);
-    ctx.clip();
+    ctx.clip("evenodd");
     this.restPath(ctx, t * 0.35);
     ctx.fillStyle = this.col(0.25, 0.25);
-    ctx.fill();
+    ctx.fill("evenodd");
     ctx.restore();
 
     // ── top surface
     this.restPath(ctx);
-    // centre is thin → pale and see-through; rim is thick → deeper colour
+    const tr = 1 / this.transparency;
     const body = ctx.createRadialGradient(-R * 0.1, -R * 0.15, R * 0.05, 0, 0, R * 1.08);
-    body.addColorStop(0, this.col(0.12, -0.25));
-    body.addColorStop(0.45, this.col(0.2, -0.08));
-    body.addColorStop(0.8, this.col(0.38, 0.03));
-    body.addColorStop(1, this.col(0.62, 0.12));
+    if (this.centerThick) {
+      // this pad is thickest in the middle: denser colour at the centre, thinning toward the tips
+      body.addColorStop(0, this.col(0.42 * tr, 0.06));
+      body.addColorStop(0.4, this.col(0.3 * tr, -0.02));
+      body.addColorStop(0.8, this.col(0.22 * tr, -0.08));
+      body.addColorStop(1, this.col(0.5 * tr, 0.1));
+    } else {
+      // centre is thin → pale and see-through; rim is thick → deeper colour
+      body.addColorStop(0, this.col(0.12 * tr, -0.25));
+      body.addColorStop(0.45, this.col(0.2 * tr, -0.08));
+      body.addColorStop(0.8, this.col(0.38 * tr, 0.03));
+      body.addColorStop(1, this.col(0.62 * tr, 0.12));
+    }
     ctx.fillStyle = body;
-    ctx.fill();
+    ctx.fill("evenodd");
     ctx.save();
-    ctx.clip();
+    ctx.clip("evenodd");
     // thickness band hugging the actual (lobed) outline: several inset strokes
     for (let i = 0; i < 4; i++) {
       this.restPath(ctx, 0, 1 - i * 0.028);
       ctx.lineWidth = R * 0.075;
       ctx.strokeStyle = this.col(0.1 - i * 0.02, 0.3);
       ctx.stroke();
+    }
+    if (this.hasHole) {
+      // the inner rim reads as a wall too: darker just inside the hole's edge
+      const h = this.holeR.reduce((a, b) => a + b, 0) / this.holeR.length;
+      const rim = ctx.createRadialGradient(0, 0, R * h * 0.95, 0, 0, R * (h + 0.16));
+      rim.addColorStop(0, this.col(0.4, 0.34));
+      rim.addColorStop(0.5, this.col(0.14, 0.28));
+      rim.addColorStop(1, this.col(0, 0.3));
+      ctx.fillStyle = rim;
+      ctx.fillRect(-E, -E, E * 2, E * 2);
     }
     this.restPath(ctx);
     ctx.lineWidth = R * 0.014;
@@ -481,9 +561,9 @@ export class Gel {
 
     // ── gel over the beads
     const tint = ctx.createRadialGradient(-R * 0.15, -R * 0.2, R * 0.1, 0, 0, R * 1.05);
-    tint.addColorStop(0, this.col(0.05, -0.1));
-    tint.addColorStop(0.7, this.col(0.09, 0));
-    tint.addColorStop(1, this.col(0.18, 0.08));
+    tint.addColorStop(0, this.col(0.03, -0.1));
+    tint.addColorStop(0.7, this.col(0.05, 0));
+    tint.addColorStop(1, this.col(0.12, 0.08));
     ctx.fillStyle = tint;
     ctx.fillRect(-E, -E, E * 2, E * 2);
     // inner Fresnel glow: a translucent slab's edges pick up ambient light
@@ -590,7 +670,7 @@ export class Gel {
     // draw each cell with its own affine transform (3 corners → parallelogram)
     const ts = tex.width / (E * 2); // texture px per local unit
     const ov = 0.35; // local px of overlap to hide hairline seams (fallback path only)
-    const maxR = this.R * 1.14 + this.thick;
+    const maxR = this.R * Math.max(...this.restR) * 1.02 + this.thick;
     ctx.save();
     ctx.globalAlpha = this.fade;
     for (let j = 0; j < n; j++) {
@@ -647,7 +727,7 @@ export class Gel {
     const s = R / 170;
     ctx.save();
     this.outlinePath(ctx);
-    ctx.clip();
+    ctx.clip("evenodd");
     let hx = 0,
       hy = 0;
     for (const f of this.fingers.values()) {

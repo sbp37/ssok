@@ -54,13 +54,15 @@ export class Pull {
     fy: number,
     padR: number,
     private rand: () => number,
+    /** pad-level × local grip multiplier (thin petal tips <1, a knot >1) */
+    resist = 1,
   ) {
     this.sx = fx;
     this.sy = fy;
     const s = (this.s = padR / REF_PAD_R);
     const deep = bead.layer === 1 ? 1.25 : 1;
-    this.t1 = bead.type.grip * s * deep;
-    this.t2Base = bead.type.pull * s * (bead.layer === 1 ? 1.35 : 1);
+    this.t1 = bead.type.grip * s * deep * resist;
+    this.t2Base = bead.type.pull * s * (bead.layer === 1 ? 1.35 : 1) * resist;
   }
 
   update(fx: number, fy: number, speed: number, dt: number): PullEvent[] {

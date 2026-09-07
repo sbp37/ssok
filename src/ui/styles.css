@@ -275,3 +275,91 @@ body,
   justify-content: center;
   transform: translateY(-50%);
 }
+
+/* NEXT tease + pad flow */
+.next {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  margin-bottom: 6px;
+  transition: opacity 0.6s ease, transform 0.6s ease;
+  transform-origin: left bottom;
+  animation: btnIn 0.6s ease-out;
+}
+.next-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: var(--ink-faint);
+}
+.next-q {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-soft);
+  letter-spacing: 0.04em;
+}
+.sil {
+  position: relative;
+  display: inline-block;
+}
+.sil canvas {
+  display: block;
+}
+.glint {
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  margin: -2px 0 0 -2px;
+  border-radius: 999px;
+  opacity: 0;
+  animation: glint 5.5s ease-in-out infinite;
+  animation-delay: 1.2s;
+}
+@keyframes glint {
+  0%,
+  86%,
+  100% {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+  90% {
+    opacity: 0.95;
+    transform: scale(1);
+  }
+  95% {
+    opacity: 0.6;
+  }
+}
+.done {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 45.5%;
+  text-align: center;
+  font-size: 15px;
+  font-weight: 500;
+  color: rgba(80, 40, 70, 0.62);
+  animation: btnIn 0.7s ease-out;
+}
+.gate {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.gate .btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  padding: 11px 24px;
+}
+.gate .btn small {
+  font-size: 11px;
+  font-weight: 500;
+  opacity: 0.7;
+  letter-spacing: 0.02em;
+}
+.gate .btn:disabled {
+  opacity: 0.7;
+}
