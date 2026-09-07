@@ -13,7 +13,9 @@ pnpm build        # 타입체크 + dist/ 빌드
 pnpm preview      # 빌드 결과 미리보기 (4173)
 ```
 
-`main`에 push하면 GitHub Actions가 GitHub Pages로 자동 배포한다 (`.github/workflows/deploy.yml`).
+`main`에 push하면 GitHub Actions가 빌드 결과를 `gh-pages` 브랜치로 밀어 GitHub Pages에 배포한다 (`.github/workflows/deploy.yml`).
+
+배포 주소: **https://sbp37.github.io/ssok/**
 
 ## 테스트 / 튜닝
 
