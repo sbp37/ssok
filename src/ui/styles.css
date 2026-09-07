@@ -614,3 +614,48 @@ body,
 .btn:disabled {
   opacity: 0.5;
 }
+
+/* collection sheet */
+.sheet-head small {
+  display: block;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ink-soft);
+  margin-top: 2px;
+}
+.section {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: var(--ink-faint);
+  margin: 12px 0 8px;
+}
+.next-q.rare {
+  color: #b1699a;
+}
+.sil.shimmer::after {
+  content: "";
+  position: absolute;
+  inset: 8%;
+  border-radius: 50%;
+  pointer-events: none;
+  background: linear-gradient(115deg, transparent 35%, rgba(255, 255, 255, 0.55) 50%, transparent 65%);
+  background-size: 250% 100%;
+  animation: shimmer 2.8s ease-in-out infinite;
+  mix-blend-mode: screen;
+}
+@keyframes shimmer {
+  0%,
+  60% {
+    background-position: 120% 0;
+  }
+  100% {
+    background-position: -120% 0;
+  }
+}
+.toast.soft {
+  color: var(--ink-soft);
+  background: rgba(255, 255, 255, 0.7);
+  font-weight: 500;
+  animation-duration: 1.5s;
+}

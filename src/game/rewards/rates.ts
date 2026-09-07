@@ -3,9 +3,15 @@
  * (rare beads, buried objects) – there is no currency in this game.
  */
 
-/** weighted hidden-object pool per pad: the same pad never reliably hides the same thing */
+/**
+ * Weighted hidden-object pool per pad: the same pad never reliably hides the
+ * same thing. "none" is a real outcome (≈20%): an empty pad is what makes a
+ * treasure feel like one. Ultra entries are the "뭐야 이거?" moments.
+ */
+export const NONE = "none";
 export const HIDDEN_POOLS: Record<string, { id: string; w: number }[]> = {
   cloud: [
+    { id: NONE, w: 20 },
     { id: "bigglass", w: 55 },
     { id: "candystar", w: 20 },
     { id: "smallshell", w: 12 },
@@ -14,6 +20,7 @@ export const HIDDEN_POOLS: Record<string, { id: string; w: number }[]> = {
     { id: "bigduck", w: 1 },
   ],
   flower: [
+    { id: NONE, w: 20 },
     { id: "candystar", w: 50 },
     { id: "bigopal", w: 22 },
     { id: "minicherry", w: 14 },
@@ -22,6 +29,7 @@ export const HIDDEN_POOLS: Record<string, { id: string; w: number }[]> = {
     { id: "holostar", w: 1 },
   ],
   donut: [
+    { id: NONE, w: 20 },
     { id: "key", w: 48 },
     { id: "bigglass", w: 24 },
     { id: "candystar", w: 14 },
@@ -30,6 +38,7 @@ export const HIDDEN_POOLS: Record<string, { id: string; w: number }[]> = {
     { id: "crown", w: 1 },
   ],
   paw: [
+    { id: NONE, w: 20 },
     { id: "eye", w: 50 },
     { id: "duck", w: 22 },
     { id: "minicherry", w: 14 },
@@ -38,6 +47,7 @@ export const HIDDEN_POOLS: Record<string, { id: string; w: number }[]> = {
     { id: "bigduck", w: 1 },
   ],
   ribbon: [
+    { id: NONE, w: 20 },
     { id: "bigopal", w: 50 },
     { id: "key", w: 22 },
     { id: "bigpearl", w: 15 },
@@ -46,6 +56,7 @@ export const HIDDEN_POOLS: Record<string, { id: string; w: number }[]> = {
     { id: "crown", w: 1 },
   ],
   shell: [
+    { id: NONE, w: 20 },
     { id: "bigpearl", w: 55 },
     { id: "bigopal", w: 23 },
     { id: "smallshell", w: 12 },
@@ -54,6 +65,7 @@ export const HIDDEN_POOLS: Record<string, { id: string; w: number }[]> = {
     { id: "crown", w: 1 },
   ],
   cherry: [
+    { id: NONE, w: 20 },
     { id: "minicherry", w: 55 },
     { id: "bigglass", w: 20 },
     { id: "eye", w: 12 },
@@ -62,6 +74,7 @@ export const HIDDEN_POOLS: Record<string, { id: string; w: number }[]> = {
     { id: "holostar", w: 1 },
   ],
   star: [
+    { id: NONE, w: 20 },
     { id: "duck", w: 45 },
     { id: "bigopal", w: 28 },
     { id: "candystar", w: 15 },
@@ -71,8 +84,14 @@ export const HIDDEN_POOLS: Record<string, { id: string; w: number }[]> = {
   ],
 };
 
-/** chance that one deep bead of any pad is replaced by an ultra-rare object */
-export const ULTRA_SURFACE_CHANCE = 0.006;
+/** chance that one deep bead of any pad is replaced by an ultra-rare object (on top of the pools' 1%) */
+export const ULTRA_SURFACE_CHANCE = 0.004;
+
+/** the first pads of a new player always hide something – the idea has to land before it gets rare */
+export const FIRST_TREASURE_GUARANTEE = 3;
+
+/** first pad of a new day: "none" is half as likely. That is the whole daily difference. */
+export const DAY_NONE_FACTOR = 0.5;
 
 /** pad variant rolls, applied when the next pad is chosen */
 export const VARIANT_CHANCE = { rare: 0.07, super: 0.012 };

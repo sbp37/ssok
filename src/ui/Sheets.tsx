@@ -2,17 +2,22 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { Game } from "../game/Game";
 import { getBeadSprite } from "../game/beads/BeadSprites";
 import type { BeadType } from "../game/beads/BeadTypes";
+import { PADS, variantCount } from "../game/pads/PadTypes";
 import { TREASURE_TYPES } from "../game/rewards/treasure";
 import { haptics } from "../game/haptics";
 import { sfx } from "../game/audio/Sfx";
+import { PadSilhouette } from "./NextPanel";
 
 /** small bottom sheet – the only kind of "screen" the game has */
-export function Sheet({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
+export function Sheet({ title, sub, onClose, children }: { title: string; sub?: string; onClose: () => void; children: ReactNode }) {
   return (
     <div className="sheet-wrap" onClick={onClose}>
       <div className="sheet" onClick={(e) => e.stopPropagation()}>
         <div className="sheet-head">
-          <span>{title}</span>
+          <span>
+            {title}
+            {sub && <small>{sub}</small>}
+          </span>
           <button className="link" onClick={onClose}>
             닫기
           </button>
@@ -41,12 +46,41 @@ export function BeadIcon({ type, size, found }: { type: BeadType; size: number; 
   return <canvas ref={ref} style={{ width: size, height: size }} />;
 }
 
-export function TreasureSheet({ game, onClose }: { game: Game; onClose: () => void }) {
+/**
+ * The collection: what you have seen. Pads in their real gel colours (dark ???
+ * when not yet found), then the treasure box. Nothing here is tappable into
+ * play – NEXT decides what you get; this is for looking.
+ */
+export function CollectionSheet({ game, onClose }: { game: Game; onClose: () => void }) {
   const [, tick] = useState(0);
-  useEffect(() => game.treasure.subscribe(() => tick((n) => n + 1)), [game]);
+  useEffect(() => {
+    const a = game.treasure.subscribe(() => tick((n) => n + 1));
+    const b = game.progressStore.subscribe(() => tick((n) => n + 1));
+    return () => {
+      a();
+      b();
+    };
+  }, [game]);
   const t = game.treasure;
+  const prog = game.progressStore;
+  const foundPads = PADS.filter((p) => prog.isDiscovered(p.id)).length;
   return (
-    <Sheet title={`보물함 · ${t.found}/${t.total}`} onClose={onClose}>
+    <Sheet title="컬렉션" sub={`패드 ${foundPads}/${PADS.length} · 보물 ${t.found}/${t.total}`} onClose={onClose}>
+      <div className="section">패드</div>
+      <div className="grid pads">
+        {PADS.map((p) => {
+          const found = prog.isDiscovered(p.id);
+          const vFound = prog.discoveredVariants.filter((id) => id.startsWith(p.id + ":")).length;
+          return (
+            <div key={p.id} className={"card" + (found ? "" : " unknown")}>
+              <PadSilhouette pad={p} size={44} mode={found ? "color" : "dark"} glint={false} />
+              <div className="card-name">{found ? p.name : "???"}</div>
+              <div className="card-n">{found && vFound ? `변종 ${vFound}/${variantCount(p.id)}` : found ? `${prog.playCount(p.id)}회` : ""}</div>
+            </div>
+          );
+        })}
+      </div>
+      <div className="section">보물</div>
       <div className="grid">
         {TREASURE_TYPES.map((ty) => {
           const n = t.count(ty.id);
@@ -59,7 +93,7 @@ export function TreasureSheet({ game, onClose }: { game: Game; onClose: () => vo
           );
         })}
       </div>
-      <div className="sheet-foot">아직 못 찾은 건 어느 패드에 숨어 있을까.</div>
+      <div className="sheet-foot">빈칸은 어느 패드에 숨어 있을까.</div>
     </Sheet>
   );
 }

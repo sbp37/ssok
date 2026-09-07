@@ -84,14 +84,39 @@ export interface PadVariant {
 }
 
 export const VARIANTS: Record<string, PadVariant[]> = {
-  cloud: [{ id: "glasscloud", name: "유리 구름", tier: "rare", patch: { gelColor: { r: 222, g: 232, b: 246 }, transparency: 1.35, raritySkew: { rare: 1.8 } } }],
-  flower: [{ id: "pearlflower", name: "펄 꽃", tier: "rare", patch: { gelColor: { r: 244, g: 236, b: 246 }, transparency: 0.9, raritySkew: { rare: 1.6, special: 1.4 }, hiddenVisibility: 0.7 } }],
-  donut: [{ id: "sugardonut", name: "슈가 도넛", tier: "rare", patch: { gelColor: { r: 248, g: 240, b: 236 }, transparency: 0.95, grip: 0.92, raritySkew: { rare: 1.6 } } }],
-  paw: [{ id: "milkypaw", name: "밀키 발바닥", tier: "rare", patch: { gelColor: { r: 248, g: 226, b: 232 }, transparency: 0.85, raritySkew: { rare: 1.7 }, hiddenVisibility: 0.7 } }],
-  ribbon: [{ id: "glassribbon", name: "유리 리본", tier: "rare", patch: { gelColor: { r: 230, g: 236, b: 248 }, transparency: 1.4, grip: 0.95, raritySkew: { rare: 1.8 } } }],
-  shell: [{ id: "pearlshell", name: "펄 조개", tier: "rare", patch: { gelColor: { r: 246, g: 240, b: 244 }, transparency: 0.85, raritySkew: { rare: 1.6, big: 1.3 }, hiddenVisibility: 0.6 } }],
-  cherry: [{ id: "jellycherry", name: "젤리 체리", tier: "rare", patch: { gelColor: { r: 250, g: 190, b: 196 }, transparency: 1.3, softness: 1.15, raritySkew: { rare: 1.6 } } }],
-  star: [{ id: "rainbowstar", name: "무지개 별", tier: "super", patch: { gelColor: { r: 226, g: 220, b: 248 }, transparency: 1.25, raritySkew: { rare: 2.6, special: 1.5 }, hint: { color: "#ffe9ff", label: "???" } } }],
+  cloud: [
+    { id: "glasscloud", name: "유리 구름", tier: "rare", patch: { gelColor: { r: 222, g: 232, b: 246 }, transparency: 1.35 } },
+    { id: "softcloud", name: "말랑 구름", tier: "rare", patch: { softness: 1.35 } },
+  ],
+  flower: [
+    { id: "pearlflower", name: "펄 꽃", tier: "rare", patch: { gelColor: { r: 244, g: 236, b: 246 }, transparency: 0.85 } },
+    { id: "luckyflower", name: "행운 꽃", tier: "rare", patch: { raritySkew: { rare: 2.2 } } },
+  ],
+  donut: [
+    { id: "sugardonut", name: "슈가 도넛", tier: "rare", patch: { gelColor: { r: 248, g: 240, b: 236 }, transparency: 0.95 } },
+    { id: "chewydonut", name: "쫀득 도넛", tier: "rare", patch: { grip: 1.18 } },
+  ],
+  paw: [
+    { id: "milkypaw", name: "밀키 발바닥", tier: "rare", patch: { gelColor: { r: 248, g: 226, b: 232 }, transparency: 0.85 } },
+    { id: "loosepaw", name: "헐렁 발바닥", tier: "rare", patch: { grip: 0.86 } },
+  ],
+  ribbon: [
+    { id: "glassribbon", name: "유리 리본", tier: "rare", patch: { gelColor: { r: 230, g: 236, b: 248 }, transparency: 1.4 } },
+    { id: "luckyribbon", name: "행운 리본", tier: "rare", patch: { raritySkew: { rare: 2.2 } } },
+  ],
+  shell: [
+    { id: "pearlshell", name: "펄 조개", tier: "rare", patch: { gelColor: { r: 246, g: 240, b: 244 }, transparency: 0.8 } },
+    { id: "clearshell", name: "엄청 투명한 조개", tier: "rare", patch: { transparency: 1.45 } },
+    { id: "thickshell", name: "조금 두꺼운 조개", tier: "rare", patch: { grip: 1.15 } },
+  ],
+  cherry: [
+    { id: "jellycherry", name: "젤리 체리", tier: "rare", patch: { softness: 1.3 } },
+    { id: "clearcherry", name: "유리 체리", tier: "rare", patch: { gelColor: { r: 250, g: 210, b: 216 }, transparency: 1.35 } },
+  ],
+  star: [
+    { id: "rainbowstar", name: "무지개 별", tier: "super", patch: { gelColor: { r: 226, g: 220, b: 248 }, transparency: 1.25, raritySkew: { rare: 2.6 }, hint: { color: "#ffe9ff", label: "???" } } },
+    { id: "glassstar", name: "유리 별", tier: "rare", patch: { transparency: 1.4 } },
+  ],
 };
 
 /** merge a variant onto its base pad */
@@ -284,6 +309,19 @@ export const PADS: readonly PadType[] = [
 
 /** base pad by id ("shell" or a variant id "shell:pearlshell" → the shell) */
 export const padById = (id: string) => PADS.find((p) => p.id === id.split(":")[0]);
+
+/** full pad for an id, variants included ("shell:pearlshell" → the pearl shell) */
+export function resolvePad(id: string): PadType | undefined {
+  const [baseId, vId] = id.split(":");
+  const base = PADS.find((p) => p.id === baseId);
+  if (!base) return undefined;
+  if (!vId) return base;
+  const v = (VARIANTS[baseId] ?? []).find((x) => x.id === vId);
+  return v ? applyVariant(base, v) : base;
+}
+
+/** how many variants a base pad has (for the collection sheet) */
+export const variantCount = (baseId: string) => (VARIANTS[baseId] ?? []).length;
 
 /** draw a pad's silhouette (with hole) centred at (0,0), radius R, into ctx */
 export function silhouettePath(ctx: CanvasRenderingContext2D, pad: PadType, R: number, n = 96) {

@@ -10,9 +10,10 @@ import { records } from "./storage/records";
 import { sfx } from "./audio/Sfx";
 import { haptics } from "./haptics";
 import { clamp, easeOutCubic, rng } from "./util/math";
-import { PADS, padById, type PadType } from "./pads/PadTypes";
-import { MockRewardedProvider, PadProgress, SequenceProvider, isRareVariant, type NextPadProvider, type RewardedUnlockProvider } from "./pads/progress";
-import { HIDDEN_POOLS, ULTRA_SURFACE_CHANCE } from "./rewards/rates";
+import { PADS, padById, resolvePad, type PadType } from "./pads/PadTypes";
+import { DiscoveryProvider, MockRewardedProvider, PadProgress, isRareVariant, type NextPadProvider, type RewardedUnlockProvider } from "./pads/progress";
+import { DAY_NONE_FACTOR, FIRST_TREASURE_GUARANTEE, HIDDEN_POOLS, NONE, ULTRA_SURFACE_CHANCE } from "./rewards/rates";
+import { ULTRA_TYPES } from "./beads/BeadTypes";
 import { TreasureStore, treasureKind, type TreasureKind } from "./rewards/treasure";
 import type { BeadType } from "./beads/BeadTypes";
 
@@ -28,7 +29,7 @@ export interface GameEvents {
   slipped: undefined;
   /** free mode: how much of the current pad has been emptied */
   progress: { emptied: number; remaining: number; total: number };
-  padChange: { pad: PadType };
+  padChange: { pad: PadType; newPad: boolean; newVariant: boolean };
   /** a rare bead / hidden object / ultra landed in the treasure box */
   treasure: { type: BeadType; kind: TreasureKind; isNew: boolean; count: number; padName: string };
 }
@@ -107,11 +108,15 @@ export class Game extends Emitter<GameEvents> {
   private tickAcc = 0;
   /** pads */
   progressStore = new PadProgress();
-  nextProvider: NextPadProvider = new SequenceProvider();
+  nextProvider: NextPadProvider = new DiscoveryProvider();
   rewarded: RewardedUnlockProvider = new MockRewardedProvider();
   treasure = new TreasureStore();
-  /** the pad after this one – rolled once when this pad opens so NEXT and the door agree */
+  /** the pad after this one – rolled once (and saved) so NEXT, the door and a restart all agree */
   private pendingNext: PadType | null = null;
+  /** what that next pad hides (null = nothing), rolled together with it */
+  private pendingHidden: string | null | undefined = undefined;
+  /** treasure to use for the pad being generated right now, when it was pre-rolled */
+  private startHidden: string | null | undefined = undefined;
   /** while > time, the buried object is shown clearly (the "살짝 보기" hint) */
   private peekUntil = -1;
   private padTotal = 0;
@@ -143,9 +148,22 @@ export class Game extends Emitter<GameEvents> {
     this.ro.observe(canvas);
     this.resize();
     const forced = padById(new URLSearchParams(location.search).get("pad") ?? "");
-    this.gel.setShape(forced ?? this.progressStore.current);
+    let pad = forced;
+    if (!pad) {
+      const prog = this.progressStore;
+      if (prog.currentDone) {
+        // emptied last time but never walked through the door → continue at the next pad, not the same one
+        pad = (prog.nextId ? resolvePad(prog.nextId) : undefined) ?? this.nextProvider.next(prog);
+        this.startHidden = prog.nextId ? prog.nextHidden : undefined;
+        prog.open(pad);
+      } else {
+        pad = prog.current; // mid-pad exit → same pad, fresh
+        // very first start: the pad on the table counts as discovered too
+        if (!prog.isDiscovered(pad.variantOf ?? pad.id)) prog.open(pad);
+      }
+    }
+    this.gel.setShape(pad);
     this.newPad(true);
-    this.pendingNext = this.nextProvider.next(this.pad.id);
     this.last = performance.now();
     this.raf = requestAnimationFrame(this.frame);
   }
@@ -235,7 +253,7 @@ export class Game extends Emitter<GameEvents> {
           raritySkew: preset.raritySkew,
           typeSkew: preset.typeSkew,
           rareCenterChance: preset.rareCenterChance,
-          hiddenObject: this.rollHidden(),
+          hiddenObject: this.hiddenForThisPad(),
           ultraChance: ULTRA_SURFACE_CHANCE,
         });
     this.padTotal = this.beads.length;
@@ -263,7 +281,7 @@ export class Game extends Emitter<GameEvents> {
     this.freePulled = 0;
     this.newPad();
     this.collector.clear();
-    this.emit("padChange", { pad: this.pad });
+    this.emit("padChange", { pad: this.pad, newPad: false, newVariant: false });
     this.emitProgress();
   }
 
@@ -275,17 +293,60 @@ export class Game extends Emitter<GameEvents> {
     return this.gel.pad;
   }
 
-  /** what this pad hides this time, from its weighted pool (never the same twice for sure) */
-  private rollHidden(): string | undefined {
-    const pool = HIDDEN_POOLS[this.pad.variantOf ?? this.pad.id];
-    if (!pool?.length) return undefined;
-    return rng.weighted(pool, (e) => e.w).id;
+  /**
+   * What a pad hides this time, from its weighted pool. "none" is a real
+   * outcome, except for a new player's first pads; the first pad of a new day
+   * makes "none" half as likely – that is the only daily difference.
+   */
+  private rollHidden(pad: PadType, dayBonus = false): string | null {
+    const pool = HIDDEN_POOLS[pad.variantOf ?? pad.id];
+    if (!pool?.length) return null;
+    const guarantee = this.progressStore.totalCompleted < FIRST_TREASURE_GUARANTEE;
+    const picked = rng.weighted(pool, (e) => (e.id === NONE ? (guarantee ? 0 : e.w * (dayBonus ? DAY_NONE_FACTOR : 1)) : e.w));
+    return picked.id === NONE ? null : picked.id;
   }
 
-  /** the pad that comes after this one (rolled once per pad) */
+  /** treasure for the pad being generated: the pre-rolled one if there is one, else a fresh roll */
+  private hiddenForThisPad(): string | undefined {
+    const day = this.progressStore.takeDayBonus();
+    let h: string | null;
+    if (this.startHidden !== undefined) {
+      h = this.startHidden;
+      this.startHidden = undefined;
+      // the day's nudge still applies: an empty pre-roll gets one more chance
+      if (h === null && day) h = this.rollHidden(this.pad, true);
+    } else h = this.rollHidden(this.pad, day);
+    return h ?? undefined;
+  }
+
+  /** the pad that comes after this one – rolled once, together with what it hides, and saved */
   get nextPad(): PadType {
-    if (!this.pendingNext) this.pendingNext = this.nextProvider.next(this.pad.id);
+    if (!this.pendingNext) {
+      const prog = this.progressStore;
+      const saved = prog.nextId ? resolvePad(prog.nextId) : undefined;
+      if (saved && prog.nextHidden !== undefined) {
+        this.pendingNext = saved;
+        this.pendingHidden = prog.nextHidden;
+      } else {
+        this.pendingNext = this.nextProvider.next(prog);
+        this.pendingHidden = this.rollHidden(this.pendingNext);
+        prog.setNext(this.pendingNext, this.pendingHidden);
+      }
+    }
     return this.pendingNext;
+  }
+
+  /** everything the NEXT tease is allowed to know */
+  get nextInfo() {
+    const pad = this.nextPad;
+    const rare = isRareVariant(pad);
+    return {
+      pad,
+      rare,
+      rareNew: rare && !this.progressStore.isVariantDiscovered(pad.id),
+      ultra: !!this.pendingHidden && ULTRA_TYPES.some((t) => t.id === this.pendingHidden),
+      collection: this.progressStore.mode === "COLLECTION",
+    };
   }
 
   /** is the next pad a rare variant passing by? (the only thing an ad is offered for) */
@@ -313,11 +374,14 @@ export class Game extends Emitter<GameEvents> {
    */
   openPad(pad: PadType) {
     this.collector.dismiss();
-    this.progressStore.open(pad);
+    // the treasure rolled for NEXT travels with it; a different pad rolls fresh
+    this.startHidden = this.pendingNext && this.pendingNext.id === pad.id ? this.pendingHidden : undefined;
+    const { newPad, newVariant } = this.progressStore.open(pad);
     this.gel.setShape(pad);
     this.newPad();
-    this.pendingNext = this.nextProvider.next(pad.id);
-    this.emit("padChange", { pad });
+    this.pendingNext = null;
+    this.pendingHidden = undefined;
+    this.emit("padChange", { pad, newPad, newVariant });
     this.emitProgress();
   }
 
@@ -325,6 +389,20 @@ export class Game extends Emitter<GameEvents> {
   openNextPlain() {
     const base = padById(this.nextPad.id)!;
     this.openPad(base);
+  }
+
+  /** test/QA: empty the pad instantly (beads vanish, treasures are credited, completion logic runs) */
+  debugFinishPad() {
+    for (const b of this.beads)
+      if (b.state === "embedded" || b.state === "held") {
+        b.state = "collected";
+        if (treasureKind(b.type)) this.treasure.add(b.type.id);
+      }
+    this.pulls.clear();
+    this.gel.markDirty();
+    this.progressStore.complete();
+    this.emitProgress();
+    this.emit("padEmpty", undefined);
   }
 
   private emitProgress() {
@@ -553,7 +631,7 @@ export class Game extends Emitter<GameEvents> {
     if (this.remainingCount() === 0) {
       if (this.mode === "challenge" && this.challenge.running) this.schedule(0.35, () => this.newPad());
       else {
-        this.progressStore.complete(this.pad.id);
+        this.progressStore.complete();
         this.schedule(0.4, () => this.emit("padEmpty", undefined));
       }
     }

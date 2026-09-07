@@ -1,15 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import { Game } from "../game/Game";
-import type { PadType } from "../game/pads/PadTypes";
 import { sfx } from "../game/audio/Sfx";
-import { NextPanel } from "./NextPanel";
-import { SettingsSheet, TreasureSheet } from "./Sheets";
+import { NextPanel, type NextView } from "./NextPanel";
+import { CollectionSheet, SettingsSheet } from "./Sheets";
 
 interface Toast {
   id: number;
   text: string;
   sub?: string;
-  tone: "rare" | "hidden" | "ultra";
+  tone: "rare" | "hidden" | "ultra" | "soft";
 }
 
 type Phase = "intro" | "free";
@@ -28,8 +27,7 @@ export function App() {
   const [padEmpty, setPadEmpty] = useState(false);
   // pad flow
   const [emptied, setEmptied] = useState(0);
-  const [nextPad, setNextPad] = useState<PadType | null>(null);
-  const [rareNext, setRareNext] = useState(false);
+  const [next, setNext] = useState<NextView | null>(null);
   /** "" → playing · "done" → "다 비웠다." · "ready" → the open button */
   const [flow, setFlow] = useState<"" | "done" | "ready">("");
   const [watching, setWatching] = useState(false);
@@ -37,7 +35,8 @@ export function App() {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [boxPulse, setBoxPulse] = useState<{ n: number; strong: boolean }>({ n: 0, strong: false });
   const [glimmer, setGlimmer] = useState(false);
-  const [sheet, setSheet] = useState<"" | "treasure" | "settings">("");
+  const [sheet, setSheet] = useState<"" | "collection" | "settings">("");
+  const [collLabel, setCollLabel] = useState("컬렉션");
   const toastId = useRef(0);
 
   const later = (fn: () => void, ms: number) => {
@@ -47,7 +46,7 @@ export function App() {
   const pushToast = (t: Omit<Toast, "id">) => {
     const id = ++toastId.current;
     setToasts((ts) => [...ts.slice(-1), { ...t, id }]);
-    later(() => setToasts((ts) => ts.filter((x) => x.id !== id)), t.tone === "ultra" ? 2600 : 1700);
+    later(() => setToasts((ts) => ts.filter((x) => x.id !== id)), t.tone === "ultra" ? 2600 : t.tone === "soft" ? 1500 : 1700);
   };
 
   useEffect(() => {
@@ -55,7 +54,20 @@ export function App() {
     const game = new Game(canvas);
     gameRef.current = game;
     (window as unknown as { __ssok?: Game }).__ssok = game;
+    // a returning player does not need "하나 뽑아봐." again
+    if (game.progressStore.totalCompleted > 0) {
+      setPhase("free");
+      setHintHidden(true);
+    }
+    const label = () => {
+      const n = game.progressStore.discoveredPads.length;
+      setCollLabel(n > 0 && n < 8 ? `컬렉션 ${n}/8` : "컬렉션");
+    };
+    label();
+    // a new day: one quiet line, and the first pad is a touch more generous. No streaks, no stamps.
+    if (game.progressStore.newDay) later(() => pushToast({ tone: "soft", text: "오늘은 뭔가 좀 다르다. ✦" }), 900);
     const offs = [
+      game.progressStore.subscribe(label),
       game.on("pop", ({ pulled }) => {
         setPulled(pulled);
         setPadEmpty(false);
@@ -66,8 +78,7 @@ export function App() {
       }),
       game.on("padEmpty", () => {
         setPadEmpty(true);
-        setNextPad(game.nextPad);
-        setRareNext(game.nextIsRare);
+        setNext(game.nextInfo);
         // hold the empty pad (and the full jar) for a beat, say it quietly, then offer the door
         later(() => setFlow("done"), 550);
         later(() => setFlow("ready"), 1550);
@@ -75,7 +86,7 @@ export function App() {
       game.on("progress", ({ emptied }) => {
         setEmptied(emptied);
         if (emptied >= 0.68) {
-          setNextPad(game.nextPad);
+          setNext(game.nextInfo);
           // a passive nudge, once, when something unseen is still buried in there
           setGlimmer((g) => {
             if (g) return g;
@@ -88,12 +99,14 @@ export function App() {
           });
         }
       }),
-      game.on("padChange", () => {
+      game.on("padChange", ({ pad, newPad, newVariant }) => {
         setEmptied(0);
         setPadEmpty(false);
         setFlow("");
-        setNextPad(null);
+        setNext(null);
         setGlimmer(false);
+        // first time on this pad (or this variant): a small line after it appears. Seen before: nothing.
+        if (newPad || newVariant) later(() => pushToast({ tone: "soft", text: "NEW ✦", sub: pad.name }), 450);
       }),
       game.on("treasure", ({ type, kind, isNew, count, padName }) => {
         // a repeat rare only makes the box blink; new things and buried things get a short line
@@ -147,9 +160,9 @@ export function App() {
               <button
                 className={"pill box" + (boxPulse.n ? (boxPulse.strong ? " pulse" : " blink") : "")}
                 key={boxPulse.n}
-                onClick={() => setSheet("treasure")}
+                onClick={() => setSheet("collection")}
               >
-                보물함
+                {collLabel}
               </button>
               <button className="pill tiny" onClick={() => setSheet("settings")} aria-label="설정">
                 ⚙
@@ -173,15 +186,13 @@ export function App() {
           )}
 
           <div className="bottom">
-            {phase === "free" && nextPad && (emptied >= 0.68 || padEmpty) && (
-              <NextPanel pad={nextPad} emphasis={padEmpty ? 1 : 0} gated={rareNext} />
-            )}
-            {phase === "free" && padEmpty && flow === "ready" && nextPad && !rareNext && (
+            {phase === "free" && next && (emptied >= 0.68 || padEmpty) && <NextPanel info={next} emphasis={padEmpty ? 1 : 0} />}
+            {phase === "free" && padEmpty && flow === "ready" && next && !next.rare && (
               <button className="btn" onClick={openNext}>
                 다음 패드 열기
               </button>
             )}
-            {phase === "free" && padEmpty && flow === "ready" && nextPad && rareNext && (
+            {phase === "free" && padEmpty && flow === "ready" && next && next.rare && (
               <div className="gate">
                 <button className="btn" onClick={catchRare} disabled={watching}>
                   {watching ? "잠깐…" : "광고 보고 잡기"}
@@ -194,7 +205,7 @@ export function App() {
             )}
           </div>
         </div>
-        {sheet === "treasure" && gameRef.current && <TreasureSheet game={gameRef.current} onClose={() => setSheet("")} />}
+        {sheet === "collection" && gameRef.current && <CollectionSheet game={gameRef.current} onClose={() => setSheet("")} />}
         {sheet === "settings" && <SettingsSheet onClose={() => setSheet("")} />}
       </div>
       {/* reserved for the bottom banner ad – no game content ever draws here */}
