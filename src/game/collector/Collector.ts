@@ -69,7 +69,7 @@ export class Collector {
   static readonly DISMISS = 0.28;
   /** beads are drawn a bit smaller than on the pad – it reads as depth, and a pad's worth fits */
   static readonly BEAD_SCALE = 0.55;
-  static readonly MAX_ITEMS = 90;
+  static readonly MAX_ITEMS = 100; // above any pad's plain-bead count (max seen: 94) – nothing is ever silently dropped mid-pad
 
   layout(x: number, y: number, w: number, h: number) {
     this.x = x;
