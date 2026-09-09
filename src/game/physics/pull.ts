@@ -141,7 +141,10 @@ export class Pull {
     // gel around the socket is dragged toward the finger: 6~18px at full grip, a bit more while slipping
     const stretchLen = this.tension * 16 * s + this.progress * 5 * s;
     this.stretch.setTarget(ux * stretchLen, uy * stretchLen);
-    this.stretch.step(dt);
+    // Same spring / resistance at 60Hz. A 50ms frame exceeds this stiff
+    // spring's stable Euler step and used to send the rendered tent offscreen.
+    const stretchSteps = Math.max(1, Math.ceil(dt / (1 / 60)));
+    for (let i = 0; i < stretchSteps; i++) this.stretch.step(dt / stretchSteps);
     b.off.setTarget(ux * offMag, uy * offMag);
     b.lift = this.phase === "grip" ? this.tension * 0.12 : 0.12 + this.progress * 0.88;
     return events;

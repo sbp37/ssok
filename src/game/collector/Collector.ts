@@ -1,5 +1,6 @@
 import type { Bead } from "../beads/Bead";
 import { getBeadSprite, getShadowSprite } from "../beads/BeadSprites";
+import { jarLayers, preloadJar } from './JarAsset';
 
 interface Item {
   bead: Bead;
@@ -56,6 +57,7 @@ const MAX_AWAKE = 0.5;
  * ones it touches.
  */
 export class Collector {
+  constructor() { void preloadJar(); }
   x = 0;
   y = 0;
   w = 96;
@@ -286,6 +288,7 @@ export class Collector {
 
   draw(ctx: CanvasRenderingContext2D, dpr: number) {
     const { x, y, w, h } = this;
+    const glass = jarLayers(w, h, dpr);
     // gentle, quick squash; ease it out so the tail is invisible
     const sq = 1 + this.bump * this.bump * 0.016;
     ctx.save();
@@ -309,9 +312,12 @@ export class Collector {
     ctx.beginPath();
     ctx.ellipse(x + w / 2, y + h + 3, w * 0.5, 5, 0, 0, Math.PI * 2);
     ctx.fill();
-    path();
-    ctx.fillStyle = "rgba(255,255,255,0.35)";
-    ctx.fill();
+    if (glass) ctx.drawImage(glass.back, x, y, w, h);
+    else {
+      path();
+      ctx.fillStyle = "rgba(255,255,255,0.35)";
+      ctx.fill();
+    }
     ctx.save();
     path();
     ctx.clip();
@@ -332,6 +338,12 @@ export class Collector {
       ctx.restore();
     }
     ctx.globalAlpha = 1;
+    if (glass) {
+      ctx.restore(); // bead clip
+      ctx.drawImage(glass.front, x, y, w, h);
+      ctx.restore(); // jar bump transform
+      return;
+    }
     // glass tint over beads
     const g = ctx.createLinearGradient(x, y, x + w, y + h);
     g.addColorStop(0, "rgba(255,255,255,0.28)");

@@ -1,0 +1,407 @@
+{
+  "pink": {
+    "source": "Photo 2.jpg",
+    "sourceSize": [
+      1280,
+      1280
+    ],
+    "crop": [
+      15,
+      200,
+      275,
+      455
+    ],
+    "originalSize": [
+      253,
+      248
+    ],
+    "size": [
+      128,
+      125
+    ],
+    "pivot": [
+      0.5,
+      0.5
+    ],
+    "path": "assets/beads/pink.png",
+    "fit": "preserve aspect; subject fits existing diameter; oval rotated 90 degrees"
+  },
+  "violet": {
+    "source": "Photo 2.jpg",
+    "sourceSize": [
+      1280,
+      1280
+    ],
+    "crop": [
+      285,
+      200,
+      540,
+      455
+    ],
+    "originalSize": [
+      252,
+      246
+    ],
+    "size": [
+      128,
+      125
+    ],
+    "pivot": [
+      0.5,
+      0.5
+    ],
+    "path": "assets/beads/violet.png",
+    "fit": "preserve aspect; subject fits existing diameter; oval rotated 90 degrees"
+  },
+  "pearl": {
+    "source": "Photo 2.jpg",
+    "sourceSize": [
+      1280,
+      1280
+    ],
+    "crop": [
+      550,
+      200,
+      795,
+      455
+    ],
+    "originalSize": [
+      241,
+      241
+    ],
+    "size": [
+      128,
+      128
+    ],
+    "pivot": [
+      0.5,
+      0.5
+    ],
+    "path": "assets/beads/pearl.png",
+    "fit": "preserve aspect; subject fits existing diameter; oval rotated 90 degrees"
+  },
+  "long": {
+    "source": "Photo 2.jpg",
+    "sourceSize": [
+      1280,
+      1280
+    ],
+    "crop": [
+      812,
+      142,
+      997,
+      477
+    ],
+    "originalSize": [
+      176,
+      327
+    ],
+    "size": [
+      69,
+      128
+    ],
+    "pivot": [
+      0.5,
+      0.5
+    ],
+    "path": "assets/beads/long.png",
+    "fit": "preserve aspect; subject fits existing diameter; oval rotated 90 degrees"
+  },
+  "rainbow": {
+    "source": "Photo 2.jpg",
+    "sourceSize": [
+      1280,
+      1280
+    ],
+    "crop": [
+      1010,
+      190,
+      1270,
+      455
+    ],
+    "originalSize": [
+      253,
+      253
+    ],
+    "size": [
+      128,
+      128
+    ],
+    "pivot": [
+      0.5,
+      0.5
+    ],
+    "path": "assets/beads/rainbow.png",
+    "fit": "preserve aspect; subject fits existing diameter; oval rotated 90 degrees"
+  },
+  "star": {
+    "source": "Photo 2.jpg",
+    "sourceSize": [
+      1280,
+      1280
+    ],
+    "crop": [
+      8,
+      532,
+      278,
+      800
+    ],
+    "originalSize": [
+      263,
+      258
+    ],
+    "size": [
+      128,
+      126
+    ],
+    "pivot": [
+      0.5,
+      0.5
+    ],
+    "path": "assets/beads/star.png",
+    "fit": "preserve aspect; subject fits existing diameter; oval rotated 90 degrees"
+  },
+  "heart": {
+    "source": "Photo 2.jpg",
+    "sourceSize": [
+      1280,
+      1280
+    ],
+    "crop": [
+      273,
+      555,
+      518,
+      792
+    ],
+    "originalSize": [
+      242,
+      215
+    ],
+    "size": [
+      128,
+      114
+    ],
+    "pivot": [
+      0.5,
+      0.5
+    ],
+    "path": "assets/beads/heart.png",
+    "fit": "preserve aspect; subject fits existing diameter; oval rotated 90 degrees"
+  },
+  "flower": {
+    "source": "Photo 2.jpg",
+    "sourceSize": [
+      1280,
+      1280
+    ],
+    "crop": [
+      510,
+      536,
+      774,
+      804
+    ],
+    "originalSize": [
+      262,
+      261
+    ],
+    "size": [
+      128,
+      128
+    ],
+    "pivot": [
+      0.5,
+      0.5
+    ],
+    "path": "assets/beads/flower.png",
+    "fit": "preserve aspect; subject fits existing diameter; oval rotated 90 degrees"
+  },
+  "cherry": {
+    "source": "Photo 2.jpg",
+    "sourceSize": [
+      1280,
+      1280
+    ],
+    "crop": [
+      765,
+      490,
+      1027,
+      815
+    ],
+    "originalSize": [
+      267,
+      319
+    ],
+    "size": [
+      107,
+      128
+    ],
+    "pivot": [
+      0.5,
+      0.5
+    ],
+    "path": "assets/beads/cherry.png",
+    "fit": "preserve aspect; subject fits existing diameter; oval rotated 90 degrees"
+  },
+  "duck": {
+    "source": "Photo 2.jpg",
+    "sourceSize": [
+      1280,
+      1280
+    ],
+    "crop": [
+      1017,
+      496,
+      1265,
+      818
+    ],
+    "originalSize": [
+      240,
+      315
+    ],
+    "size": [
+      98,
+      128
+    ],
+    "pivot": [
+      0.5,
+      0.5
+    ],
+    "path": "assets/beads/duck.png",
+    "fit": "preserve aspect; subject fits existing diameter; oval rotated 90 degrees"
+  },
+  "eye": {
+    "source": "Photo 2.jpg",
+    "sourceSize": [
+      1280,
+      1280
+    ],
+    "crop": [
+      8,
+      872,
+      272,
+      1138
+    ],
+    "originalSize": [
+      258,
+      255
+    ],
+    "size": [
+      128,
+      127
+    ],
+    "pivot": [
+      0.5,
+      0.5
+    ],
+    "path": "assets/beads/eye.png",
+    "fit": "preserve aspect; subject fits existing diameter; oval rotated 90 degrees"
+  },
+  "key": {
+    "source": "Photo 2.jpg",
+    "sourceSize": [
+      1280,
+      1280
+    ],
+    "crop": [
+      273,
+      810,
+      446,
+      1153
+    ],
+    "originalSize": [
+      170,
+      332
+    ],
+    "size": [
+      66,
+      128
+    ],
+    "pivot": [
+      0.5,
+      0.5
+    ],
+    "path": "assets/beads/key.png",
+    "fit": "preserve aspect; subject fits existing diameter; oval rotated 90 degrees"
+  },
+  "crown": {
+    "source": "Photo 2.jpg",
+    "sourceSize": [
+      1280,
+      1280
+    ],
+    "crop": [
+      449,
+      860,
+      729,
+      1125
+    ],
+    "originalSize": [
+      275,
+      257
+    ],
+    "size": [
+      128,
+      120
+    ],
+    "pivot": [
+      0.5,
+      0.5
+    ],
+    "path": "assets/beads/crown.png",
+    "fit": "preserve aspect; subject fits existing diameter; oval rotated 90 degrees"
+  },
+  "holostar": {
+    "source": "Photo 2.jpg",
+    "sourceSize": [
+      1280,
+      1280
+    ],
+    "crop": [
+      725,
+      861,
+      1002,
+      1135
+    ],
+    "originalSize": [
+      274,
+      265
+    ],
+    "size": [
+      128,
+      124
+    ],
+    "pivot": [
+      0.5,
+      0.5
+    ],
+    "path": "assets/beads/holostar.png",
+    "fit": "preserve aspect; subject fits existing diameter; oval rotated 90 degrees"
+  },
+  "faceted": {
+    "source": "Photo 2.jpg",
+    "sourceSize": [
+      1280,
+      1280
+    ],
+    "crop": [
+      1008,
+      864,
+      1270,
+      1134
+    ],
+    "originalSize": [
+      257,
+      260
+    ],
+    "size": [
+      127,
+      128
+    ],
+    "pivot": [
+      0.5,
+      0.5
+    ],
+    "path": "assets/beads/faceted.png",
+    "fit": "preserve aspect; subject fits existing diameter; oval rotated 90 degrees"
+  }
+}

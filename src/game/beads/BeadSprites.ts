@@ -1,4 +1,5 @@
 import type { BeadType } from "./BeadTypes";
+import { beadAsset } from './BeadAssets';
 
 /**
  * Beads are pre-rendered once per (type, color, radius) into small offscreen
@@ -14,6 +15,7 @@ export interface Sprite {
 
 const cache = new Map<string, Sprite>();
 const shadowCache = new Map<string, Sprite>();
+export function invalidateBeadSprites(){cache.clear();contourCache.clear();}
 
 function hexToRgb(hex: string): [number, number, number] {
   const h = hex.replace("#", "");
@@ -348,6 +350,14 @@ export function getBeadSprite(type: BeadType, color: string, radius: number, dpr
     return sp;
   }
 
+  const photo=beadAsset(type);
+  if(photo){
+    // The entire cutout fits the existing diameter; preserve its aspect ratio.
+    const fit=r*2/Math.max(photo.naturalWidth,photo.naturalHeight);
+    const pw=photo.naturalWidth*fit,ph=photo.naturalHeight*fit;
+    ctx.drawImage(photo,-pw/2,-ph/2,pw,ph);
+    const sp={canvas,w,h};cache.set(key,sp);return sp;
+  }
   shapePath(ctx, type, r);
   paintBody(ctx, type, color, r);
   ctx.save();
@@ -387,6 +397,32 @@ export function getShadowSprite(radius: number, dpr: number): Sprite {
 }
 
 const meniscusCache = new Map<string, Sprite>();
+const contourCache = new Map<string, Sprite>();
+
+/** Silicone follows the actual charm silhouette, including spaces between
+ * petals/cherries. Cached masks retain the original depth/lift animation. */
+export function getContourMeniscus(type:BeadType,color:string,radius:number,dpr:number,gel:string):Sprite {
+  const r=Math.round(radius*2)/2,key=`${type.id}|${color}|${r}|${dpr}|${gel}`;
+  const cached=contourCache.get(key);if(cached)return cached;
+  const source=getBeadSprite(type,color,r,dpr);
+  const {w,h}=source;
+  const make=()=>{const c=document.createElement('canvas');c.width=source.canvas.width;c.height=source.canvas.height;return c;};
+  const mask=make(),m=mask.getContext('2d')!;
+  m.drawImage(source.canvas,0,0);m.globalCompositeOperation='source-in';m.fillStyle='#fff';m.fillRect(0,0,mask.width,mask.height);
+  const canvas=make(),ctx=canvas.getContext('2d')!;ctx.scale(dpr,dpr);
+  const rim=Math.max(.65,r*.075);
+  for(let i=0;i<12;i++){const a=i*Math.PI/6;ctx.drawImage(mask,Math.cos(a)*rim,Math.sin(a)*rim,w,h);}
+  ctx.globalCompositeOperation='destination-out';ctx.drawImage(mask,0,0,w,h);
+  ctx.globalCompositeOperation='source-in';
+  const reflection=ctx.createLinearGradient(0,0,w,h);
+  reflection.addColorStop(0,'rgba(255,255,255,.75)');reflection.addColorStop(.5,'rgba(255,255,255,.24)');reflection.addColorStop(1,gel.replace(/[\d.]+\)$/,'0.4)'));
+  ctx.fillStyle=reflection;ctx.fillRect(0,0,w,h);ctx.globalCompositeOperation='source-over';
+  const cap=make(),c=cap.getContext('2d')!;c.scale(dpr,dpr);c.drawImage(mask,0,0,w,h);c.globalCompositeOperation='source-in';
+  const tint=c.createLinearGradient(0,h*.25,0,h*.82);
+  tint.addColorStop(0,gel.replace(/[\d.]+\)$/,'0)'));tint.addColorStop(.55,gel.replace(/[\d.]+\)$/,'0.04)'));tint.addColorStop(1,gel.replace(/[\d.]+\)$/,'0.38)'));
+  c.fillStyle=tint;c.fillRect(0,0,w,h);ctx.drawImage(cap,0,0,w,h);
+  const sp={canvas,w,h};contourCache.set(key,sp);return sp;
+}
 /**
  * Gel around an embedded bead, drawn *over* the bead sprite:
  *  - a clear light ring just outside (the raised meniscus catches light)

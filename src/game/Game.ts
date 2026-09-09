@@ -1,5 +1,6 @@
 import { beadPos, generatePad, REF_PAD_R, type Bead } from "./beads/Bead";
-import { getBeadSprite, getMeniscusSprite, getShadowSprite } from "./beads/BeadSprites";
+import { getBeadSprite, getMeniscusSprite, getShadowSprite, getContourMeniscus, invalidateBeadSprites } from "./beads/BeadSprites";
+import { preloadBeadAssets, beadAsset } from './beads/BeadAssets';
 import { Collector } from "./collector/Collector";
 import { Gel } from "./gel/Gel";
 import { MeshGL } from "./gel/MeshGL";
@@ -51,7 +52,7 @@ class Emitter<E extends object> {
   }
 }
 
-/** one thin strand of gel that follows a popped bead for ~90ms, then snaps */
+/** Visual-only gel bridge: neck -> filament -> two retracting ends. */
 interface Thread {
   hx: number;
   hy: number;
@@ -166,6 +167,7 @@ export class Game extends Emitter<GameEvents> {
     this.newPad(true);
     this.last = performance.now();
     this.raf = requestAnimationFrame(this.frame);
+    void preloadBeadAssets().then(()=>{invalidateBeadSprites();this.gel.markDirty();});
   }
 
   destroy() {
@@ -249,7 +251,8 @@ export class Game extends Emitter<GameEvents> {
       : generatePad(this.gel.R, rng, {
           boundary,
           hole,
-          surface: preset.surface,
+          // Shorter pads requested: keep type/deeper/treasure rolls unchanged.
+          surface: Math.max(1, Math.round(preset.surface * 0.7)),
           raritySkew: preset.raritySkew,
           typeSkew: preset.typeSkew,
           rareCenterChance: preset.rareCenterChance,
@@ -379,6 +382,7 @@ export class Game extends Emitter<GameEvents> {
     const { newPad, newVariant } = this.progressStore.open(pad);
     this.gel.setShape(pad);
     this.newPad();
+    this.glShadowR = -1; // silhouette-shaped shadow changes even at the same R
     this.pendingNext = null;
     this.pendingHidden = undefined;
     this.emit("padChange", { pad, newPad, newVariant });
@@ -593,8 +597,8 @@ export class Game extends Emitter<GameEvents> {
     if (!deeper) this.gel.sockets.push({ x: b.rx, y: b.ry, r: b.radius * 0.92 });
     this.gel.markDirty();
 
-    // one thin strand of gel keeps hold of the bead for ~90ms, then snaps
-    this.threads.push({ hx: b.rx, hy: b.ry, bead: b, t: 0, life: 0.09, side: Math.random() < 0.5 ? -1 : 1 });
+    // Visual only: does not postpone POP, input, or the flight into the jar.
+    this.threads.push({ hx: b.rx, hy: b.ry, bead: b, t: 0, life: 0.19, side: Math.random() < 0.5 ? -1 : 1 });
     // +30ms: gel snaps back the other way, dent appears
     this.schedule(0.03, () => {
       const m = Math.pow(b.type.mass, 0.6);
@@ -801,7 +805,7 @@ export class Game extends Emitter<GameEvents> {
         c.push(q.x, q.y);
       }
       gl.drawQuad("shadow", c, 1);
-      gl.drawMesh("gel", gel.meshPos, gel.fade);
+      gl.drawMesh("gel", gel.meshPos, gel.fade, gel.materialLights());
     } else {
       ctx.save();
       ctx.translate(this.padCx, this.padCy);
@@ -895,14 +899,14 @@ export class Game extends Emitter<GameEvents> {
     ctx.drawImage(sh.canvas, x - sh.w / 2 + lift * 4 * this.s, y - sh.h / 2 + b.radius * (0.18 + lift * 0.5), sh.w, sh.h);
 
     // seen through gel → a softened sprite variant (blur baked in, cached); crisp once it lifts out
-    const sp = getBeadSprite(b.type, b.color, b.radius, dpr, base ? (0.3 + depth * 0.6) * this.s : 0);
+    const sp = getBeadSprite(b.type, b.color, b.radius, dpr, base ? depth * 0.7 * this.s : 0);
     ctx.save();
     ctx.translate(x, y);
     ctx.rotate(b.rot);
     ctx.scale(scale, scale);
-    if (!above) {
+    if (!above && depth > 0.15) {
       // refraction ghost: the gel bends the bead's outline a hair
-      ctx.globalAlpha = alpha * 0.2;
+      ctx.globalAlpha = alpha * depth * 0.12;
       ctx.drawImage(sp.canvas, -sp.w / 2 + 1.2 * this.s, -sp.h / 2 + 1.4 * this.s, sp.w, sp.h);
     }
     ctx.globalAlpha = alpha;
@@ -911,9 +915,13 @@ export class Game extends Emitter<GameEvents> {
     // meniscus: gel climbing the bead, fades as it's pulled out / when deep
     const men = (1 - lift) * (1 - depth) * alpha;
     if (men > 0.02 && b.type.shape !== "oval") {
-      const ms = getMeniscusSprite(b.radius * scale, dpr, this.gel.col(1));
+      const ms = beadAsset(b.type)
+        ? getContourMeniscus(b.type,b.color,b.radius*scale,dpr,this.gel.col(1))
+        : getMeniscusSprite(b.radius * scale, dpr, this.gel.col(1));
       ctx.globalAlpha = men;
+      ctx.save();ctx.translate(x,y);ctx.rotate(beadAsset(b.type)?b.rot:0);ctx.translate(-x,-y);
       ctx.drawImage(ms.canvas, x - ms.w / 2, y - ms.h / 2, ms.w, ms.h);
+      ctx.restore();
     }
 
     // rare beads twinkle faintly inside the gel
@@ -964,10 +972,10 @@ export class Game extends Emitter<GameEvents> {
 
     // ── tent: surface around the socket lifted toward the finger.
     // dark on the far side (steep, in shadow), bright bulge on the near side.
-    const tentR = r * (2.0 + 1.4 * T + 0.8 * P);
+    const tentR = r * (1.7 + 0.8 * T + 0.4 * P);
     const far = ctx.createRadialGradient(hx - ux * r * 0.6, hy - uy * r * 0.6, r * 0.4, hx - ux * r * 0.3, hy - uy * r * 0.3, tentR);
-    far.addColorStop(0, `rgba(55,45,58,${0.2 * T})`);
-    far.addColorStop(0.5, `rgba(55,45,58,${0.07 * T})`);
+    far.addColorStop(0, gel.col(0.19 * T, 0.35));
+    far.addColorStop(0.5, gel.col(0.055 * T, 0.25));
     far.addColorStop(1, "rgba(55,45,58,0)");
     ctx.fillStyle = far;
     ctx.beginPath();
@@ -1063,17 +1071,17 @@ export class Game extends Emitter<GameEvents> {
       ctx.save();
       ctx.translate(2 * s + P * 4, 3 * s + P * 6);
       neck();
-      ctx.fillStyle = `rgba(55,45,58,${0.2 + P * 0.14})`;
+      ctx.fillStyle = gel.col(0.12 + P * 0.07, 0.35);
       ctx.fill();
       ctx.restore();
       neck();
-      ctx.fillStyle = gel.col(0.88, 0.1);
+      ctx.fillStyle = gel.col(0.62 - P * 0.16, -0.03);
       ctx.fill();
       const lg = ctx.createLinearGradient(mx + nx * w0, my + ny * w0, mx - nx * w0, my - ny * w0);
-      lg.addColorStop(0, "rgba(255,255,255,0.55)");
+      lg.addColorStop(0, "rgba(255,255,255,0.4)");
       lg.addColorStop(0.3, "rgba(255,255,255,0.12)");
       lg.addColorStop(0.65, "rgba(55,45,58,0.08)");
-      lg.addColorStop(1, "rgba(55,45,58,0.32)");
+      lg.addColorStop(1, gel.col(0.25, 0.35));
       ctx.fillStyle = lg;
       ctx.fill();
       ctx.beginPath();
@@ -1085,8 +1093,8 @@ export class Game extends Emitter<GameEvents> {
       ctx.beginPath();
       ctx.moveTo(hx - nx * w0, hy - ny * w0);
       ctx.quadraticCurveTo(mx - nx * wm, my - ny * wm, bx - nx * w1, by - ny * w1);
-      ctx.strokeStyle = `rgba(70,55,72,${0.4 + 0.25 * P})`;
-      ctx.lineWidth = 1.3;
+      ctx.strokeStyle = gel.col(0.18 + 0.1 * P, 0.3);
+      ctx.lineWidth = 0.8;
       ctx.stroke();
     }
     // gel still clinging to the back of the bead
@@ -1102,11 +1110,12 @@ export class Game extends Emitter<GameEvents> {
     ctx.restore();
   }
 
-  /** the last strand of gel between socket and a just-popped bead: thins for ~90ms and snaps */
+  /** A tapering translucent bridge, then two short ends that recoil after rupture. */
   private drawThread(ctx: CanvasRenderingContext2D, th: Thread) {
     const b = th.bead;
     if (!b.fly) return;
-    const k = th.t / th.life;
+    const k = Math.min(1, th.t / 0.115);
+    const recoil = Math.max(0, (th.t - 0.115) / (th.life - 0.115));
     const p = this.flyPos(b);
     const bx = p.x - this.padCx;
     const by = (p.y - this.padCy) / this.gel.tilt;
@@ -1118,18 +1127,43 @@ export class Game extends Emitter<GameEvents> {
     const L = Math.hypot(dx, dy) || 1;
     const nx = -dy / L;
     const ny = dx / L;
-    // sags sideways a little before it lets go
-    const sag = th.side * (2 + 5 * k) * this.s * (1 - k * 0.5);
-    ctx.beginPath();
-    ctx.moveTo(hx, hy);
-    ctx.quadraticCurveTo((hx + bx) / 2 + nx * sag, (hy + by) / 2 + ny * sag, bx - (dx / L) * b.radius * 0.7, by - (dy / L) * b.radius * 0.7);
-    ctx.strokeStyle = this.gel.col(0.85 * (1 - k * k), 0.08);
-    ctx.lineWidth = Math.max(0.4, (2.2 - 1.9 * k) * this.s);
-    ctx.lineCap = "round";
-    ctx.stroke();
-    ctx.strokeStyle = `rgba(255,255,255,${0.5 * (1 - k)})`;
-    ctx.lineWidth = 0.6;
-    ctx.stroke();
+    const ex = bx - dx / L * b.radius * 0.75;
+    const ey = by - dy / L * b.radius * 0.75;
+    const sag = th.side * 3 * this.s * k;
+    const mx = (hx + ex) * 0.5 + nx * sag;
+    const my = (hy + ey) * 0.5 + ny * sag;
+    ctx.save();
+    ctx.lineCap = 'round';
+    if (recoil === 0) {
+      // A wide foot remains attached to the socket while the middle narrows.
+      const root = b.radius * (0.42 - k * 0.30);
+      const tip = b.radius * (0.26 - k * 0.20);
+      const waist = Math.max(0.35 * this.s, b.radius * 0.13 * (1 - k));
+      ctx.beginPath();
+      ctx.moveTo(hx + nx * root, hy + ny * root);
+      ctx.bezierCurveTo(hx + dx * 0.16 + nx * waist, hy + dy * 0.16 + ny * waist, mx + nx * waist, my + ny * waist, ex + nx * tip, ey + ny * tip);
+      ctx.lineTo(ex - nx * tip, ey - ny * tip);
+      ctx.bezierCurveTo(mx - nx * waist, my - ny * waist, hx + dx * 0.16 - nx * waist, hy + dy * 0.16 - ny * waist, hx - nx * root, hy - ny * root);
+      ctx.closePath();
+      ctx.fillStyle = this.gel.col(0.66, -0.08); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(hx - nx * root * 0.6, hy - ny * root * 0.6);
+      ctx.quadraticCurveTo(mx - nx * waist, my - ny * waist, ex, ey);
+      ctx.strokeStyle = 'rgba(255,255,255,0.8)';
+      ctx.lineWidth = Math.max(0.45, 0.85 * this.s); ctx.stroke();
+    } else {
+      // Endpoints separate immediately at rupture. No strand follows to the jar.
+      const tail = Math.pow(1 - recoil, 2) * 0.43;
+      const curl = th.side * Math.sin(recoil * Math.PI) * 5 * this.s;
+      ctx.globalAlpha = 1 - recoil;
+      ctx.strokeStyle = this.gel.col(0.9, -0.1);
+      ctx.lineWidth = (0.8 + recoil * 0.7) * this.s;
+      ctx.beginPath(); ctx.moveTo(hx, hy);
+      ctx.quadraticCurveTo(hx + (mx - hx) * tail + nx * curl, hy + (my - hy) * tail + ny * curl, hx + (ex - hx) * tail, hy + (ey - hy) * tail);
+      ctx.moveTo(ex, ey);
+      ctx.quadraticCurveTo(ex + (mx - ex) * tail - nx * curl, ey + (my - ey) * tail - ny * curl, ex + (hx - ex) * tail * 0.6, ey + (hy - ey) * tail * 0.6);
+      ctx.stroke();
+    }
+    ctx.restore();
   }
 
   /** screen position of a flying bead: kick → hang near the socket → arc to the cup */

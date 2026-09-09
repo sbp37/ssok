@@ -12,6 +12,8 @@ export class MeshGL {
   private aUv: number;
   private uRes: WebGLUniformLocation;
   private uAlpha: WebGLUniformLocation;
+  private uSurface: WebGLUniformLocation;
+  private uNodes: WebGLUniformLocation;
   private posBuf: WebGLBuffer;
   private uvBuf: WebGLBuffer;
   private idxBuf: WebGLBuffer;
@@ -47,7 +49,33 @@ export class MeshGL {
       void main(){ v_uv = a_uv; vec2 c = a_pos / u_res * 2.0 - 1.0; gl_Position = vec4(c.x, -c.y, 0.0, 1.0); }`;
     const fs = `
       precision mediump float; uniform sampler2D u_tex; uniform float u_alpha; varying vec2 v_uv;
-      void main(){ gl_FragColor = texture2D(u_tex, v_uv) * u_alpha; }`;
+      uniform float u_surface;
+      uniform vec4 u_nodes[6];
+      void main(){
+        vec4 texel=texture2D(u_tex,v_uv);
+        if(u_surface>0.5){
+          vec2 position=(v_uv*2.0-1.0)*1.3;
+          vec2 slope=vec2(0.0);
+          for(int i=0;i<6;i++){
+            vec4 source=u_nodes[i];
+            vec2 delta=position-source.xy;
+            float radius2=max(source.z*source.z,0.001);
+            float height=source.w*exp(-dot(delta,delta)/radius2);
+            slope+=-2.0*height*delta/radius2;
+          }
+          vec3 normal=normalize(vec3(-slope,1.0));
+          vec3 key=normalize(vec3(-0.38,-0.50,0.78));
+          vec3 halfVector=normalize(key+vec3(0.0,0.0,1.0));
+          float diffuse=dot(normal,key)-key.z;
+          float reflection=pow(max(0.0,dot(normal,halfVector)),48.0)-pow(halfVector.z,48.0);
+          // Incremental response: the original texture already contains light.
+          // Keep premultiplied RGB <= alpha; never add a white opacity blanket.
+          texel.rgb*=1.0+clamp(diffuse*0.28,-0.085,0.07);
+          texel.rgb+=(vec3(texel.a)-texel.rgb)*clamp(reflection*0.30,0.0,0.18);
+          texel.rgb=clamp(texel.rgb,vec3(0.0),vec3(texel.a));
+        }
+        gl_FragColor=texel*u_alpha;
+      }`;
     const compile = (type: number, src: string) => {
       const sh = gl.createShader(type)!;
       gl.shaderSource(sh, src);
@@ -65,6 +93,8 @@ export class MeshGL {
     this.aUv = gl.getAttribLocation(prog, "a_uv");
     this.uRes = gl.getUniformLocation(prog, "u_res")!;
     this.uAlpha = gl.getUniformLocation(prog, "u_alpha")!;
+    this.uSurface = gl.getUniformLocation(prog, "u_surface")!;
+    this.uNodes = gl.getUniformLocation(prog, "u_nodes[0]")!;
     gl.uniform1i(gl.getUniformLocation(prog, "u_tex"), 0);
     this.posBuf = gl.createBuffer()!;
     this.uvBuf = gl.createBuffer()!;
@@ -146,12 +176,14 @@ export class MeshGL {
   }
 
   /** draw the grid with interleaved device-px positions [x0,y0,x1,y1,...] */
-  drawMesh(texKey: string, pos: Float32Array, alpha: number) {
+  drawMesh(texKey: string, pos: Float32Array, alpha: number, nodes:Float32Array|null=null) {
     const gl = this.gl;
     const t = this.textures.get(texKey);
     if (!t) return;
     gl.bindTexture(gl.TEXTURE_2D, t.tex);
     gl.uniform1f(this.uAlpha, alpha);
+    gl.uniform1f(this.uSurface,nodes?1:0);
+    if(nodes)gl.uniform4fv(this.uNodes,nodes);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.posBuf);
     gl.bufferData(gl.ARRAY_BUFFER, pos, gl.DYNAMIC_DRAW);
     gl.enableVertexAttribArray(this.aPos);
@@ -170,6 +202,7 @@ export class MeshGL {
     if (!t) return;
     gl.bindTexture(gl.TEXTURE_2D, t.tex);
     gl.uniform1f(this.uAlpha, alpha);
+    gl.uniform1f(this.uSurface,0);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.quadPos);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(corners), gl.DYNAMIC_DRAW);
     gl.enableVertexAttribArray(this.aPos);
