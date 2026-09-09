@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Game } from "../game/Game";
+import { preloadBeadAssets } from "../game/beads/BeadAssets";
 import { sfx } from "../game/audio/Sfx";
 import { NextPanel, type NextView } from "./NextPanel";
 import { CollectionSheet, SettingsSheet } from "./Sheets";
@@ -51,8 +52,27 @@ export function App() {
 
   useEffect(() => {
     const canvas = canvasRef.current!;
-    const game = new Game(canvas);
-    gameRef.current = game;
+    // give the photo beads up to 350ms to arrive so the first pad is drawn once, in its final look
+    let game: Game | null = null;
+    let cancelled = false;
+    const offs: (() => void)[] = [];
+    void Promise.race([preloadBeadAssets(), new Promise<void>((r) => setTimeout(r, 350))]).then(() => {
+      if (cancelled) return;
+      game = new Game(canvas);
+      gameRef.current = game;
+      offs.push(...bind(game));
+    });
+    return () => {
+      cancelled = true;
+      offs.forEach((off) => off());
+      timers.current.forEach((t) => window.clearTimeout(t));
+      game?.destroy();
+      gameRef.current = null;
+    };
+  }, []);
+
+  /** wire the game's events to the UI; returns the unsubscribers */
+  const bind = (game: Game): (() => void)[] => {
     (window as unknown as { __ssok?: Game }).__ssok = game;
     // a returning player does not need "하나 뽑아봐." again
     if (game.progressStore.totalCompleted > 0) {
@@ -116,13 +136,8 @@ export function App() {
         else if (isNew) pushToast({ tone: "rare", text: `NEW ✦ ${type.name}` });
       }),
     ];
-    return () => {
-      offs.forEach((off) => off());
-      timers.current.forEach((t) => window.clearTimeout(t));
-      game.destroy();
-      gameRef.current = null;
-    };
-  }, []);
+    return offs;
+  };
 
   const openNext = () => {
     const g = gameRef.current;

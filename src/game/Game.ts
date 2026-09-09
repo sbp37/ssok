@@ -167,7 +167,11 @@ export class Game extends Emitter<GameEvents> {
     this.newPad(true);
     this.last = performance.now();
     this.raf = requestAnimationFrame(this.frame);
-    void preloadBeadAssets().then(()=>{invalidateBeadSprites();this.gel.markDirty();});
+    // photo beads that arrive after the first paint re-render the base once (rare: they are awaited at boot)
+    void preloadBeadAssets().then(() => {
+      invalidateBeadSprites();
+      this.gel.markDirty();
+    });
   }
 
   destroy() {

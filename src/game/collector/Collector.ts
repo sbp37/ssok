@@ -69,8 +69,8 @@ export class Collector {
   /** >0 while the jar is being tidied for a new pad (seconds elapsed) */
   private dismissT = -1;
   static readonly DISMISS = 0.28;
-  /** beads are drawn a bit smaller than on the pad – it reads as depth, and a pad's worth fits */
-  static readonly BEAD_SCALE = 0.55;
+  /** beads are drawn a bit smaller than on the pad – it reads as depth – sized so a pad's worth (≈55) fills the jar */
+  static readonly BEAD_SCALE = 0.76;
   static readonly MAX_ITEMS = 100; // above any pad's plain-bead count (max seen: 94) – nothing is ever silently dropped mid-pad
 
   layout(x: number, y: number, w: number, h: number) {

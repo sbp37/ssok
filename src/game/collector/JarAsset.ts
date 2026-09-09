@@ -1,6 +1,6 @@
 // Empty RGBA glass only. Live beads are never baked into this sprite.
-// Source 1195x1316; vessel crop excludes transparent exterior padding.
-const crop = { x: 37, y: 75, w: 1116, h: 1182 };
+// 400x424 WebP, already cropped to the vessel (the jar is drawn at ≤136 css px).
+const crop = { x: 0, y: 0, w: 400, h: 424 };
 let image: HTMLImageElement | undefined;
 let pending: Promise<void> | undefined;
 let cached: { key: string; back: HTMLCanvasElement; front: HTMLCanvasElement } | undefined;
@@ -14,7 +14,7 @@ export function preloadJar(): Promise<void> {
       resolve();
     };
     img.onerror = () => resolve();
-    img.src = `${import.meta.env.BASE_URL}assets/collector/glass-empty.png`;
+    img.src = `${import.meta.env.BASE_URL}assets/collector/glass-empty.webp`;
   });
 }
 
