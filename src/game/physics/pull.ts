@@ -9,7 +9,9 @@ import { clamp } from "../util/math";
  *  grip   the finger moves, the bead does not. What moves is the *gel*: it
  *         stretches toward the finger (tension 0→1) while holding the bead.
  *  slip   past the grip distance the bead creeps out in stick-slip steps and
- *         the neck between socket and bead thins.
+ *         the neck between socket and bead thins. Big beads *wedge* on the
+ *         way out: once or twice the bead stops while the finger keeps going
+ *         (the gel tents further, the bead quivers), then it gives with a lurch.
  *  pop    past the pull distance *and* moving fast enough → resistance
  *         vanishes at once. (Pulling too violently can instead slip out
  *         of your fingers ~6% of the time.)
@@ -22,7 +24,24 @@ export type PullEvent =
   | { kind: "tick"; step: number }
   | { kind: "slipStart" }
   | { kind: "pop"; dirX: number; dirY: number; speed: number }
-  | { kind: "slipped" };
+  | { kind: "slipped" }
+  /** grip nearly maxed: the gel audibly strains (once per grab) */
+  | { kind: "strain" }
+  /** a big bead wedged in the socket – the finger travels, the bead does not */
+  | { kind: "jamStart" }
+  /** …and gave way */
+  | { kind: "jamFree" };
+
+/** a point in the slip stage where the bead wedges and holds for `w` px of extra finger travel */
+interface Jam {
+  p: number;
+  w: number;
+  hit: boolean;
+  freed: boolean;
+}
+
+/** reference-pad radius above which a bead starts to wedge on the way out (tiny/marble never do) */
+const JAM_R0 = 12;
 
 const stretchP = springParams(0.13, 0.5);
 
@@ -47,6 +66,18 @@ export class Pull {
   readonly t2Base: number;
   private catchHold = 0;
   private readonly s: number;
+  /** 0..1 how much this bead wedges on the way out – from its actual size, so two
+   *  beads of one type never feel identical (tiny/marble: 0, big pearl ≈0.5, treasures 1) */
+  readonly jam: number;
+  private readonly jams: Jam[] = [];
+  /** true while wedged */
+  jammed = false;
+  /** 0..1 how far the finger has strained through the current wedge */
+  over = 0;
+  private quiver = 0;
+  private strained = false;
+  /** bookkeeping for the creak grains played while wedged (owned by the caller) */
+  creakT = 0;
 
   constructor(
     public bead: Bead,
@@ -63,6 +94,17 @@ export class Pull {
     const deep = bead.layer === 1 ? 1.25 : 1;
     this.t1 = bead.type.grip * s * deep * resist;
     this.t2Base = bead.type.pull * s * (bead.layer === 1 ? 1.35 : 1) * resist;
+    // big pearl ≈0.5 (≈13px of extra travel), a buried treasure 1 (two wedges, ≈44px)
+    this.jam = bead.type.jam ?? clamp((bead.radius / s - JAM_R0) / 8, 0, 1);
+    if (this.jam > 0) {
+      this.jams.push({ p: 0.38 + (rand() - 0.5) * 0.16, w: this.jam * 30 * s, hit: false, freed: false });
+      if (this.jam > 0.55) this.jams.push({ p: 0.72 + (rand() - 0.5) * 0.1, w: this.jam * 14 * s, hit: false, freed: false });
+    }
+  }
+
+  /** extra finger travel the wedges add before the pop (px) */
+  get extraTravel() {
+    return this.jams.reduce((a, j) => a + j.w, 0);
   }
 
   update(fx: number, fy: number, speed: number, dt: number): PullEvent[] {
@@ -100,15 +142,47 @@ export class Pull {
       this.phase = "grip";
       this.progress = 0;
       this.tension = clamp(dist / this.t1, 0, 1);
+      if (this.tension > 0.75 && !this.strained) {
+        this.strained = true;
+        events.push({ kind: "strain" });
+      }
       // the bead itself only starts to give in the last 40% of the grip, and barely
       offMag = this.tension > 0.6 ? ((this.tension - 0.6) / 0.4) * 1.6 * s : 0;
+      this.jammed = false;
+      this.over = 0;
     } else {
       if (this.phase === "grip") {
         this.phase = "slip";
         events.push({ kind: "slipStart" });
       }
       this.tension = 1;
-      let p = clamp((dist - this.t1) / (t2 - this.t1), 0, 1);
+      // wedges eat finger travel: inside one the bead holds still and the strain builds
+      const span = t2 - this.t1;
+      let d = dist - this.t1;
+      let jammed = false;
+      let over = 0;
+      for (const j of this.jams) {
+        const dj = j.p * span;
+        if (d <= dj) break;
+        if (d < dj + j.w) {
+          over = (d - dj) / j.w;
+          d = dj;
+          jammed = true;
+          if (!j.hit) {
+            j.hit = true;
+            events.push({ kind: "jamStart" });
+          }
+          break;
+        }
+        if (j.hit && !j.freed) {
+          j.freed = true;
+          events.push({ kind: "jamFree" });
+        }
+        d -= j.w;
+      }
+      this.jammed = jammed;
+      this.over = jammed ? over : 0;
+      let p = clamp(d / span, 0, 1);
       if (b.type.catch !== undefined) {
         const c = b.type.catch;
         if (p > c && p < c + 0.18) {
@@ -120,13 +194,18 @@ export class Pull {
       // creeps out to ~2.4 radii by the threshold so the neck is visible, curve set by friction
       const creep = Math.pow(p, 1 + b.type.friction * 1.4) * b.radius * 2.4;
       offMag = 1.6 * s + creep;
+      if (jammed) {
+        // wedged: the bead quivers in place while the finger strains against it
+        this.quiver += dt;
+        offMag += Math.sin(this.quiver * Math.PI * 2 * 22) * 0.55 * s * over;
+      }
       const step = Math.floor(p * 6);
       if (step > this.lastStep && p < 1) {
         this.lastStep = step;
         events.push({ kind: "tick", step });
       }
-      if (dist >= t2) {
-        const extra = dist - t2;
+      if (d >= span) {
+        const extra = d - span;
         this.holdT += dt;
         const forced = extra > 26 * (this.t2Base / 30) || this.holdT > 0.45;
         if (speed >= b.type.minSpeed || forced) {
@@ -138,8 +217,9 @@ export class Pull {
         offMag += extra * 0.18;
       }
     }
-    // gel around the socket is dragged toward the finger: 6~18px at full grip, a bit more while slipping
-    const stretchLen = this.tension * 16 * s + this.progress * 5 * s;
+    // gel around the socket is dragged toward the finger: 6~18px at full grip, a bit more while
+    // slipping – and further still while straining against a wedge (that IS the visible effort)
+    const stretchLen = this.tension * 16 * s + this.progress * 5 * s + this.over * this.jam * 14 * s;
     this.stretch.setTarget(ux * stretchLen, uy * stretchLen);
     // Same spring / resistance at 60Hz. A 50ms frame exceeds this stiff
     // spring's stable Euler step and used to send the rendered tent offscreen.

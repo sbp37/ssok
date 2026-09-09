@@ -442,13 +442,21 @@ export function getMeniscusSprite(radius: number, dpr: number, gel: string): Spr
   ctx.scale(dpr, dpr);
   const c = w / 2;
   const gelA = (a: number) => gel.replace(/[\d.]+\)$/, `${a})`);
-  // contact darkening just outside the bead
+  // contact darkening just outside the bead. A radial gradient paints its
+  // stop-0 colour over the whole inner disc, so this MUST be clipped to the
+  // outside of the bead – unclipped it veiled every bead 20% grey.
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(0, 0, w, w);
+  ctx.arc(c, c, r * 0.97, 0, Math.PI * 2, true);
+  ctx.clip("evenodd");
   const ao = ctx.createRadialGradient(c, c + r * 0.1, r * 0.98, c, c + r * 0.1, r * 1.32);
   ao.addColorStop(0, "rgba(60,50,62,0.26)");
   ao.addColorStop(0.45, "rgba(60,50,62,0.08)");
   ao.addColorStop(1, "rgba(60,50,62,0)");
   ctx.fillStyle = ao;
   ctx.fillRect(0, 0, w, w);
+  ctx.restore();
   // light ring: the meniscus lip, brightest top-left
   const ring = ctx.createRadialGradient(c - r * 0.08, c - r * 0.1, r * 1.0, c - r * 0.08, c - r * 0.1, r * 1.34);
   ring.addColorStop(0, "rgba(255,255,255,0)");

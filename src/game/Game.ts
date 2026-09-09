@@ -530,6 +530,23 @@ export class Game extends Emitter<GameEvents> {
           sfx.stretch(b.type.mass);
           haptics.slipStart();
           break;
+        case "strain":
+          // grip nearly maxed: the gel creaks softly before anything moves
+          sfx.creak(b.type.mass, 0.1);
+          break;
+        case "jamStart":
+          sfx.creak(b.type.mass, 0.3);
+          haptics.jam();
+          pull.creakT = 0;
+          break;
+        case "jamFree": {
+          // the wedge gives: the bead lurches toward the finger, the gel around the socket shudders
+          sfx.give(b.type.mass);
+          haptics.give();
+          b.off.impulse(pull.dirX * 28 * this.s, pull.dirY * 28 * this.s);
+          this.gel.shock(b.rx, b.ry, b.radius, 1.6 * this.s);
+          break;
+        }
         case "slipped": {
           // "앗." – it slid back into the gel
           this.pulls.delete(id);
@@ -709,6 +726,14 @@ export class Game extends Emitter<GameEvents> {
       const speed = now - f.lastMove > 70 ? 0 : f.sample.speed;
       const events = pull.update(l.x, l.y, speed, dt);
       if (events.length) this.handlePullEvents(pull, id, events);
+      // wedged: creak grains, closer together and sharper the harder the finger strains
+      if (pull.jammed && this.pulls.has(id)) {
+        pull.creakT += dt;
+        if (pull.creakT > 0.11 - pull.over * 0.04) {
+          pull.creakT = 0;
+          sfx.creak(pull.bead.type.mass, 0.25 + pull.over * 0.75);
+        }
+      }
     }
 
     // beads
@@ -973,13 +998,17 @@ export class Game extends Emitter<GameEvents> {
     const bx = hx + b.off.x;
     const by = hy + b.off.y;
     const offL = Math.hypot(b.off.x, b.off.y);
+    // big beads drag more gel with them: wider tent, thicker neck; while wedged the strain shows
+    const J = pull.jam;
+    const O = pull.over;
+    const bigK = 1 + 0.35 * J + 0.25 * J * O;
 
     // ── tent: surface around the socket lifted toward the finger.
     // dark on the far side (steep, in shadow), bright bulge on the near side.
-    const tentR = r * (1.7 + 0.8 * T + 0.4 * P);
+    const tentR = r * (1.7 + 0.8 * T + 0.4 * P) * bigK;
     const far = ctx.createRadialGradient(hx - ux * r * 0.6, hy - uy * r * 0.6, r * 0.4, hx - ux * r * 0.3, hy - uy * r * 0.3, tentR);
-    far.addColorStop(0, gel.col(0.19 * T, 0.35));
-    far.addColorStop(0.5, gel.col(0.055 * T, 0.25));
+    far.addColorStop(0, gel.col(0.19 * T * (1 + 0.6 * J * O), 0.35));
+    far.addColorStop(0.5, gel.col(0.055 * T * (1 + 0.6 * J * O), 0.25));
     far.addColorStop(1, "rgba(55,45,58,0)");
     ctx.fillStyle = far;
     ctx.beginPath();
@@ -1057,11 +1086,12 @@ export class Game extends Emitter<GameEvents> {
     ctx.arc(hx, hy, holeR * 1.1, 0, Math.PI * 2);
     ctx.fill();
 
-    // ── neck (slip stage): a concave bridge from the lip to the bead that thins as it goes
-    if (offL > r * 0.35) {
-      const w0 = across * (1.0 + 0.08 * P);
-      const w1 = r * (0.9 - 0.62 * P);
-      const wm = r * (0.86 - 0.74 * P);
+    // ── neck (slip stage): a concave bridge from the lip to the bead that thins as it goes.
+    // A big bead shows its neck sooner and keeps it thicker; a wedged one bulges mid-neck.
+    if (offL > r * (0.35 - 0.15 * J)) {
+      const w0 = across * (1.0 + 0.08 * P + 0.14 * J);
+      const w1 = r * (0.9 - 0.62 * P) * (1 + 0.12 * J);
+      const wm = r * (0.86 - 0.74 * P) * (1 + 0.28 * J + 0.3 * J * O);
       const mx = hx + b.off.x * 0.55;
       const my = hy + b.off.y * 0.55;
       const neck = () => {

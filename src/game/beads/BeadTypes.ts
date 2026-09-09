@@ -36,6 +36,8 @@ export interface BeadType {
   catch?: number;
   /** long beads: pulling off-axis is harder, wiggling the pull direction frees them */
   needsWiggle?: boolean;
+  /** 0..1 override for how much the bead wedges on the way out (default: from its size) */
+  jam?: number;
   sound: PopSound;
   /** elongation for oval shapes (major/minor) */
   aspect?: number;

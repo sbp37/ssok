@@ -37,7 +37,7 @@ src/game/
   beads/BeadTypes.ts  비즈 카탈로그 — 촉감을 바꾸는 값은 전부 여기 (grip/pull/friction/minSpeed/mass/bounce)
   beads/Bead.ts       비즈 엔티티 + 패드 레이아웃(표면층/깊은층)
   beads/BeadSprites.ts 비즈/그림자/메니스커스 스프라이트 프리렌더
-  physics/pull.ts     붙잡힘(tension, 젤만 늘어남) → 미끄러짐(stick-slip) → POP / 미끄러져 빠짐(5~8%) 상태기계
+  physics/pull.ts     붙잡힘(tension, 젤만 늘어남) → 미끄러짐(stick-slip, 큰 비즈는 중간에 1~2번 낑김) → POP / 미끄러져 빠짐(5~8%) 상태기계
   audio/samples.ts    녹음 샘플 뱅크 (manifest 기반, 없으면 프로시저럴 폴백)
   physics/spring.ts   감쇠 스프링
   audio/Sfx.ts        Web Audio 프로시저럴 효과음 (매번 ±5~10% 변형)

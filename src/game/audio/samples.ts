@@ -10,6 +10,8 @@ export type SampleName =
   | "pop_small"
   | "pop_big"
   | "release"
+  | "creak"
+  | "give"
   | "land_glass"
   | "land_plastic"
   | "land_metal"

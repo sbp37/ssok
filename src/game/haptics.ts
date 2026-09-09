@@ -33,6 +33,14 @@ class Haptics {
   slipStart() {
     this.buzz(4);
   }
+  /** a big bead wedged: a firm little bump */
+  jam() {
+    this.buzz(7);
+  }
+  /** …and gave way */
+  give() {
+    this.buzz(10);
+  }
   pop(mass: number) {
     this.buzz(Math.round(12 + Math.min(6, mass * 3)));
   }

@@ -64,27 +64,99 @@ const wobbleP = springParams(0.19, 0.28);
 const shockP = springParams(0.16, 0.26);
 
 const socketCache = new Map<string, HTMLCanvasElement>();
-/** empty socket: a shallow cup – dark centre, light lip at the bottom */
+/**
+ * Empty socket: a cup carved into the gel. The floor is seen through more
+ * silicone (denser pad colour, darkest under the far wall), the near wall is
+ * in shadow, the lip catches light bottom-right, and a soft dip surrounds it.
+ * Every radial gradient is clipped: stop-0 colour must never flood a disc.
+ */
 function getSocketSprite(r: number, dpr: number, gel: string) {
   const key = `${Math.round(r)}|${dpr}|${gel}|${originalMaterial}`;
   const hit = socketCache.get(key);
   if (hit) return hit;
   const rr = Math.round(r);
-  const size = Math.ceil(rr * 2.8);
+  const size = Math.ceil(rr * 3.1);
   const c = document.createElement("canvas");
   c.width = c.height = Math.ceil(size * dpr);
   const g = c.getContext("2d")!;
   g.scale(dpr, dpr);
   const cx = size / 2;
-  // Restore Claude's volumetric socket, not the bright outlined replacement.
-  const grad = g.createRadialGradient(cx, cx + rr * 0.12, rr * 0.15, cx, cx, rr * 1.18);
-  grad.addColorStop(0, "rgba(70,60,70,0.22)");
-  grad.addColorStop(0.6, "rgba(90,40,80,0.1)");
-  grad.addColorStop(0.86, "rgba(90,40,80,0.02)");
-  grad.addColorStop(0.92, "rgba(255,255,255,0.16)");
-  grad.addColorStop(1, "rgba(255,255,255,0)");
-  g.fillStyle = grad;
+  const [gr, gg, gb] = (gel.match(/\d+/g) ?? ["230", "200", "220"]).slice(0, 3).map(Number);
+  const dense = (a: number, k: number) => `rgba(${Math.round(gr * k)},${Math.round(gg * k)},${Math.round(gb * k)},${a})`;
+  const circle = (rad: number) => {
+    g.beginPath();
+    g.arc(cx, cx, rad, 0, Math.PI * 2);
+  };
+  // floor
+  g.save();
+  circle(rr * 1.0);
+  g.clip();
+  const floor = g.createRadialGradient(cx, cx - rr * 0.1, 0, cx, cx, rr * 1.02);
+  floor.addColorStop(0, dense(0.5, 0.6));
+  floor.addColorStop(0.5, dense(0.36, 0.66));
+  floor.addColorStop(0.85, dense(0.18, 0.74));
+  floor.addColorStop(1, dense(0.08, 0.8));
+  g.fillStyle = floor;
   g.fillRect(0, 0, size, size);
+  // near (top / left) wall in shadow: light comes from top-left, so the wall
+  // under the top-left rim is what we look into
+  const wallV = g.createLinearGradient(cx, cx - rr, cx, cx + rr * 0.35);
+  wallV.addColorStop(0, "rgba(45,30,45,0.34)");
+  wallV.addColorStop(0.4, "rgba(45,30,45,0.1)");
+  wallV.addColorStop(1, "rgba(45,30,45,0)");
+  g.fillStyle = wallV;
+  g.fillRect(0, 0, size, size);
+  const wallH = g.createLinearGradient(cx - rr, cx, cx + rr * 0.2, cx);
+  wallH.addColorStop(0, "rgba(45,30,45,0.2)");
+  wallH.addColorStop(1, "rgba(45,30,45,0)");
+  g.fillStyle = wallH;
+  g.fillRect(0, 0, size, size);
+  // a faint bottom-right floor glint: light reaching the far floor
+  const glint = g.createRadialGradient(cx + rr * 0.3, cx + rr * 0.35, 0, cx + rr * 0.3, cx + rr * 0.35, rr * 0.6);
+  glint.addColorStop(0, "rgba(255,255,255,0.1)");
+  glint.addColorStop(1, "rgba(255,255,255,0)");
+  g.fillStyle = glint;
+  g.fillRect(0, 0, size, size);
+  g.restore();
+  // lip: a thin bright rim, strongest bottom-right, faint elsewhere
+  g.save();
+  g.beginPath();
+  g.rect(0, 0, size, size);
+  g.arc(cx, cx, rr * 0.96, 0, Math.PI * 2, true);
+  g.clip("evenodd");
+  const lip = g.createRadialGradient(cx, cx, rr * 0.96, cx, cx, rr * 1.2);
+  lip.addColorStop(0, "rgba(255,255,255,0.18)");
+  lip.addColorStop(0.35, "rgba(255,255,255,0.14)");
+  lip.addColorStop(1, "rgba(255,255,255,0)");
+  g.fillStyle = lip;
+  g.fillRect(0, 0, size, size);
+  // extra light on the bottom-right half of the lip
+  g.beginPath();
+  g.moveTo(cx - rr * 1.6, cx + rr * 1.6);
+  g.lineTo(cx + rr * 1.6, cx - rr * 1.6);
+  g.lineTo(cx + rr * 1.6, cx + rr * 1.6);
+  g.closePath();
+  g.clip();
+  const lip2 = g.createRadialGradient(cx, cx, rr * 0.96, cx, cx, rr * 1.16);
+  lip2.addColorStop(0, "rgba(255,255,255,0.34)");
+  lip2.addColorStop(0.4, "rgba(255,255,255,0.18)");
+  lip2.addColorStop(1, "rgba(255,255,255,0)");
+  g.fillStyle = lip2;
+  g.fillRect(0, 0, size, size);
+  g.restore();
+  // the socket sits in a shallow dip: soft darkening outside the lip, top-left
+  g.save();
+  g.beginPath();
+  g.rect(0, 0, size, size);
+  g.arc(cx, cx, rr * 1.1, 0, Math.PI * 2, true);
+  g.clip("evenodd");
+  const dip = g.createRadialGradient(cx - rr * 0.1, cx - rr * 0.12, rr * 1.1, cx - rr * 0.1, cx - rr * 0.12, rr * 1.5);
+  dip.addColorStop(0, "rgba(60,45,60,0.13)");
+  dip.addColorStop(0.5, "rgba(60,45,60,0.04)");
+  dip.addColorStop(1, "rgba(60,45,60,0)");
+  g.fillStyle = dip;
+  g.fillRect(0, 0, size, size);
+  g.restore();
   socketCache.set(key, c);
   return c;
 }

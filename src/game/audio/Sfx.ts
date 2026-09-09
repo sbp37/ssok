@@ -151,17 +151,49 @@ class Sfx {
     this.tone("sine", 85 * this.j(0.1), 55, 0.08, 0.03, { attack: 0.01 });
   }
 
-  /** gel starting to give: faint sticky "찌익" */
+  /** gel starting to give: sticky "찌익" – longer and lower for a heavy bead */
   stretch(mass: number) {
     if (!this.ready) return;
     if (this.sample("stretch", 1 / Math.pow(mass, 0.2), 0.5)) return;
-    this.burst(0.14 * this.j(0.15), 0.026 * this.j(0.2), {
+    const heavy = Math.min(1, Math.max(0, mass - 0.9));
+    this.burst((0.14 + heavy * 0.1) * this.j(0.15), (0.03 + heavy * 0.015) * this.j(0.2), {
       type: "bandpass",
       freq: 320 / Math.sqrt(mass),
       freq1: 900 / Math.sqrt(mass),
       q: 2.5,
       attack: 0.03,
     });
+  }
+
+  /**
+   * the gel straining against a bead that won't come: a short rubbery creak whose
+   * pitch and bite climb with `over` (0..1). Played as grains while wedged, and
+   * once softly as the grip nears its limit.
+   */
+  creak(mass: number, over: number) {
+    if (!this.ready) return;
+    const m = Math.pow(mass, 0.3);
+    if (this.sample("creak", (0.9 + over * 0.5) / m, 0.35 + over * 0.35)) return;
+    const f = ((480 + over * 620) / m) * this.j(0.06);
+    this.burst((0.06 + over * 0.05) * this.j(0.15), (0.03 + over * 0.04) * this.j(0.25), {
+      type: "bandpass",
+      freq: f,
+      freq1: f * 1.4,
+      q: 7,
+      attack: 0.018,
+    });
+    // a low body under the squeak: the whole slab under tension
+    this.tone("sine", (92 / Math.pow(mass, 0.25)) * this.j(0.05), 68, 0.09, 0.03 + over * 0.035, { attack: 0.02 });
+  }
+
+  /** a wedge gives way: dull rubbery "뚝" then a tick as the bead lurches */
+  give(mass: number) {
+    if (!this.ready) return;
+    const m = Math.pow(mass, 0.3);
+    if (this.sample("give", 1 / m, 0.7)) return;
+    this.tone("sine", (210 / m) * this.j(0.08), 95, 0.09, 0.22);
+    this.burst(0.03, 0.09, { type: "bandpass", freq: 1500 / m, q: 2 });
+    this.burst(0.06, 0.05, { type: "lowpass", freq: 700, q: 0.7, delay: 0.01 });
   }
 
   /** stick-slip "딱… 딱…" as the bead creeps out */
@@ -172,6 +204,8 @@ class Sfx {
     // a tiny woody click: filtered noise with a very short body, no pure tone
     this.burst(0.014, 0.05 * this.j(0.2), { type: "bandpass", freq: f * this.j(0.08), q: 2.2 });
     this.burst(0.03, 0.02, { type: "lowpass", freq: 900, q: 0.7 });
+    // heavy beads drag a faint rubber creak under each step
+    if (mass > 1.05) this.burst(0.05, 0.018 * Math.min(1, mass - 1), { type: "bandpass", freq: 620 / Math.pow(mass, 0.3), freq1: 760 / Math.pow(mass, 0.3), q: 6, attack: 0.012 });
   }
 
   pop(kind: PopSound, mass: number, rare = false) {
