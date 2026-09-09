@@ -312,13 +312,17 @@ body,
 }
 .done {
   position: absolute;
-  left: 0;
-  right: 0;
+  left: 50%;
+  transform: translateX(-50%);
   top: 45.5%;
+  padding: 5px 13px;
+  border-radius: 999px;
+  background: rgba(255, 250, 252, 0.72);
+  backdrop-filter: blur(3px);
   text-align: center;
   font-size: 15px;
   font-weight: 500;
-  color: rgba(80, 40, 70, 0.62);
+  color: rgba(80, 40, 70, 0.78);
   animation: btnIn 0.7s ease-out;
 }
 .gate {

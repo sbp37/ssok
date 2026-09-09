@@ -621,7 +621,7 @@ export class Game extends Emitter<GameEvents> {
       // that sat on it was squeezed out through that bead's hole, so it never overlaps neighbours
       const host = this.beads.find((o) => o.slot === b.slot && o.layer === 0);
       const slotR = host && host !== b ? host.radius * 1.12 : Infinity;
-      this.gel.sockets.push({ x: b.rx, y: b.ry, r: Math.min(b.radius, slotR) * 0.92, type: b.type, rot: b.rot, k: 0.75 + rng.next() * 0.55 });
+      this.gel.sockets.push({ x: b.rx, y: b.ry, r: Math.min(b.radius, slotR) * 0.92, type: b.type, rot: b.rot, k: 0.9 + rng.next() * 0.45 });
     }
     if (b.type.rarity === "special") this.treasure.noteSpecial(b.type.id);
     this.gel.markDirty();
@@ -637,7 +637,8 @@ export class Game extends Emitter<GameEvents> {
     // +40ms: the gel around the hole bulges outward and rings down – neighbours ride it
     this.schedule(0.04, () => this.gel.shock(b.rx, b.ry, b.radius, 5 * s * Math.pow(b.type.mass, 0.5)));
     // +120ms: the bead underneath rises to the surface
-    if (deeper) this.schedule(0.12, () => (deeper.depth.target = 0));
+    // the bead underneath waits at the bottom of the hole, then rises (slow spring, no overshoot)
+    if (deeper) this.schedule(0.42, () => (deeper.depth.target = 0));
 
     if (kind) this.flashes.push({ x: pos.x, y: pos.y, t: 0 });
 
@@ -899,6 +900,14 @@ export class Game extends Emitter<GameEvents> {
           continue;
         }
         if (b.state !== "embedded") continue;
+        if (layer === 1 && !covered.has(b.slot) && b.depth.x > 0.02) {
+          // the hole is empty for a beat: draw the cup, the bead rises out of it
+          const host = this.beads.find((o) => o.slot === b.slot && o.layer === 0);
+          const hr = host ? host.radius : b.radius;
+          ctx.globalAlpha = clamp(b.depth.x, 0, 1);
+          gel.drawSocket(ctx, b.rx, b.ry, hr * 0.92, host?.type, host?.rot ?? 0, 1.1);
+          ctx.globalAlpha = 1;
+        }
         if (layer === 1 && covered.has(b.slot)) {
           // the hidden object is bigger than the bead sitting on it: its edges show
           // around the host, fading in as the pad empties – "what's that in there?"
@@ -922,12 +931,16 @@ export class Game extends Emitter<GameEvents> {
       this.tmp.x = p.x;
       this.tmp.y = p.y;
     } else this.gel.warp(p.x, p.y, this.tmp);
-    const depth = b.depth.x;
+    // clamp: the depth spring overshoots a hair below 0 and settles there; an alpha above 1
+    // is *ignored* by canvas, which left the shadow's 55% in place – every surfaced bead
+    // stayed hazy for good
+    const depth = clamp(b.depth.x, 0, 1);
     const lift = b.lift;
-    const scale = (1 - depth * 0.22) * (1 + lift * 0.2);
+    // down in the hole it reads smaller and sits lower; rising brings it to full size
+    const scale = (1 - depth * 0.34) * (1 + lift * 0.2);
     const x = this.tmp.x;
-    const y = this.tmp.y + depth * 3 * this.s - lift * 3 * this.s;
-    const alpha = (above ? 1 : 1 - depth * 0.5) * ctx.globalAlpha;
+    const y = this.tmp.y + depth * b.radius * 0.22 - lift * 3 * this.s;
+    const alpha = Math.min(1, (above ? 1 : 1 - depth * 0.5) * ctx.globalAlpha);
     const dpr = this.dpr;
 
     // shadow: tighter when embedded, lifts & offsets as the bead comes out

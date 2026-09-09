@@ -67,12 +67,14 @@ export function PadSilhouette({
     } else {
       const v = Math.max(0, Math.min(1, reveal));
       const { r, g, b } = pad.gelColor;
-      const mix = (a: number, c: number) => Math.round(a + (c - a) * v);
-      ctx.fillStyle = `rgba(${mix(43, r)},${mix(39, g)},${mix(48, b)},${0.62 + 0.3 * v})`;
+      const mix = (a: number, c: number) => Math.round(a + (c - a) * (1 - (1 - v) * (1 - v)));
+      // ease so the colour is clearly coming through by the halfway mark
+      const ve = 1 - (1 - v) * (1 - v);
+      ctx.fillStyle = `rgba(${mix(43, r)},${mix(39, g)},${mix(48, b)},${0.62 + 0.3 * ve})`;
       ctx.fill("evenodd");
-      if (v > 0.5) {
+      if (v > 0.3) {
         const gr = ctx.createRadialGradient(-R * 0.2, -R * 0.3, 0, 0, 0, R);
-        gr.addColorStop(0, `rgba(255,255,255,${0.4 * (v - 0.5) * 2})`);
+        gr.addColorStop(0, `rgba(255,255,255,${0.45 * (v - 0.3) / 0.7})`);
         gr.addColorStop(1, "rgba(255,255,255,0)");
         ctx.fillStyle = gr;
         ctx.fill("evenodd");

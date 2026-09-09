@@ -55,7 +55,7 @@ let nextId = 1;
 
 // ζ≈0.3 → a released bead snaps back with ~2 small overshoots
 const off = springParams(0.17, 0.3);
-const depth = springParams(0.45, 0.7);
+const depth = springParams(0.8, 0.95);
 
 export function makeBead(type: BeadType, color: string, radius: number, rot: number, layer: 0 | 1, slot: number, rx: number, ry: number): Bead {
   return {

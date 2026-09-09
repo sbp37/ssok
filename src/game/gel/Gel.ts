@@ -113,17 +113,17 @@ function getSocketSprite(r: number, dpr: number, gel: string, type?: BeadType, r
   shape(1);
   g.clip();
   const floor = g.createRadialGradient(cx, cx - rr * 0.1, 0, cx, cx, rr * 1.05 * ext);
-  floor.addColorStop(0, dense(0.46 * k, 0.6));
-  floor.addColorStop(0.5, dense(0.34 * k, 0.66));
-  floor.addColorStop(0.85, dense(0.18 * k, 0.74));
-  floor.addColorStop(1, dense(0.08 * k, 0.8));
+  floor.addColorStop(0, dense(0.6 * k, 0.56));
+  floor.addColorStop(0.5, dense(0.44 * k, 0.62));
+  floor.addColorStop(0.85, dense(0.24 * k, 0.72));
+  floor.addColorStop(1, dense(0.1 * k, 0.8));
   g.fillStyle = floor;
   g.fillRect(0, 0, size, size);
   // near (top / left) wall in shadow: light comes from top-left, so the wall
   // under the top-left rim is what we look into
   const wallV = g.createLinearGradient(cx, cx - rr, cx, cx + rr * 0.35);
-  wallV.addColorStop(0, `rgba(45,30,45,${0.32 * k})`);
-  wallV.addColorStop(0.4, `rgba(45,30,45,${0.1 * k})`);
+  wallV.addColorStop(0, `rgba(45,30,45,${0.4 * k})`);
+  wallV.addColorStop(0.4, `rgba(45,30,45,${0.14 * k})`);
   wallV.addColorStop(1, "rgba(45,30,45,0)");
   g.fillStyle = wallV;
   g.fillRect(0, 0, size, size);
@@ -949,7 +949,7 @@ export class Gel {
       ctx.fill();
       // stretched surface around the finger goes glossy
       const halo = ctx.createRadialGradient(f.x, f.y, rr * 0.9, f.x, f.y, rr * 2.2);
-      halo.addColorStop(0, `rgba(255,255,255,${0.14 * p})`);
+      halo.addColorStop(0, `rgba(255,255,255,${0.08 * p})`);
       halo.addColorStop(1, "rgba(255,255,255,0)");
       ctx.fillStyle = halo;
       ctx.beginPath();
@@ -958,7 +958,7 @@ export class Gel {
       // rim of the dimple catches light – soft ring, brighter top-left
       const ring = ctx.createRadialGradient(f.x - 1.5, f.y - 1.5, rr * 0.55, f.x - 1.5, f.y - 1.5, rr * 0.95);
       ring.addColorStop(0, "rgba(255,255,255,0)");
-      ring.addColorStop(0.55, `rgba(255,255,255,${0.3 * p})`);
+      ring.addColorStop(0.55, `rgba(255,255,255,${0.16 * p})`);
       ring.addColorStop(1, "rgba(255,255,255,0)");
       ctx.fillStyle = ring;
       ctx.beginPath();

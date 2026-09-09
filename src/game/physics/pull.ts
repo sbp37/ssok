@@ -209,7 +209,10 @@ export class Pull {
       if (d >= span) {
         const extra = d - span;
         this.holdT += dt;
-        const forced = extra > 26 * (this.t2Base / 30) || this.holdT > 0.45;
+        // a stalled pull still gives up eventually – quickly for a small bead, only after a
+        // real struggle for a heavy or wedging one (that is where "too easy" came from)
+        const holdLimit = 0.3 + 0.5 * clamp((b.type.mass - 0.5) / 1.5, 0, 1) + 0.5 * this.jam;
+        const forced = extra > (26 + 30 * this.jam) * (this.t2Base / 30) || this.holdT > holdLimit;
         if (speed >= b.type.minSpeed || forced) {
           const tooHard = speed > 1500 && this.rand() < 0.065;
           if (tooHard) events.push({ kind: "slipped" });

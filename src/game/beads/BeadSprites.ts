@@ -371,6 +371,15 @@ export function getBeadSprite(type: BeadType, color: string, radius: number, dpr
       ctx.globalCompositeOperation = "color";
       ctx.fillStyle = color;
       ctx.fillRect(-w / 2, -h / 2, w, h);
+      // a light bead colour (white, cream, pastel) must not end up as the photo's mid grey:
+      // lift the whole thing toward white by how light the target is
+      const [tr, tg, tb] = hexToRgb(color);
+      const light = (Math.max(tr, tg, tb) + Math.min(tr, tg, tb)) / 510;
+      if (light > 0.55) {
+        ctx.globalCompositeOperation = "screen";
+        ctx.fillStyle = `rgba(255,255,255,${Math.min(0.85, (light - 0.55) * 1.7)})`;
+        ctx.fillRect(-w / 2, -h / 2, w, h);
+      }
       ctx.globalCompositeOperation = "destination-in";
       draw();
       ctx.globalCompositeOperation = "source-over";
