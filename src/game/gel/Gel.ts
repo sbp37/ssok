@@ -628,16 +628,18 @@ export class Gel {
 
     if (!originalMaterial) ctx.drawImage(this.ensureFormLight(), -E, -E, E * 2, E * 2);
 
-    // ── sockets + embedded beads (caller)
-    inner(ctx);
-
-    // ── gel over the beads
+    // ── surface tint goes UNDER the beads: a bead sitting half out of the gel
+    // shows its own colour on top; only its submerged lower part is veiled,
+    // and that is painted per bead by the meniscus sprite.
     const tint = ctx.createRadialGradient(-R * 0.15, -R * 0.2, R * 0.1, 0, 0, R * 1.05);
     tint.addColorStop(0, this.col(0.03, -0.1));
     tint.addColorStop(0.7, this.col(0.05, 0));
     tint.addColorStop(1, this.col(0.12, 0.08));
     ctx.fillStyle = tint;
     ctx.fillRect(-E, -E, E * 2, E * 2);
+
+    // ── sockets + embedded beads (caller)
+    inner(ctx);
     if (!originalMaterial) {
       // Low, rounded perimeter bead on the top face. It follows only the outer
       // silhouette: centre holes keep their own wall treatment and no gameplay

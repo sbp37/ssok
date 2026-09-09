@@ -427,8 +427,8 @@ export function getContourMeniscus(type:BeadType,color:string,radius:number,dpr:
  * Gel around an embedded bead, drawn *over* the bead sprite:
  *  - a clear light ring just outside (the raised meniscus catches light)
  *  - contact darkening outside the rim (ambient occlusion)
- *  - gel creeping over the bead's outer edge, heaviest at the bottom, so the
- *    bead is visibly *sunk into* the gel rather than resting on it.
+ *  - gel veiling only the part BELOW the waterline, denser toward the bottom,
+ *    so the bead reads as half-sunk: its top keeps its own colour.
  */
 export function getMeniscusSprite(radius: number, dpr: number, gel: string): Sprite {
   const r = Math.round(radius);
@@ -461,27 +461,46 @@ export function getMeniscusSprite(radius: number, dpr: number, gel: string): Spr
   ctx.beginPath();
   ctx.arc(c, c, r, 0, Math.PI * 2);
   ctx.clip();
-  // gel over the rim, all round
-  const lip = ctx.createRadialGradient(c, c, r * 0.7, c, c, r * 1.02);
-  lip.addColorStop(0, gelA(0));
-  lip.addColorStop(0.62, gelA(0.1));
-  lip.addColorStop(1, gelA(0.5));
-  ctx.fillStyle = lip;
+  // The bead sits half out of the gel: everything above the waterline keeps the
+  // bead's own colour. Seen from slightly above, the waterline on a sphere is
+  // the lower arc of an ellipse; below it the gel veils the bead, denser toward
+  // the bottom, and the edge is soft – no hard stripe.
+  const water = c + r * 0.06;
+  const ry = r * 0.34;
+  const belowArc = () => {
+    ctx.beginPath();
+    ctx.moveTo(c - r, water);
+    ctx.ellipse(c, water, r, ry, 0, Math.PI, 0, true); // lower half, left → right
+    ctx.lineTo(c + r, w);
+    ctx.lineTo(c - r, w);
+    ctx.closePath();
+  };
+  ctx.save();
+  belowArc();
+  ctx.clip();
+  const veil = ctx.createLinearGradient(0, water, 0, c + r);
+  veil.addColorStop(0, gelA(0.1));
+  veil.addColorStop(0.45, gelA(0.24));
+  veil.addColorStop(1, gelA(0.46));
+  ctx.fillStyle = veil;
   ctx.fillRect(0, 0, w, w);
-  // heavier gel over the lower part – the bead sits down in the material
-  const low = ctx.createRadialGradient(c, c - r * 0.35, r * 0.55, c, c - r * 0.35, r * 1.45);
-  low.addColorStop(0, gelA(0));
-  low.addColorStop(0.62, gelA(0.06));
-  low.addColorStop(1, gelA(0.42));
-  ctx.fillStyle = low;
+  ctx.restore();
+  // soften the arc itself: a narrow gradient band straddling the waterline
+  ctx.save();
+  belowArc();
+  ctx.clip();
+  const soft = ctx.createLinearGradient(0, water - ry * 0.4, 0, water + ry * 1.2);
+  soft.addColorStop(0, gelA(0.12));
+  soft.addColorStop(1, gelA(0));
+  ctx.fillStyle = soft;
   ctx.fillRect(0, 0, w, w);
-  // soft shadow under the top rim (the gel lip shades the bead)
-  const cres = ctx.createRadialGradient(c, c + r * 0.55, r * 0.55, c, c + r * 0.3, r * 1.25);
-  cres.addColorStop(0, "rgba(60,50,62,0)");
-  cres.addColorStop(0.72, "rgba(60,50,62,0.04)");
-  cres.addColorStop(1, "rgba(60,50,62,0.22)");
-  ctx.fillStyle = cres;
-  ctx.fillRect(0, 0, w, w);
+  ctx.restore();
+  // faint glint where the surface meets the bead
+  ctx.beginPath();
+  ctx.ellipse(c, water, r * 0.96, ry * 0.96, 0, Math.PI * 0.08, Math.PI * 0.92);
+  ctx.strokeStyle = "rgba(255,255,255,0.22)";
+  ctx.lineWidth = Math.max(0.6, r * 0.05);
+  ctx.stroke();
   ctx.restore();
   const sp = { canvas, w, h: w };
   meniscusCache.set(key, sp);
