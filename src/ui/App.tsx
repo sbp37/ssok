@@ -201,7 +201,7 @@ export function App() {
           )}
 
           <div className="bottom">
-            {phase === "free" && next && (emptied >= 0.68 || padEmpty) && <NextPanel info={next} emphasis={padEmpty ? 1 : 0} />}
+            {phase === "free" && next && (emptied >= 0.68 || padEmpty) && <NextPanel info={next} emphasis={padEmpty ? 1 : 0} reveal={padEmpty ? 1 : Math.max(0, Math.min(1, (emptied - 0.68) / 0.32))} />}
             {phase === "free" && padEmpty && flow === "ready" && next && !next.rare && (
               <button className="btn" onClick={openNext}>
                 다음 패드 열기

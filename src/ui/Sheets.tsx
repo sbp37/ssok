@@ -2,8 +2,9 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { Game } from "../game/Game";
 import { getBeadSprite } from "../game/beads/BeadSprites";
 import type { BeadType } from "../game/beads/BeadTypes";
+import { ULTRA_TYPES } from "../game/beads/BeadTypes";
 import { PADS, variantCount } from "../game/pads/PadTypes";
-import { TREASURE_TYPES } from "../game/rewards/treasure";
+import { SPECIAL_TYPES, RARE_TYPES } from "../game/rewards/treasure";
 import { haptics } from "../game/haptics";
 import { sfx } from "../game/audio/Sfx";
 import { PadSilhouette } from "./NextPanel";
@@ -80,19 +81,29 @@ export function CollectionSheet({ game, onClose }: { game: Game; onClose: () => 
           );
         })}
       </div>
-      <div className="section">보물</div>
-      <div className="grid">
-        {TREASURE_TYPES.map((ty) => {
-          const n = t.count(ty.id);
-          return (
-            <div key={ty.id} className={"card" + (n ? "" : " unknown")}>
-              <BeadIcon type={ty} size={44} found={n > 0} />
-              <div className="card-name">{n ? ty.name : "???"}</div>
-              <div className="card-n">{n ? `×${n}` : ""}</div>
-            </div>
-          );
-        })}
-      </div>
+      {(
+        [
+          ["특수", SPECIAL_TYPES, (id: string) => t.specialCount(id)],
+          ["희귀", RARE_TYPES, (id: string) => t.count(id)],
+          ["초희귀", ULTRA_TYPES, (id: string) => t.count(id)],
+        ] as const
+      ).map(([title, types, countOf]) => (
+        <div key={title}>
+          <div className="section">{title}</div>
+          <div className="grid">
+            {types.map((ty) => {
+              const n = countOf(ty.id);
+              return (
+                <div key={ty.id} className={"card" + (n ? "" : " unknown")}>
+                  <BeadIcon type={ty} size={44} found={n > 0} />
+                  <div className="card-name">{n ? ty.name : "???"}</div>
+                  <div className="card-n">{n ? `×${n}` : ""}</div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ))}
       <div className="sheet-foot">빈칸은 어느 패드에 숨어 있을까.</div>
     </Sheet>
   );

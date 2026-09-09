@@ -3,18 +3,39 @@ import { originalMaterial } from "../gel/Material";
 
 /** bead type id → photo asset name (types not listed stay procedural) */
 const assetIds: Record<string, string> = {
+  // painted charms – shown as drawn
   heart: "heart",
   flower: "flower",
   cherry: "cherry",
-  rainbow: "rainbow",
-  bigpearl: "pearl",
   minicherry: "cherry",
+  rainbow: "rainbow",
   key: "key",
   eye: "eye",
-  candystar: "star",
   crown: "crown",
   holostar: "holostar",
+  duck: "duck",
+  bigduck: "duck",
+  // plain beads – the photo is recoloured to each bead's own colour (see TINTED)
+  tiny: "pink",
+  bigmatte: "violet",
+  marble: "faceted",
+  gold: "faceted",
+  bigglass: "faceted",
+  pearl: "pearl",
+  opal: "pearl",
+  bigpearl: "pearl",
+  bigopal: "pearl",
+  star: "star",
+  candystar: "star",
+  long: "long",
 };
+
+/** photos that get recoloured to the bead's colour (keeps their shading and sparkle, swaps the hue) */
+const TINTED = new Set(["pink", "violet", "faceted", "pearl", "star", "long"]);
+
+export function beadAssetTinted(type: BeadType) {
+  return TINTED.has(assetIds[type.id]);
+}
 
 const images = new Map<string, HTMLImageElement>();
 let pending: Promise<void> | undefined;

@@ -13,12 +13,15 @@ export function PadSilhouette({
   mode = "dark",
   glint = true,
   shimmer = false,
+  reveal = 0,
 }: {
   pad: PadType;
   size: number;
   mode?: "dark" | "color" | "partial";
   glint?: boolean;
   shimmer?: boolean;
+  /** 0..1 – the dark tease slowly takes on the pad's real colour as the current pad empties */
+  reveal?: number;
 }) {
   const ref = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
@@ -62,13 +65,23 @@ export function PadSilhouette({
       ctx.lineWidth = 1;
       ctx.stroke();
     } else {
-      ctx.fillStyle = "rgba(43,39,48,0.62)";
+      const v = Math.max(0, Math.min(1, reveal));
+      const { r, g, b } = pad.gelColor;
+      const mix = (a: number, c: number) => Math.round(a + (c - a) * v);
+      ctx.fillStyle = `rgba(${mix(43, r)},${mix(39, g)},${mix(48, b)},${0.62 + 0.3 * v})`;
       ctx.fill("evenodd");
-      ctx.strokeStyle = shimmer ? "rgba(255,255,255,0.7)" : "rgba(255,255,255,0.35)";
+      if (v > 0.5) {
+        const gr = ctx.createRadialGradient(-R * 0.2, -R * 0.3, 0, 0, 0, R);
+        gr.addColorStop(0, `rgba(255,255,255,${0.4 * (v - 0.5) * 2})`);
+        gr.addColorStop(1, "rgba(255,255,255,0)");
+        ctx.fillStyle = gr;
+        ctx.fill("evenodd");
+      }
+      ctx.strokeStyle = shimmer ? "rgba(255,255,255,0.7)" : `rgba(255,255,255,${0.35 + 0.25 * v})`;
       ctx.lineWidth = shimmer ? 1.6 : 1;
       ctx.stroke();
     }
-  }, [pad, size, mode, shimmer]);
+  }, [pad, size, mode, shimmer, reveal]);
   return (
     <span className={"sil" + (shimmer ? " shimmer" : "")} style={{ width: size, height: size }}>
       <canvas ref={ref} style={{ width: size, height: size }} />
@@ -92,6 +105,8 @@ export interface NextView {
   rare: boolean;
   rareNew: boolean;
   ultra: boolean;
+  /** something is buried in the next pad (which thing stays secret) */
+  hidden: boolean;
   collection: boolean;
 }
 
@@ -100,15 +115,16 @@ export interface NextView {
  * shimmering rim and a line; a pad hiding something ultra shows only a torn
  * glimpse. Never the pad itself.
  */
-export function NextPanel({ info, emphasis }: { info: NextView; emphasis: number }) {
-  const { pad, rare, rareNew, ultra } = info;
+export function NextPanel({ info, emphasis, reveal = 0 }: { info: NextView; emphasis: number; reveal?: number }) {
+  const { pad, rare, rareNew, ultra, hidden } = info;
   let line = "???";
   if (rare) line = rareNew ? "처음 보는 질감이다 ✦" : "희귀 패드가 지나가고 있어 ✦";
   else if (ultra) line = "뭔가 이상하다…";
+  else if (hidden && reveal >= 1) line = "안에 뭔가 묻혀 있다";
   return (
     <div className="next" style={{ opacity: 0.55 + 0.45 * emphasis, transform: `scale(${0.94 + 0.06 * emphasis})` }}>
       <div className="next-label">NEXT</div>
-      <PadSilhouette pad={pad} size={64} mode={ultra ? "partial" : "dark"} shimmer={rare} glint={!ultra} />
+      <PadSilhouette pad={pad} size={64} mode={ultra ? "partial" : "dark"} shimmer={rare} glint={!ultra} reveal={ultra ? 0 : reveal} />
       <div className={"next-q" + (rare ? " rare" : "")}>{line}</div>
     </div>
   );

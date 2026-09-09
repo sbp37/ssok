@@ -1,5 +1,5 @@
 import type { BeadType } from "./BeadTypes";
-import { beadAsset } from './BeadAssets';
+import { beadAsset, beadAssetTinted } from "./BeadAssets";
 
 /**
  * Beads are pre-rendered once per (type, color, radius) into small offscreen
@@ -350,13 +350,34 @@ export function getBeadSprite(type: BeadType, color: string, radius: number, dpr
     return sp;
   }
 
-  const photo=beadAsset(type);
-  if(photo){
-    // The entire cutout fits the existing diameter; preserve its aspect ratio.
-    const fit=r*2/Math.max(photo.naturalWidth,photo.naturalHeight);
-    const pw=photo.naturalWidth*fit,ph=photo.naturalHeight*fit;
-    ctx.drawImage(photo,-pw/2,-ph/2,pw,ph);
-    const sp={canvas,w,h};cache.set(key,sp);return sp;
+  const photo = beadAsset(type);
+  if (photo) {
+    // the cutout fits the bead's long axis, aspect preserved; a tall photo of an
+    // oval bead is laid down so the type's long axis stays horizontal
+    const nw = photo.naturalWidth;
+    const nh = photo.naturalHeight;
+    const lie = type.shape === "oval" && nh > nw;
+    const longAxis = type.shape === "oval" ? r * aspect * 2 : r * 2;
+    const fit = longAxis / Math.max(lie ? nh : nw, lie ? nw : nh);
+    const draw = () => {
+      ctx.save();
+      if (lie) ctx.rotate(-Math.PI / 2);
+      ctx.drawImage(photo, (-nw * fit) / 2, (-nh * fit) / 2, nw * fit, nh * fit);
+      ctx.restore();
+    };
+    draw();
+    if (beadAssetTinted(type)) {
+      // recolour: keep the photo's light and shade, take the bead's hue
+      ctx.globalCompositeOperation = "color";
+      ctx.fillStyle = color;
+      ctx.fillRect(-w / 2, -h / 2, w, h);
+      ctx.globalCompositeOperation = "destination-in";
+      draw();
+      ctx.globalCompositeOperation = "source-over";
+    }
+    const sp = { canvas, w, h };
+    cache.set(key, sp);
+    return sp;
   }
   shapePath(ctx, type, r);
   paintBody(ctx, type, color, r);

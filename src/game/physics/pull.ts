@@ -92,8 +92,10 @@ export class Pull {
     this.sy = fy;
     const s = (this.s = padR / REF_PAD_R);
     const deep = bead.layer === 1 ? 1.25 : 1;
-    this.t1 = bead.type.grip * s * deep * resist;
-    this.t2Base = bead.type.pull * s * (bead.layer === 1 ? 1.35 : 1) * resist;
+    // no two beads sit equally tight: ±12% on both distances, per bead
+    const seat = 1 + (rand() - 0.5) * 0.24;
+    this.t1 = bead.type.grip * s * deep * resist * seat;
+    this.t2Base = bead.type.pull * s * (bead.layer === 1 ? 1.35 : 1) * resist * seat;
     // big pearl ≈0.5 (≈13px of extra travel), a buried treasure 1 (two wedges, ≈44px)
     this.jam = bead.type.jam ?? clamp((bead.radius / s - JAM_R0) / 8, 0, 1);
     if (this.jam > 0) {

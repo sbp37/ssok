@@ -59,8 +59,22 @@ class Sfx {
       }
     }
     if (this.ctx?.state === "suspended") void this.ctx.resume();
+    if (this.ctx && !this.warmed) {
+      // a silent one-sample buffer opens the output path now, so the very first
+      // real sound (the first POP) is not swallowed by the hardware warming up
+      this.warmed = true;
+      try {
+        const src = this.ctx.createBufferSource();
+        src.buffer = this.ctx.createBuffer(1, 1, this.ctx.sampleRate);
+        src.connect(this.ctx.destination);
+        src.start();
+      } catch {
+        /* ignore */
+      }
+    }
     if (this.ctx) this.bank.load(this.ctx);
   }
+  private warmed = false;
 
   /** play a recorded sample if we have one; returns false to ask for the procedural fallback */
   private sample(name: SampleName, rate = 1, gain = 1, delay = 0) {
@@ -78,7 +92,9 @@ class Sfx {
   }
 
   private get ready() {
-    return !!this.ctx && !!this.master && this.enabled && this.ctx.state === "running";
+    // a context still resuming queues what we schedule and plays it the moment it runs –
+    // requiring "running" here silently ate the first sounds after every unlock
+    return !!this.ctx && !!this.master && this.enabled && this.ctx.state !== "closed";
   }
   private j(pct = 0.08) {
     return 1 + (Math.random() * 2 - 1) * pct;

@@ -1,7 +1,9 @@
 import { Spring, Spring2, springParams } from "../physics/spring";
 import { gauss } from "../util/math";
 import { PADS, type PadType } from "../pads/PadTypes";
-import { originalMaterial, siliconeColor } from './Material';
+import { originalMaterial, siliconeColor } from "./Material";
+import { shapePath } from "../beads/BeadSprites";
+import type { BeadType } from "../beads/BeadTypes";
 
 /**
  * The gel pad.
@@ -65,94 +67,104 @@ const shockP = springParams(0.16, 0.26);
 
 const socketCache = new Map<string, HTMLCanvasElement>();
 /**
- * Empty socket: a cup carved into the gel. The floor is seen through more
- * silicone (denser pad colour, darkest under the far wall), the near wall is
- * in shadow, the lip catches light bottom-right, and a soft dip surrounds it.
- * Every radial gradient is clipped: stop-0 colour must never flood a disc.
+ * Empty socket: a cup carved into the gel in the shape of the bead that left
+ * it (a star leaves a star). The floor is seen through more silicone (denser
+ * pad colour, darkest under the far wall), the near wall is in shadow, the lip
+ * catches a little light bottom-right, a soft dip surrounds it. `k` is how deep
+ * this particular socket reads (0.75 shallow … 1.3 deep). Every radial gradient
+ * is clipped: a stop-0 colour must never flood a disc.
  */
-function getSocketSprite(r: number, dpr: number, gel: string) {
-  const key = `${Math.round(r)}|${dpr}|${gel}|${originalMaterial}`;
+function getSocketSprite(r: number, dpr: number, gel: string, type?: BeadType, rot = 0, k = 1) {
+  const rq = Math.round(rot * 20) / 20;
+  const kq = Math.round(k * 20) / 20;
+  const key = `${Math.round(r)}|${dpr}|${gel}|${type?.id ?? "o"}|${rq}|${kq}|${originalMaterial}`;
   const hit = socketCache.get(key);
   if (hit) return hit;
   const rr = Math.round(r);
-  const size = Math.ceil(rr * 3.1);
+  const ext = type?.shape === "oval" ? (type.aspect ?? 1.7) * 0.78 : 1;
+  const size = Math.ceil(rr * 3.1 * ext);
   const c = document.createElement("canvas");
   c.width = c.height = Math.ceil(size * dpr);
   const g = c.getContext("2d")!;
   g.scale(dpr, dpr);
   const cx = size / 2;
   const [gr, gg, gb] = (gel.match(/\d+/g) ?? ["230", "200", "220"]).slice(0, 3).map(Number);
-  const dense = (a: number, k: number) => `rgba(${Math.round(gr * k)},${Math.round(gg * k)},${Math.round(gb * k)},${a})`;
-  const circle = (rad: number) => {
-    g.beginPath();
-    g.arc(cx, cx, rad, 0, Math.PI * 2);
+  const dense = (a: number, m: number) => `rgba(${Math.round(gr * m)},${Math.round(gg * m)},${Math.round(gb * m)},${a})`;
+  /** the socket outline at a scale, rotated like the bead was; the path survives restore() */
+  const shape = (sc: number) => {
+    g.save();
+    g.translate(cx, cx);
+    g.rotate(rq);
+    g.scale(sc, sc);
+    if (type) shapePath(g, type, rr);
+    else {
+      g.beginPath();
+      g.arc(0, 0, rr, 0, Math.PI * 2);
+    }
+    g.restore();
+  };
+  const outside = (sc: number) => {
+    shape(sc);
+    g.rect(0, 0, size, size);
+    g.clip("evenodd");
   };
   // floor
   g.save();
-  circle(rr * 1.0);
+  shape(1);
   g.clip();
-  const floor = g.createRadialGradient(cx, cx - rr * 0.1, 0, cx, cx, rr * 1.02);
-  floor.addColorStop(0, dense(0.5, 0.6));
-  floor.addColorStop(0.5, dense(0.36, 0.66));
-  floor.addColorStop(0.85, dense(0.18, 0.74));
-  floor.addColorStop(1, dense(0.08, 0.8));
+  const floor = g.createRadialGradient(cx, cx - rr * 0.1, 0, cx, cx, rr * 1.05 * ext);
+  floor.addColorStop(0, dense(0.46 * k, 0.6));
+  floor.addColorStop(0.5, dense(0.34 * k, 0.66));
+  floor.addColorStop(0.85, dense(0.18 * k, 0.74));
+  floor.addColorStop(1, dense(0.08 * k, 0.8));
   g.fillStyle = floor;
   g.fillRect(0, 0, size, size);
   // near (top / left) wall in shadow: light comes from top-left, so the wall
   // under the top-left rim is what we look into
   const wallV = g.createLinearGradient(cx, cx - rr, cx, cx + rr * 0.35);
-  wallV.addColorStop(0, "rgba(45,30,45,0.34)");
-  wallV.addColorStop(0.4, "rgba(45,30,45,0.1)");
+  wallV.addColorStop(0, `rgba(45,30,45,${0.32 * k})`);
+  wallV.addColorStop(0.4, `rgba(45,30,45,${0.1 * k})`);
   wallV.addColorStop(1, "rgba(45,30,45,0)");
   g.fillStyle = wallV;
   g.fillRect(0, 0, size, size);
-  const wallH = g.createLinearGradient(cx - rr, cx, cx + rr * 0.2, cx);
-  wallH.addColorStop(0, "rgba(45,30,45,0.2)");
+  const wallH = g.createLinearGradient(cx - rr * ext, cx, cx + rr * 0.2, cx);
+  wallH.addColorStop(0, `rgba(45,30,45,${0.18 * k})`);
   wallH.addColorStop(1, "rgba(45,30,45,0)");
   g.fillStyle = wallH;
   g.fillRect(0, 0, size, size);
   // a faint bottom-right floor glint: light reaching the far floor
   const glint = g.createRadialGradient(cx + rr * 0.3, cx + rr * 0.35, 0, cx + rr * 0.3, cx + rr * 0.35, rr * 0.6);
-  glint.addColorStop(0, "rgba(255,255,255,0.1)");
+  glint.addColorStop(0, "rgba(255,255,255,0.09)");
   glint.addColorStop(1, "rgba(255,255,255,0)");
   g.fillStyle = glint;
   g.fillRect(0, 0, size, size);
   g.restore();
-  // lip: a thin bright rim, strongest bottom-right, faint elsewhere
+  // lip: a soft, thin light on the rim – no outline. Faint all round, a touch
+  // more bottom-right where the rounded edge faces the light.
+  const lipW = Math.max(1.2, rr * 0.16);
   g.save();
+  outside(0.98);
+  shape(1.0);
+  g.lineWidth = lipW;
+  g.strokeStyle = `rgba(255,255,255,${0.07 + 0.03 / k})`;
+  g.stroke();
   g.beginPath();
-  g.rect(0, 0, size, size);
-  g.arc(cx, cx, rr * 0.96, 0, Math.PI * 2, true);
-  g.clip("evenodd");
-  const lip = g.createRadialGradient(cx, cx, rr * 0.96, cx, cx, rr * 1.2);
-  lip.addColorStop(0, "rgba(255,255,255,0.18)");
-  lip.addColorStop(0.35, "rgba(255,255,255,0.14)");
-  lip.addColorStop(1, "rgba(255,255,255,0)");
-  g.fillStyle = lip;
-  g.fillRect(0, 0, size, size);
-  // extra light on the bottom-right half of the lip
-  g.beginPath();
-  g.moveTo(cx - rr * 1.6, cx + rr * 1.6);
-  g.lineTo(cx + rr * 1.6, cx - rr * 1.6);
-  g.lineTo(cx + rr * 1.6, cx + rr * 1.6);
+  g.moveTo(cx - size, cx + size);
+  g.lineTo(cx + size, cx - size);
+  g.lineTo(cx + size, cx + size);
   g.closePath();
   g.clip();
-  const lip2 = g.createRadialGradient(cx, cx, rr * 0.96, cx, cx, rr * 1.16);
-  lip2.addColorStop(0, "rgba(255,255,255,0.34)");
-  lip2.addColorStop(0.4, "rgba(255,255,255,0.18)");
-  lip2.addColorStop(1, "rgba(255,255,255,0)");
-  g.fillStyle = lip2;
-  g.fillRect(0, 0, size, size);
+  shape(1.0);
+  g.lineWidth = lipW * 0.8;
+  g.strokeStyle = `rgba(255,255,255,${0.14 + 0.04 / k})`;
+  g.stroke();
   g.restore();
   // the socket sits in a shallow dip: soft darkening outside the lip, top-left
   g.save();
-  g.beginPath();
-  g.rect(0, 0, size, size);
-  g.arc(cx, cx, rr * 1.1, 0, Math.PI * 2, true);
-  g.clip("evenodd");
-  const dip = g.createRadialGradient(cx - rr * 0.1, cx - rr * 0.12, rr * 1.1, cx - rr * 0.1, cx - rr * 0.12, rr * 1.5);
-  dip.addColorStop(0, "rgba(60,45,60,0.13)");
-  dip.addColorStop(0.5, "rgba(60,45,60,0.04)");
+  outside(1.08);
+  const dip = g.createRadialGradient(cx - rr * 0.1, cx - rr * 0.12, rr * 1.05 * ext, cx - rr * 0.1, cx - rr * 0.12, rr * 1.5 * ext);
+  dip.addColorStop(0, `rgba(60,45,60,${0.12 * k})`);
+  dip.addColorStop(0.5, `rgba(60,45,60,${0.04 * k})`);
   dip.addColorStop(1, "rgba(60,45,60,0)");
   g.fillStyle = dip;
   g.fillRect(0, 0, size, size);
@@ -183,7 +195,8 @@ export class Gel {
   wobble = new Spring2(wobbleP.k, wobbleP.damping);
   shocks: Shock[] = [];
   dents: Dent[] = [];
-  sockets: { x: number; y: number; r: number }[] = [];
+  /** empty sockets: position, size, the shape/rotation of the bead that left, and how deep it reads */
+  sockets: { x: number; y: number; r: number; type?: BeadType; rot?: number; k?: number }[] = [];
   pulls: PullInfluence[] = [];
   fade = 1;
   time = 0;
@@ -816,8 +829,8 @@ export class Gel {
   }
 
   /** draw a socket (empty hole) – for `inner` callbacks */
-  drawSocket(ctx: CanvasRenderingContext2D, x: number, y: number, r: number) {
-    const sp = getSocketSprite(r, this.texDpr, this.col(1));
+  drawSocket(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, type?: BeadType, rot = 0, k = 1) {
+    const sp = getSocketSprite(r, this.texDpr, this.col(1), type, rot, k);
     const w = sp.width / this.texDpr;
     ctx.drawImage(sp, x - w / 2, y - w / 2, w, w);
   }

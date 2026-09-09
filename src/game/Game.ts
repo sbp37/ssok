@@ -352,6 +352,7 @@ export class Game extends Emitter<GameEvents> {
       rare,
       rareNew: rare && !this.progressStore.isVariantDiscovered(pad.id),
       ultra: !!this.pendingHidden && ULTRA_TYPES.some((t) => t.id === this.pendingHidden),
+      hidden: !!this.pendingHidden && this.pendingHidden !== NONE,
       collection: this.progressStore.mode === "COLLECTION",
     };
   }
@@ -615,7 +616,14 @@ export class Game extends Emitter<GameEvents> {
 
     // the socket is empty from now on
     const deeper = this.beads.find((o) => o.slot === b.slot && o.layer === 1 && o.state === "embedded" && o !== b);
-    if (!deeper) this.gel.sockets.push({ x: b.rx, y: b.ry, r: b.radius * 0.92 });
+    if (!deeper) {
+      // the hole is the slot's, not the object's: a buried treasure bigger than the bead
+      // that sat on it was squeezed out through that bead's hole, so it never overlaps neighbours
+      const host = this.beads.find((o) => o.slot === b.slot && o.layer === 0);
+      const slotR = host && host !== b ? host.radius * 1.12 : Infinity;
+      this.gel.sockets.push({ x: b.rx, y: b.ry, r: Math.min(b.radius, slotR) * 0.92, type: b.type, rot: b.rot, k: 0.75 + rng.next() * 0.55 });
+    }
+    if (b.type.rarity === "special") this.treasure.noteSpecial(b.type.id);
     this.gel.markDirty();
 
     // Visual only: does not postpone POP, input, or the flight into the jar.
@@ -624,7 +632,7 @@ export class Game extends Emitter<GameEvents> {
     this.schedule(0.03, () => {
       const m = Math.pow(b.type.mass, 0.6);
       this.gel.recoil(-dx * 95 * s * m, -dy * 95 * s * m);
-      this.gel.addDent(b.rx, b.ry, b.radius * 1.15, 1.6 + b.type.mass * 0.3);
+      if (!deeper) this.gel.addDent(b.rx, b.ry, b.radius * 1.15, 1.6 + b.type.mass * 0.3);
     });
     // +40ms: the gel around the hole bulges outward and rings down – neighbours ride it
     this.schedule(0.04, () => this.gel.shock(b.rx, b.ry, b.radius, 5 * s * Math.pow(b.type.mass, 0.5)));
@@ -879,7 +887,7 @@ export class Game extends Emitter<GameEvents> {
   /** everything embedded in the gel, at rest positions (the mesh does the moving) */
   private drawBaseBeads(ctx: CanvasRenderingContext2D) {
     const gel = this.gel;
-    for (const s of gel.sockets) gel.drawSocket(ctx, s.x, s.y, s.r);
+    for (const s of gel.sockets) gel.drawSocket(ctx, s.x, s.y, s.r, s.type, s.rot, s.k);
     const covered = new Set<number>();
     for (const b of this.beads) if (b.layer === 0 && (b.state === "embedded" || b.state === "held")) covered.add(b.slot);
     const emptied = this.padTotal ? 1 - this.remainingCount() / this.padTotal : 0;
@@ -887,7 +895,7 @@ export class Game extends Emitter<GameEvents> {
       for (const b of this.beads) {
         if (b.layer !== layer) continue;
         if (b.state === "held") {
-          gel.drawSocket(ctx, b.rx, b.ry, b.radius * 0.95);
+          gel.drawSocket(ctx, b.rx, b.ry, b.radius * 0.95, b.type, b.rot);
           continue;
         }
         if (b.state !== "embedded") continue;
@@ -924,7 +932,7 @@ export class Game extends Emitter<GameEvents> {
 
     // shadow: tighter when embedded, lifts & offsets as the bead comes out
     const sh = getShadowSprite(b.radius * scale, dpr);
-    ctx.globalAlpha = alpha * (0.55 + lift * 0.35);
+    ctx.globalAlpha = alpha * ((b.type.material === "glass" ? 0.3 : 0.55) + lift * 0.35);
     ctx.drawImage(sh.canvas, x - sh.w / 2 + lift * 4 * this.s, y - sh.h / 2 + b.radius * (0.18 + lift * 0.5), sh.w, sh.h);
 
     // seen through gel → a softened sprite variant (blur baked in, cached); crisp once it lifts out
@@ -1030,7 +1038,7 @@ export class Game extends Emitter<GameEvents> {
     const cx = hx + ux * L * 0.3 + b.off.x * 0.35;
     const cy = hy + uy * L * 0.3 + b.off.y * 0.35;
     const across = r * (1.12 - 0.1 * P);
-    const along = across + L * 0.42 + offL * 0.3;
+    const along = across + L * 0.26 + offL * 0.18;
     const rot = Math.atan2(uy, ux);
     ctx.save();
     ctx.translate(cx, cy);
@@ -1047,8 +1055,8 @@ export class Game extends Emitter<GameEvents> {
     ctx.fill();
     // contact shadow ring outside the lip
     const ao = ctx.createRadialGradient(0, 0, across * 1.02, 0, 0, across * 1.42);
-    ao.addColorStop(0, `rgba(55,45,58,${0.26 + 0.12 * T})`);
-    ao.addColorStop(0.45, `rgba(55,45,58,${0.08 + 0.04 * T})`);
+    ao.addColorStop(0, `rgba(55,45,58,${0.16 + 0.08 * T})`);
+    ao.addColorStop(0.45, `rgba(55,45,58,${0.05 + 0.03 * T})`);
     ao.addColorStop(1, "rgba(55,45,58,0)");
     ctx.fillStyle = ao;
     ctx.beginPath();
@@ -1076,10 +1084,10 @@ export class Game extends Emitter<GameEvents> {
     ctx.restore();
 
     // ── socket: dark, deepens with pull
-    const holeR = r * (0.92 + 0.22 * P);
+    const holeR = r * (0.9 + 0.12 * P);
     const hole = ctx.createRadialGradient(hx, hy, holeR * 0.15, hx, hy, holeR * 1.1);
-    hole.addColorStop(0, `rgba(55,45,58,${0.18 + 0.2 * T + 0.14 * P})`);
-    hole.addColorStop(0.7, `rgba(55,45,58,${0.08 + 0.06 * P})`);
+    hole.addColorStop(0, `rgba(55,45,58,${0.12 + 0.12 * T + 0.1 * P})`);
+    hole.addColorStop(0.7, `rgba(55,45,58,${0.05 + 0.04 * P})`);
     hole.addColorStop(1, "rgba(55,45,58,0)");
     ctx.fillStyle = hole;
     ctx.beginPath();
@@ -1088,12 +1096,14 @@ export class Game extends Emitter<GameEvents> {
 
     // ── neck (slip stage): a concave bridge from the lip to the bead that thins as it goes.
     // A big bead shows its neck sooner and keeps it thicker; a wedged one bulges mid-neck.
-    if (offL > r * (0.35 - 0.15 * J)) {
-      const w0 = across * (1.0 + 0.08 * P + 0.14 * J);
-      const w1 = r * (0.9 - 0.62 * P) * (1 + 0.12 * J);
-      const wm = r * (0.86 - 0.74 * P) * (1 + 0.28 * J + 0.3 * J * O);
-      const mx = hx + b.off.x * 0.55;
-      const my = hy + b.off.y * 0.55;
+    // The strand is narrower than the bead at both ends (it was a triangle when its base
+    // spanned the whole lip) and has a waist that thins as the bead comes out.
+    if (offL > r * (0.45 - 0.12 * J)) {
+      const w0 = r * (0.6 + 0.1 * J - 0.15 * P);
+      const w1 = r * (0.5 - 0.2 * P) * (1 + 0.1 * J);
+      const wm = Math.max(r * 0.12, r * (0.4 - 0.24 * P) * (1 + 0.25 * J + 0.3 * J * O));
+      const mx = hx + b.off.x * 0.5;
+      const my = hy + b.off.y * 0.5;
       const neck = () => {
         ctx.beginPath();
         ctx.moveTo(hx + nx * w0, hy + ny * w0);
@@ -1103,13 +1113,13 @@ export class Game extends Emitter<GameEvents> {
         ctx.closePath();
       };
       ctx.save();
-      ctx.translate(2 * s + P * 4, 3 * s + P * 6);
+      ctx.translate(1.5 * s + P * 2.5, 2 * s + P * 4);
       neck();
-      ctx.fillStyle = gel.col(0.12 + P * 0.07, 0.35);
+      ctx.fillStyle = gel.col(0.1 + P * 0.05, 0.35);
       ctx.fill();
       ctx.restore();
       neck();
-      ctx.fillStyle = gel.col(0.62 - P * 0.16, -0.03);
+      ctx.fillStyle = gel.col(0.5 - P * 0.14, -0.03);
       ctx.fill();
       const lg = ctx.createLinearGradient(mx + nx * w0, my + ny * w0, mx - nx * w0, my - ny * w0);
       lg.addColorStop(0, "rgba(255,255,255,0.4)");
