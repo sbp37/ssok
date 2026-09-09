@@ -415,9 +415,9 @@ export function getShadowSprite(radius: number, dpr: number): Sprite {
   canvas.height = Math.ceil(w * dpr);
   const ctx = canvas.getContext("2d")!;
   ctx.scale(dpr, dpr);
-  const g = ctx.createRadialGradient(w / 2, w / 2, r * 0.4, w / 2, w / 2, r * 1.5);
+  const g = ctx.createRadialGradient(w / 2, w / 2, r * 0.5, w / 2, w / 2, r * 1.22);
   g.addColorStop(0, "rgba(70,30,60,0.42)");
-  g.addColorStop(0.6, "rgba(70,30,60,0.14)");
+  g.addColorStop(0.6, "rgba(70,30,60,0.12)");
   g.addColorStop(1, "rgba(70,30,60,0)");
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, w, w);
@@ -440,16 +440,16 @@ export function getContourMeniscus(type:BeadType,color:string,radius:number,dpr:
   const mask=make(),m=mask.getContext('2d')!;
   m.drawImage(source.canvas,0,0);m.globalCompositeOperation='source-in';m.fillStyle='#fff';m.fillRect(0,0,mask.width,mask.height);
   const canvas=make(),ctx=canvas.getContext('2d')!;ctx.scale(dpr,dpr);
-  const rim=Math.max(.65,r*.075);
+  const rim=Math.max(.6,r*.06);
   for(let i=0;i<12;i++){const a=i*Math.PI/6;ctx.drawImage(mask,Math.cos(a)*rim,Math.sin(a)*rim,w,h);}
   ctx.globalCompositeOperation='destination-out';ctx.drawImage(mask,0,0,w,h);
   ctx.globalCompositeOperation='source-in';
   const reflection=ctx.createLinearGradient(0,0,w,h);
-  reflection.addColorStop(0,'rgba(255,255,255,.75)');reflection.addColorStop(.5,'rgba(255,255,255,.24)');reflection.addColorStop(1,gel.replace(/[\d.]+\)$/,'0.4)'));
+  reflection.addColorStop(0,'rgba(255,255,255,.55)');reflection.addColorStop(.5,'rgba(255,255,255,.16)');reflection.addColorStop(1,gel.replace(/[\d.]+\)$/,'0.45)'));
   ctx.fillStyle=reflection;ctx.fillRect(0,0,w,h);ctx.globalCompositeOperation='source-over';
   const cap=make(),c=cap.getContext('2d')!;c.scale(dpr,dpr);c.drawImage(mask,0,0,w,h);c.globalCompositeOperation='source-in';
   const tint=c.createLinearGradient(0,h*.25,0,h*.82);
-  tint.addColorStop(0,gel.replace(/[\d.]+\)$/,'0)'));tint.addColorStop(.55,gel.replace(/[\d.]+\)$/,'0.04)'));tint.addColorStop(1,gel.replace(/[\d.]+\)$/,'0.38)'));
+  tint.addColorStop(0,gel.replace(/[\d.]+\)$/,'0)'));tint.addColorStop(.55,gel.replace(/[\d.]+\)$/,'0.06)'));tint.addColorStop(1,gel.replace(/[\d.]+\)$/,'0.5)'));
   c.fillStyle=tint;c.fillRect(0,0,w,h);ctx.drawImage(cap,0,0,w,h);
   const sp={canvas,w,h};contourCache.set(key,sp);return sp;
 }
@@ -480,18 +480,19 @@ export function getMeniscusSprite(radius: number, dpr: number, gel: string): Spr
   ctx.rect(0, 0, w, w);
   ctx.arc(c, c, r * 0.97, 0, Math.PI * 2, true);
   ctx.clip("evenodd");
-  const ao = ctx.createRadialGradient(c, c + r * 0.1, r * 0.98, c, c + r * 0.1, r * 1.32);
-  ao.addColorStop(0, "rgba(60,50,62,0.26)");
-  ao.addColorStop(0.45, "rgba(60,50,62,0.08)");
+  // tight: a dark contact line right at the bead, gone within ~0.15r (a wide soft ring read as haze)
+  const ao = ctx.createRadialGradient(c, c + r * 0.06, r * 0.97, c, c + r * 0.06, r * 1.16);
+  ao.addColorStop(0, "rgba(60,50,62,0.34)");
+  ao.addColorStop(0.4, "rgba(60,50,62,0.1)");
   ao.addColorStop(1, "rgba(60,50,62,0)");
   ctx.fillStyle = ao;
   ctx.fillRect(0, 0, w, w);
   ctx.restore();
   // light ring: the meniscus lip, brightest top-left
-  const ring = ctx.createRadialGradient(c - r * 0.08, c - r * 0.1, r * 1.0, c - r * 0.08, c - r * 0.1, r * 1.34);
+  const ring = ctx.createRadialGradient(c - r * 0.06, c - r * 0.08, r * 1.0, c - r * 0.06, c - r * 0.08, r * 1.14);
   ring.addColorStop(0, "rgba(255,255,255,0)");
-  ring.addColorStop(0.3, "rgba(255,255,255,0.5)");
-  ring.addColorStop(0.65, "rgba(255,255,255,0.12)");
+  ring.addColorStop(0.35, "rgba(255,255,255,0.42)");
+  ring.addColorStop(0.7, "rgba(255,255,255,0.08)");
   ring.addColorStop(1, "rgba(255,255,255,0)");
   ctx.fillStyle = ring;
   ctx.fillRect(0, 0, w, w);
@@ -517,9 +518,9 @@ export function getMeniscusSprite(radius: number, dpr: number, gel: string): Spr
   belowArc();
   ctx.clip();
   const veil = ctx.createLinearGradient(0, water, 0, c + r);
-  veil.addColorStop(0, gelA(0.1));
-  veil.addColorStop(0.45, gelA(0.24));
-  veil.addColorStop(1, gelA(0.46));
+  veil.addColorStop(0, gelA(0.14));
+  veil.addColorStop(0.45, gelA(0.3));
+  veil.addColorStop(1, gelA(0.55));
   ctx.fillStyle = veil;
   ctx.fillRect(0, 0, w, w);
   ctx.restore();

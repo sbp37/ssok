@@ -49,6 +49,8 @@ export interface Bead {
   sparkle: number;
   /** the pad's hidden object – drawn dim & partial under its host until the pad empties out */
   hidden?: boolean;
+  /** already did its "almost… no" slip back into the hole (each bead does it at most once) */
+  fakedOut?: boolean;
 }
 
 let nextId = 1;
@@ -122,6 +124,8 @@ export interface PadOptions {
   hiddenObject?: string;
   /** chance that one ordinary deep bead is secretly an ultra-rare object */
   ultraChance?: number;
+  /** average chance of a second bead under a surface bead (default 0.4); 1.5× at the centre, 0.5× at the rim */
+  deeperChance?: number;
 }
 
 export function generatePad(padR: number, rng: Rng, opts: PadOptions = {}): Bead[] {
@@ -170,8 +174,9 @@ export function generatePad(padR: number, rng: Rng, opts: PadOptions = {}): Bead
       const color = rng.pick(p.type.colors);
       const rot = p.type.shape === "circle" ? 0 : rng.range(-Math.PI, Math.PI);
       beads.push(makeBead(p.type, color, p.radius, rot, 0, slot, x, y));
-      // deeper bead under this slot?
-      if (opts.deeper !== false && rng.chance(0.62)) {
+      // deeper bead under this slot? denser toward the middle so the pad has a "core"
+      const toEdge = edge > inner ? (rad - inner) / (edge - inner) : 1;
+      if (opts.deeper !== false && rng.chance((opts.deeperChance ?? 0.4) * (1.5 - toEdge))) {
         const dt = pickType(rng, { common: 0.6, big: 1.6, odd: 1.5, special: 1.1 }, typeSkew);
         const dr = Math.min(footprint * 1.02, rng.range(dt.radius[0], dt.radius[1]) * s);
         const dcolor = rng.pick(dt.colors);

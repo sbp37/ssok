@@ -76,6 +76,9 @@ export class Pull {
   over = 0;
   private quiver = 0;
   private strained = false;
+  private readonly neck: number;
+  /** progress at which this bead may slip back in (rolled once per grab) */
+  private readonly fakeAt: number | null;
   /** bookkeeping for the creak grains played while wedged (owned by the caller) */
   creakT = 0;
 
@@ -98,6 +101,9 @@ export class Pull {
     this.t2Base = bead.type.pull * s * (bead.layer === 1 ? 1.35 : 1) * resist * seat;
     // big pearl ≈0.5 (≈13px of extra travel), a buried treasure 1 (two wedges, ≈44px)
     this.jam = bead.type.jam ?? clamp((bead.radius / s - JAM_R0) / 8, 0, 1);
+    this.neck = bead.type.neck ?? 1;
+    // "almost out… and it's back in": once per bead, only if the type does that at all
+    this.fakeAt = !bead.fakedOut && bead.type.fakeout && rand() < bead.type.fakeout ? 0.68 + rand() * 0.2 : null;
     if (this.jam > 0) {
       this.jams.push({ p: 0.38 + (rand() - 0.5) * 0.16, w: this.jam * 30 * s, hit: false, freed: false });
       if (this.jam > 0.55) this.jams.push({ p: 0.72 + (rand() - 0.5) * 0.1, w: this.jam * 14 * s, hit: false, freed: false });
@@ -193,8 +199,12 @@ export class Pull {
         }
       }
       this.progress = p;
-      // creeps out to ~2.4 radii by the threshold so the neck is visible, curve set by friction
-      const creep = Math.pow(p, 1 + b.type.friction * 1.4) * b.radius * 2.4;
+      if (this.fakeAt !== null && p >= this.fakeAt) {
+        events.push({ kind: "slipped" });
+        return events;
+      }
+      // creeps out to ~2.4 radii by the threshold (further for a long-necked charm), curve set by friction
+      const creep = Math.pow(p, 1 + b.type.friction * 1.4) * b.radius * 2.4 * this.neck;
       offMag = 1.6 * s + creep;
       if (jammed) {
         // wedged: the bead quivers in place while the finger strains against it
@@ -211,8 +221,8 @@ export class Pull {
         this.holdT += dt;
         // a stalled pull still gives up eventually – quickly for a small bead, only after a
         // real struggle for a heavy or wedging one (that is where "too easy" came from)
-        const holdLimit = 0.3 + 0.5 * clamp((b.type.mass - 0.5) / 1.5, 0, 1) + 0.5 * this.jam;
-        const forced = extra > (26 + 30 * this.jam) * (this.t2Base / 30) || this.holdT > holdLimit;
+        const holdLimit = 0.45 + 0.8 * clamp((b.type.mass - 0.5) / 1.5, 0, 1) + 0.6 * this.jam;
+        const forced = extra > (34 + 40 * this.jam) * (this.t2Base / 30) || this.holdT > holdLimit;
         if (speed >= b.type.minSpeed || forced) {
           const tooHard = speed > 1500 && this.rand() < 0.065;
           if (tooHard) events.push({ kind: "slipped" });
@@ -224,7 +234,7 @@ export class Pull {
     }
     // gel around the socket is dragged toward the finger: 6~18px at full grip, a bit more while
     // slipping – and further still while straining against a wedge (that IS the visible effort)
-    const stretchLen = this.tension * 16 * s + this.progress * 5 * s + this.over * this.jam * 14 * s;
+    const stretchLen = this.tension * 16 * s + this.progress * 5 * s * this.neck + this.over * this.jam * 14 * s;
     this.stretch.setTarget(ux * stretchLen, uy * stretchLen);
     // Same spring / resistance at 60Hz. A 50ms frame exceeds this stiff
     // spring's stable Euler step and used to send the rendered tent offscreen.

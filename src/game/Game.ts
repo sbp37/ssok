@@ -257,6 +257,9 @@ export class Game extends Emitter<GameEvents> {
           hole,
           // Shorter pads requested: keep type/deeper/treasure rolls unchanged.
           surface: Math.max(1, Math.round(preset.surface * 0.7)),
+          // how layered this pad is – some pads are mostly one layer, some hide a second one
+          // under half their beads; always denser toward the middle than at the rim
+          deeperChance: 0.26 + rng.next() * 0.3,
           raritySkew: preset.raritySkew,
           typeSkew: preset.typeSkew,
           rareCenterChance: preset.rareCenterChance,
@@ -558,7 +561,8 @@ export class Game extends Emitter<GameEvents> {
           b.off.impulse(-ox * 12, -oy * 12);
           this.gel.reanchor(id);
           this.gel.markDirty();
-          this.gel.addDent(b.rx + ox * 0.3, b.ry + oy * 0.3, b.radius * 0.8, 0.5);
+          this.gel.addDent(b.rx, b.ry, b.radius * 0.92, 0.6, b.type, b.rot);
+          b.fakedOut = true;
           sfx.slipped();
           haptics.slipped();
           this.emit("slipped", undefined);
@@ -621,7 +625,10 @@ export class Game extends Emitter<GameEvents> {
       // that sat on it was squeezed out through that bead's hole, so it never overlaps neighbours
       const host = this.beads.find((o) => o.slot === b.slot && o.layer === 0);
       const slotR = host && host !== b ? host.radius * 1.12 : Infinity;
-      this.gel.sockets.push({ x: b.rx, y: b.ry, r: Math.min(b.radius, slotR) * 0.92, type: b.type, rot: b.rot, k: 0.9 + rng.next() * 0.45 });
+      const sr = Math.min(b.radius, slotR) * 0.92;
+      this.gel.sockets.push({ x: b.rx, y: b.ry, r: sr, type: b.type, rot: b.rot, k: 0.9 + rng.next() * 0.45 });
+      // fresh: crisp and dark for a couple of seconds, then it settles
+      this.gel.addDent(b.rx, b.ry, sr, 2.4 + b.type.mass * 0.3, b.type, b.rot);
     }
     if (b.type.rarity === "special") this.treasure.noteSpecial(b.type.id);
     this.gel.markDirty();
@@ -632,7 +639,6 @@ export class Game extends Emitter<GameEvents> {
     this.schedule(0.03, () => {
       const m = Math.pow(b.type.mass, 0.6);
       this.gel.recoil(-dx * 95 * s * m, -dy * 95 * s * m);
-      if (!deeper) this.gel.addDent(b.rx, b.ry, b.radius * 1.15, 1.6 + b.type.mass * 0.3);
     });
     // +40ms: the gel around the hole bulges outward and rings down – neighbours ride it
     this.schedule(0.04, () => this.gel.shock(b.rx, b.ry, b.radius, 5 * s * Math.pow(b.type.mass, 0.5)));

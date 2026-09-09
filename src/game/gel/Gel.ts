@@ -34,12 +34,15 @@ export interface Finger {
   down: boolean;
 }
 
+/** a freshly emptied socket reads dark and crisp, then settles to the base socket over `life` */
 export interface Dent {
   x: number;
   y: number;
   r: number;
   t: number;
   life: number;
+  type?: BeadType;
+  rot?: number;
 }
 
 export interface PullInfluence {
@@ -374,8 +377,8 @@ export class Gel {
     this.shocks.push({ x, y, r, s });
   }
 
-  addDent(x: number, y: number, r: number, life = 1.7) {
-    this.dents.push({ x, y, r, t: 0, life });
+  addDent(x: number, y: number, r: number, life = 1.7, type?: BeadType, rot = 0) {
+    this.dents.push({ x, y, r, t: 0, life, type, rot });
   }
 
   // ─── simulation ───────────────────────────────────────────────
@@ -904,22 +907,15 @@ export class Gel {
   drawDents(ctx: CanvasRenderingContext2D) {
     const tmp = this.tmp;
     for (const d of this.dents) {
+      // the same shaped socket laid over its base copy: twice as dark at first, gone by `life`
+      // (a round gradient here used to sit on top of star/heart holes as a second, circular hole)
       const k = 1 - d.t / d.life;
-      const a = k * k;
+      const a = Math.pow(k, 1.6) * 0.9;
+      if (a < 0.01) continue;
       this.warp(d.x, d.y, tmp);
-      const g = ctx.createRadialGradient(tmp.x, tmp.y, 0, tmp.x, tmp.y, d.r * 1.3);
-      g.addColorStop(0, `rgba(60,50,62,${0.3 * a})`);
-      g.addColorStop(0.6, `rgba(60,50,62,${0.1 * a})`);
-      g.addColorStop(1, "rgba(60,50,62,0)");
-      ctx.fillStyle = g;
-      ctx.beginPath();
-      ctx.arc(tmp.x, tmp.y, d.r * 1.3, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.strokeStyle = `rgba(255,255,255,${0.4 * a})`;
-      ctx.lineWidth = 1.2;
-      ctx.beginPath();
-      ctx.arc(tmp.x, tmp.y, d.r * 0.9, Math.PI * 0.15, Math.PI * 0.85);
-      ctx.stroke();
+      ctx.globalAlpha = a;
+      this.drawSocket(ctx, tmp.x, tmp.y, d.r, d.type, d.rot ?? 0, 1.25);
+      ctx.globalAlpha = 1;
     }
   }
 
