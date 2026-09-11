@@ -149,7 +149,7 @@ const bump = (th: number, at: number, width: number) => {
  * A polar outline from a parametric closed curve: sample it, sort by angle, interpolate.
  * Lets a pad be a shape that has no tidy r(θ) formula (a heart) while staying on the one radial path.
  */
-function polarOf(curve: (t: number) => [number, number], n = 512): (theta: number) => number {
+function polarOf(curve: (t: number) => [number, number], n = 512, smoothDeg = 0): (theta: number) => number {
   const pts: { a: number; r: number }[] = [];
   let maxR = 0;
   for (let i = 0; i < n; i++) {
@@ -171,6 +171,16 @@ function polarOf(curve: (t: number) => [number, number], n = 512): (theta: numbe
     const t = a1 > a0 ? clamp01((aa - a0) / (a1 - a0)) : 0;
     table.push((pts[lo].r + (pts[hi].r - pts[lo].r) * t) / maxR);
   }
+  // circular box blur over ±smoothDeg: rounds sharp corners into silicone-like ones
+  const w = Math.round(smoothDeg);
+  if (w > 0) {
+    const src = table.slice();
+    for (let k = 0; k < N; k++) {
+      let acc = 0;
+      for (let d = -w; d <= w; d++) acc += src[(k + d + N) % N];
+      table[k] = acc / (2 * w + 1);
+    }
+  }
   return (theta: number) => {
     const u = (((theta % TAU) + TAU) % TAU) / TAU * N;
     const i = Math.floor(u) % N, j = (i + 1) % N, f = u - Math.floor(u);
@@ -179,8 +189,62 @@ function polarOf(curve: (t: number) => [number, number], n = 512): (theta: numbe
 }
 /** a plump heart: the classic curve blended a third toward a circle so the lobes stay round (y down, tip at the bottom) */
 const heartR = (() => {
-  const h = polarOf((t) => [16 * Math.pow(Math.sin(t), 3), -(13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t)) + 1.5]);
-  return (th: number) => 0.7 * h(th) + 0.3 * 0.92;
+  const h = polarOf((t) => [16 * Math.pow(Math.sin(t), 3), -(13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t)) + 1.5], 512, 9);
+  return (th: number) => 0.66 * h(th) + 0.34 * 0.92;
+})();
+/** a bow tie: two triangles meeting at a knot, corners softened – a ribbon, not a peanut */
+const ribbonR = (() => {
+  const P: [number, number][] = [
+    [1, -0.8], [1, 0.8], [0.22, 0.26], [-0.22, 0.26], [-1, 0.8], [-1, -0.8], [-0.22, -0.26], [0.22, -0.26],
+  ];
+  // piecewise-linear closed polygon by arc length
+  const segs = P.map((p, i) => { const q = P[(i + 1) % P.length]; return Math.hypot(q[0] - p[0], q[1] - p[1]); });
+  const total = segs.reduce((a, b) => a + b, 0);
+  return polarOf((t) => {
+    let d = (t / TAU) * total;
+    for (let i = 0; i < P.length; i++) {
+      if (d <= segs[i]) { const p = P[i], q = P[(i + 1) % P.length], u = d / segs[i]; return [p[0] + (q[0] - p[0]) * u, p[1] + (q[1] - p[1]) * u]; }
+      d -= segs[i];
+    }
+    return P[0];
+  }, 720, 7);
+})();
+
+/** polar boundary of a union of circles: r(θ) = the farthest circle surface along θ */
+function unionCircles(circles: { x: number; y: number; r: number }[]): (theta: number) => number {
+  return (theta: number) => {
+    let best = 0;
+    for (const c of circles) {
+      const d = Math.hypot(c.x, c.y);
+      if (d < 1e-6) {
+        best = Math.max(best, c.r);
+        continue;
+      }
+      const phi = Math.atan2(c.y, c.x);
+      const dth = theta - phi;
+      const sin = d * Math.sin(dth);
+      if (Math.abs(sin) >= c.r) continue;
+      const along = d * Math.cos(dth) + Math.sqrt(c.r * c.r - sin * sin);
+      if (along > best) best = along;
+    }
+    return best;
+  };
+}
+const bearR = (() => {
+  const u = unionCircles([
+    { x: 0, y: 0.02, r: 0.9 },
+    { x: -0.64, y: -0.7, r: 0.31 },
+    { x: 0.64, y: -0.7, r: 0.31 },
+  ]);
+  // soften the junctions a touch so it reads as one moulded piece
+  const table: number[] = [];
+  for (let k = 0; k < 360; k++) table.push(u((k / 360) * TAU));
+  const sm2 = table.map((_, k) => (table[(k + 359) % 360] + table[k] + table[(k + 1) % 360]) / 3);
+  return (th: number) => {
+    const uu = ((((th % TAU) + TAU) % TAU) / TAU) * 360;
+    const i = Math.floor(uu) % 360, j = (i + 1) % 360, f = uu - Math.floor(uu);
+    return sm2[i] * (1 - f) + sm2[j] * f;
+  };
 })();
 
 export const PADS: readonly PadType[] = [
@@ -266,12 +330,8 @@ export const PADS: readonly PadType[] = [
     id: "ribbon",
     name: "리본",
     glyph: "🎀",
-    outline: (th) => {
-      const c = Math.abs(Math.cos(th));
-      // two wings, a knot in the middle
-      return 0.4 + 0.66 * Math.pow(c, 0.55) + 0.05 * bump(th, 0, 0.5) + 0.05 * bump(th, Math.PI, 0.5);
-    },
-    noise: 0.012,
+    outline: ribbonR,
+    noise: 0.006,
     gelColor: { r: 240, g: 196, b: 210 },
     transparency: 1,
     thickness: 1,
@@ -369,7 +429,7 @@ export const PADS: readonly PadType[] = [
     name: "고양이",
     glyph: "🐱",
     // a round face with two pointed ears at the top corners
-    outline: (th) => 0.9 + 0.44 * Math.pow(bump(th, -2.32, 0.24), 0.7) + 0.44 * Math.pow(bump(th, -0.82, 0.24), 0.7) + 0.03 * Math.cos(th * 2),
+    outline: (th) => 0.84 + 0.38 * Math.pow(bump(th, -2.32, 0.24), 0.7) + 0.38 * Math.pow(bump(th, -0.82, 0.24), 0.7) + 0.03 * Math.cos(th * 2),
     noise: 0.008,
     gelColor: { r: 222, g: 220, b: 234 },
     transparency: 1.1,
@@ -388,7 +448,9 @@ export const PADS: readonly PadType[] = [
     name: "곰돌이",
     glyph: "🐻",
     // a round face with two round ears
-    outline: (th) => 0.92 + 0.24 * bump(th, -2.36, 0.36) + 0.24 * bump(th, -0.78, 0.36) + 0.02 * Math.cos(th * 2 + 0.3),
+    // two round ears standing clear of a slightly flattened top
+    // a round face with two real round ears (union of circles), ±38° off vertical
+    outline: bearR,
     noise: 0.01,
     gelColor: { r: 236, g: 206, b: 170 },
     transparency: 0.95,
