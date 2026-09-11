@@ -18,6 +18,8 @@ export interface BeadPreset {
   typeSkew?: Record<string, number>;
   /** the bead closest to the centre is upgraded to a rare with this chance */
   rareCenterChance?: number;
+  /** chance of one 왕비즈 on this pad (default 0.4) */
+  kingChance?: number;
 }
 
 export interface PadType {
@@ -142,6 +144,44 @@ const bump = (th: number, at: number, width: number) => {
   d /= width;
   return Math.exp(-d * d);
 };
+
+/**
+ * A polar outline from a parametric closed curve: sample it, sort by angle, interpolate.
+ * Lets a pad be a shape that has no tidy r(θ) formula (a heart) while staying on the one radial path.
+ */
+function polarOf(curve: (t: number) => [number, number], n = 512): (theta: number) => number {
+  const pts: { a: number; r: number }[] = [];
+  let maxR = 0;
+  for (let i = 0; i < n; i++) {
+    const [x, y] = curve((i / n) * TAU);
+    const r = Math.hypot(x, y);
+    maxR = Math.max(maxR, r);
+    pts.push({ a: ((Math.atan2(y, x) % TAU) + TAU) % TAU, r });
+  }
+  pts.sort((p, q) => p.a - q.a);
+  const table: number[] = [];
+  const N = 360;
+  for (let k = 0; k < N; k++) {
+    const a = (k / N) * TAU;
+    // nearest sample on either side, angular interpolation (wraps)
+    let lo = pts.length - 1;
+    for (let i = 0; i < pts.length; i++) if (pts[i].a <= a) lo = i;
+    const hi = (lo + 1) % pts.length;
+    const a0 = pts[lo].a, a1 = pts[hi].a + (hi === 0 ? TAU : 0), aa = a < a0 ? a + TAU : a;
+    const t = a1 > a0 ? clamp01((aa - a0) / (a1 - a0)) : 0;
+    table.push((pts[lo].r + (pts[hi].r - pts[lo].r) * t) / maxR);
+  }
+  return (theta: number) => {
+    const u = (((theta % TAU) + TAU) % TAU) / TAU * N;
+    const i = Math.floor(u) % N, j = (i + 1) % N, f = u - Math.floor(u);
+    return table[i] * (1 - f) + table[j] * f;
+  };
+}
+/** a plump heart: the classic curve blended a third toward a circle so the lobes stay round (y down, tip at the bottom) */
+const heartR = (() => {
+  const h = polarOf((t) => [16 * Math.pow(Math.sin(t), 3), -(13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t)) + 1.5]);
+  return (th: number) => 0.7 * h(th) + 0.3 * 0.92;
+})();
 
 export const PADS: readonly PadType[] = [
   {
@@ -304,6 +344,62 @@ export const PADS: readonly PadType[] = [
     grip: 1,
     beads: { surface: 48, typeSkew: { star: 3 } },
     hint: { color: "#fff6c8", label: "오리" },
+  },
+
+  {
+    id: "heart",
+    name: "하트",
+    glyph: "♥",
+    outline: heartR,
+    noise: 0.008,
+    gelColor: { r: 255, g: 168, b: 178 },
+    transparency: 1,
+    thickness: 1.05,
+    softness: 1.2,
+    stretch: 1.15,
+    wobble: 1.15,
+    // the dip between the lobes is thin: pops a little easier there
+    resistance: (xn, yn) => (yn < -0.35 && Math.abs(xn) < 0.22 ? 0.85 : 1),
+    grip: 1,
+    beads: { surface: 50, typeSkew: { heart: 3, cherry: 1.6 }, raritySkew: { special: 1.5 } },
+    hint: { color: "#ffd0d8", label: "하트" },
+  },
+  {
+    id: "cat",
+    name: "고양이",
+    glyph: "🐱",
+    // a round face with two pointed ears at the top corners
+    outline: (th) => 0.9 + 0.44 * Math.pow(bump(th, -2.32, 0.24), 0.7) + 0.44 * Math.pow(bump(th, -0.82, 0.24), 0.7) + 0.03 * Math.cos(th * 2),
+    noise: 0.008,
+    gelColor: { r: 222, g: 220, b: 234 },
+    transparency: 1.1,
+    thickness: 0.95,
+    softness: 1,
+    stretch: 1.05,
+    wobble: 1,
+    // ear tips are thin
+    resistance: (_xn, yn) => (yn < -0.85 ? 0.78 : 1),
+    grip: 1,
+    beads: { surface: 48, typeSkew: { smile: 2, gem: 1.6 } },
+    hint: { color: "#e8e6f4", label: "고양이" },
+  },
+  {
+    id: "bear",
+    name: "곰돌이",
+    glyph: "🐻",
+    // a round face with two round ears
+    outline: (th) => 0.92 + 0.24 * bump(th, -2.36, 0.36) + 0.24 * bump(th, -0.78, 0.36) + 0.02 * Math.cos(th * 2 + 0.3),
+    noise: 0.01,
+    gelColor: { r: 236, g: 206, b: 170 },
+    transparency: 0.95,
+    thickness: 1.1,
+    softness: 1.05,
+    stretch: 1,
+    wobble: 1.05,
+    centerThick: true,
+    grip: 1.02,
+    beads: { surface: 50, typeSkew: { gold: 2, gem: 1.4, pearl: 1.3 }, kingChance: 0.5 },
+    hint: { color: "#f3dcc0", label: "곰돌이" },
   },
 ];
 

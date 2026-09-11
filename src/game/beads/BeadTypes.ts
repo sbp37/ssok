@@ -42,15 +42,22 @@ export interface BeadType {
   neck?: number;
   /** chance (0..1) that the bead, almost out, slips back into its hole once – you grab it again */
   fakeout?: number;
+  /** base weight when a pad rolls beads of this rarity (default 1; 0 = only placed on purpose) */
+  pick?: number;
   sound: PopSound;
   /** elongation for oval shapes (major/minor) */
   aspect?: number;
 }
 
 // candy tones: clearly coloured, still soft – they have to stay pretty under a layer of gel
-const PASTEL = ["#6fbfff", "#ff8fc4", "#b08cff", "#6fe0ae", "#ffe05c", "#ffab6a", "#ffffff", "#ff7fa8", "#5fd8e8"];
-const GLASS = ["#7fcdff", "#8ff0d0", "#ffa6d2", "#c3a8ff", "#ffe48a", "#a0f0ff"];
-const MATTE_BIG = ["#ff92bc", "#7fb8ff", "#bf9dff", "#ffcf4d", "#7fe0c0", "#ff9d7a"];
+// a few deep tones in every palette: navy, ink, wine – candy needs a dark bead or two to look real
+const PASTEL = ["#6fbfff", "#ff8fc4", "#b08cff", "#6fe0ae", "#ffe05c", "#ffab6a", "#ffffff", "#ff7fa8", "#5fd8e8", "#4a5bd6", "#2d2d38"];
+const GLASS = ["#7fcdff", "#8ff0d0", "#ffa6d2", "#c3a8ff", "#ffe48a", "#a0f0ff", "#3b6fd6"];
+const MATTE_BIG = ["#ff92bc", "#7fb8ff", "#bf9dff", "#ffcf4d", "#7fe0c0", "#ff9d7a", "#31407a", "#c2263f"];
+/** cut stones: sapphire, ruby, emerald, amber, onyx, amethyst, diamond */
+const GEMS = ["#1e4fb5", "#b81e3a", "#178a5e", "#d8892a", "#262630", "#7a3fb0", "#f4f8ff"];
+/** 왕비즈 colours: deep jewel tones and one pearl white */
+const KING = ["#24356b", "#262630", "#b81e3a", "#1e4fb5", "#d8892a", "#178a5e", "#7a3fb0", "#f6f1ea"];
 
 export const BEAD_TYPES: readonly BeadType[] = [
   // ─── common (60%) ───────────────────────────────────────────────
@@ -286,6 +293,46 @@ export const BEAD_TYPES: readonly BeadType[] = [
     bounce: 14,
     neck: 0.8,
     sound: "tok",
+  },
+  {
+    id: "gem",
+    name: "보석",
+    shape: "circle",
+    material: "glass",
+    rarity: "special",
+    score: 1,
+    radius: [11, 13.5],
+    colors: GEMS,
+    grip: 15,
+    pull: 36,
+    friction: 0.4,
+    minSpeed: 190,
+    mass: 1.2,
+    bounce: 16,
+    neck: 0.85,
+    jam: 0.2,
+    sound: "tok",
+  },
+  {
+    // the 왕비즈: twice a big bead, at most one per pad, placed by the pad itself (never rolled)
+    id: "king",
+    name: "왕비즈",
+    shape: "circle",
+    material: "plastic",
+    rarity: "special",
+    pick: 0,
+    score: 1,
+    radius: [30, 34],
+    colors: KING,
+    grip: 28,
+    pull: 76,
+    friction: 0.7,
+    minSpeed: 330,
+    mass: 3.4,
+    bounce: 26,
+    neck: 0.7,
+    jam: 1,
+    sound: "pong",
   },
   // ─── rare (3%) ──────────────────────────────────────────────────
   {

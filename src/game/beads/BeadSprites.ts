@@ -379,6 +379,11 @@ export function getBeadSprite(type: BeadType, color: string, radius: number, dpr
         ctx.globalCompositeOperation = "screen";
         ctx.fillStyle = `rgba(255,255,255,${Math.min(0.85, (light - 0.55) * 1.7)})`;
         ctx.fillRect(-w / 2, -h / 2, w, h);
+      } else if (light < 0.42) {
+        // navy, onyx, wine: pull the photo's mid-light body down to the stone's depth, keep its glints
+        ctx.globalCompositeOperation = "multiply";
+        ctx.fillStyle = `rgba(${tr},${tg},${tb},${Math.min(0.9, (0.42 - light) * 2.4)})`;
+        ctx.fillRect(-w / 2, -h / 2, w, h);
       }
       ctx.globalCompositeOperation = "destination-in";
       draw();
@@ -439,6 +444,9 @@ export function getContourMeniscus(type:BeadType,color:string,radius:number,dpr:
   const make=()=>{const c=document.createElement('canvas');c.width=source.canvas.width;c.height=source.canvas.height;return c;};
   const mask=make(),m=mask.getContext('2d')!;
   m.drawImage(source.canvas,0,0);m.globalCompositeOperation='source-in';m.fillStyle='#fff';m.fillRect(0,0,mask.width,mask.height);
+  // hard outline: the photo cutouts carry a faint baked-in drop shadow; left in the mask it became
+  // a big tilted halo ring around the bead
+  {const img=m.getImageData(0,0,mask.width,mask.height),d=img.data;for(let i=3;i<d.length;i+=4)d[i]=d[i]>140?255:0;m.putImageData(img,0,0);}
   const canvas=make(),ctx=canvas.getContext('2d')!;ctx.scale(dpr,dpr);
   // contact shadow just outside the outline, then the light lip on top of it
   const aoW=Math.max(1.2,r*.16);

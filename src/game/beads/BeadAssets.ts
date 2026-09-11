@@ -28,6 +28,8 @@ const assetIds: Record<string, string> = {
   star: "star",
   candystar: "star",
   long: "long",
+  gem: "faceted",
+  king: "violet",
 };
 
 /** photos that get recoloured to the bead's colour (keeps their shading and sparkle, swaps the hue) */

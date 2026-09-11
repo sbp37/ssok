@@ -95,7 +95,7 @@ export const REF_PAD_R = 170;
 function pickType(rng: Rng, skew: Partial<Record<Rarity, number>> = {}, typeSkew: Record<string, number> = {}): BeadType {
   const rarity = rng.weighted(Object.keys(RARITY_WEIGHT) as Rarity[], (r) => RARITY_WEIGHT[r] * (skew[r] ?? 1));
   const pool = BEAD_TYPES.filter((t) => t.rarity === rarity);
-  return rng.weighted(pool, (t) => typeSkew[t.id] ?? 1);
+  return rng.weighted(pool, (t) => (typeSkew[t.id] ?? 1) * (t.pick ?? 1));
 }
 
 /**
@@ -128,6 +128,8 @@ export interface PadOptions {
   ultraChance?: number;
   /** average chance of a second bead under a surface bead (default 0.4); 1.5× at the centre, 0.5× at the rim */
   deeperChance?: number;
+  /** chance that this pad carries one 왕비즈 (a giant bead, placed first so it gets room) */
+  kingChance?: number;
 }
 
 export function generatePad(padR: number, rng: Rng, opts: PadOptions = {}): Bead[] {
@@ -152,6 +154,10 @@ export function generatePad(padR: number, rng: Rng, opts: PadOptions = {}): Bead
     perType.set(type.id, (perType.get(type.id) ?? 0) + 1);
     const radius = rng.range(type.radius[0], type.radius[1]) * s;
     picks.push({ type, radius });
+  }
+  if (opts.kingChance && rng.chance(opts.kingChance)) {
+    const king = BEAD_TYPES.find((t) => t.id === "king")!;
+    picks.push({ type: king, radius: rng.range(king.radius[0], king.radius[1]) * s });
   }
   picks.sort((a, b) => b.radius - a.radius);
 

@@ -1,6 +1,6 @@
 import { beadPos, generatePad, REF_PAD_R, type Bead } from "./beads/Bead";
-import { getBeadSprite, getMeniscusSprite, getShadowSprite, getContourMeniscus, invalidateBeadSprites } from "./beads/BeadSprites";
-import { preloadBeadAssets, beadAsset } from './beads/BeadAssets';
+import { getBeadSprite, getShadowSprite, getContourMeniscus, invalidateBeadSprites } from "./beads/BeadSprites";
+import { preloadBeadAssets } from "./beads/BeadAssets";
 import { Collector } from "./collector/Collector";
 import { Gel } from "./gel/Gel";
 import { MeshGL } from "./gel/MeshGL";
@@ -267,6 +267,7 @@ export class Game extends Emitter<GameEvents> {
           // how layered this pad is – some pads are mostly one layer, some hide a second one
           // under half their beads; always denser toward the middle than at the rim
           deeperChance: 0.26 + rng.next() * 0.3,
+          kingChance: preset.kingChance ?? 0.3,
           raritySkew: preset.raritySkew,
           typeSkew: preset.typeSkew,
           rareCenterChance: preset.rareCenterChance,
@@ -1007,13 +1008,13 @@ export class Game extends Emitter<GameEvents> {
     ctx.drawImage(sp.canvas, -sp.w / 2, -sp.h / 2, sp.w, sp.h);
     ctx.restore();
     // meniscus: gel climbing the bead, fades as it's pulled out / when deep
+    // one meniscus for every bead: the outline-hugging lip with a directional highlight (light
+    // top-left, gel-coloured bottom-right) and a contact shadow – the look the rainbow bead had
     const men = (1 - lift) * (1 - depth) * alpha;
-    if (men > 0.02 && b.type.shape !== "oval") {
-      const ms = beadAsset(b.type)
-        ? getContourMeniscus(b.type,b.color,b.radius*scale,dpr,this.gel.col(1))
-        : getMeniscusSprite(b.radius * scale, dpr, this.gel.col(1));
+    if (men > 0.02) {
+      const ms = getContourMeniscus(b.type, b.color, b.radius * scale, dpr, this.gel.col(1));
       ctx.globalAlpha = men;
-      ctx.save();ctx.translate(x,y);ctx.rotate(beadAsset(b.type)?b.rot:0);ctx.translate(-x,-y);
+      ctx.save();ctx.translate(x,y);ctx.rotate(b.rot);ctx.translate(-x,-y);
       ctx.drawImage(ms.canvas, x - ms.w / 2, y - ms.h / 2, ms.w, ms.h);
       ctx.restore();
     }
