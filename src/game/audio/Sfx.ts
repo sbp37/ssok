@@ -304,6 +304,36 @@ class Sfx {
     }
   }
 
+  /** a quick tap on bare gel: short soft "톡" – the slab answers the finger */
+  tap() {
+    if (!this.ready) return;
+    if (this.sample("press", 1.25, 0.6)) return;
+    this.burst(0.045, 0.07 * this.j(0.2), { type: "lowpass", freq: 900, q: 0.8, attack: 0.003 });
+    this.tone("sine", 160 * this.j(0.1), 95, 0.06, 0.06, { attack: 0.004 });
+  }
+
+  /** finger sliding over bare gel: a faint rubbery "쓱" grain, brighter when faster */
+  rub(speed: number) {
+    if (!this.ready) return;
+    const k = Math.min(1, speed / 1400);
+    if (this.sample("stretch", 1.1 + k * 0.4, 0.2 + k * 0.2)) return;
+    this.burst(0.05 + k * 0.03, (0.012 + k * 0.02) * this.j(0.25), {
+      type: "bandpass",
+      freq: (900 + k * 900) * this.j(0.1),
+      freq1: (700 + k * 500) * this.j(0.1),
+      q: 3.5,
+      attack: 0.012,
+    });
+  }
+
+  /** the last bead left the pad: a quiet, warm two-note settle (no fanfare) */
+  done() {
+    if (!this.ready) return;
+    this.tone("sine", 523 * this.j(0.02), 520, 0.28, 0.1, { attack: 0.01 });
+    this.tone("sine", 784 * this.j(0.02), 780, 0.42, 0.08, { attack: 0.01, delay: 0.11 });
+    this.burst(0.12, 0.03, { type: "lowpass", freq: 700, q: 0.7, attack: 0.03, delay: 0.02 });
+  }
+
   /** let go of a stretched bead: soft "뭉" as the gel takes it back */
   release(mass: number) {
     if (!this.ready) return;

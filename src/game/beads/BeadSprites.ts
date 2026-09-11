@@ -440,13 +440,21 @@ export function getContourMeniscus(type:BeadType,color:string,radius:number,dpr:
   const mask=make(),m=mask.getContext('2d')!;
   m.drawImage(source.canvas,0,0);m.globalCompositeOperation='source-in';m.fillStyle='#fff';m.fillRect(0,0,mask.width,mask.height);
   const canvas=make(),ctx=canvas.getContext('2d')!;ctx.scale(dpr,dpr);
-  const rim=Math.max(.6,r*.06);
-  for(let i=0;i<12;i++){const a=i*Math.PI/6;ctx.drawImage(mask,Math.cos(a)*rim,Math.sin(a)*rim,w,h);}
+  // contact shadow just outside the outline, then the light lip on top of it
+  const aoW=Math.max(1.2,r*.16);
+  for(let i=0;i<12;i++){const a=i*Math.PI/6;ctx.drawImage(mask,Math.cos(a)*aoW,Math.sin(a)*aoW,w,h);}
+  ctx.globalCompositeOperation='source-in';ctx.fillStyle='rgba(60,50,62,0.3)';ctx.fillRect(0,0,w,h);
+  ctx.globalCompositeOperation='source-over';
+  const lip=document.createElement('canvas');lip.width=canvas.width;lip.height=canvas.height;const l=lip.getContext('2d')!;l.scale(dpr,dpr);
+  const rim=Math.max(.7,r*.075);
+  for(let i=0;i<12;i++){const a=i*Math.PI/6;l.drawImage(mask,Math.cos(a)*rim,Math.sin(a)*rim,w,h);}
+  l.globalCompositeOperation='source-in';
+  const reflection=l.createLinearGradient(0,0,w,h);
+  reflection.addColorStop(0,'rgba(255,255,255,.8)');reflection.addColorStop(.5,'rgba(255,255,255,.3)');reflection.addColorStop(1,gel.replace(/[\d.]+\)$/,'0.55)'));
+  l.fillStyle=reflection;l.fillRect(0,0,w,h);
+  ctx.drawImage(lip,0,0,w,h);
   ctx.globalCompositeOperation='destination-out';ctx.drawImage(mask,0,0,w,h);
-  ctx.globalCompositeOperation='source-in';
-  const reflection=ctx.createLinearGradient(0,0,w,h);
-  reflection.addColorStop(0,'rgba(255,255,255,.55)');reflection.addColorStop(.5,'rgba(255,255,255,.16)');reflection.addColorStop(1,gel.replace(/[\d.]+\)$/,'0.45)'));
-  ctx.fillStyle=reflection;ctx.fillRect(0,0,w,h);ctx.globalCompositeOperation='source-over';
+  ctx.globalCompositeOperation='source-over';
   const cap=make(),c=cap.getContext('2d')!;c.scale(dpr,dpr);c.drawImage(mask,0,0,w,h);c.globalCompositeOperation='source-in';
   const tint=c.createLinearGradient(0,h*.25,0,h*.82);
   tint.addColorStop(0,gel.replace(/[\d.]+\)$/,'0)'));tint.addColorStop(.55,gel.replace(/[\d.]+\)$/,'0.06)'));tint.addColorStop(1,gel.replace(/[\d.]+\)$/,'0.5)'));
@@ -481,18 +489,20 @@ export function getMeniscusSprite(radius: number, dpr: number, gel: string): Spr
   ctx.arc(c, c, r * 0.97, 0, Math.PI * 2, true);
   ctx.clip("evenodd");
   // tight: a dark contact line right at the bead, gone within ~0.15r (a wide soft ring read as haze)
-  const ao = ctx.createRadialGradient(c, c + r * 0.06, r * 0.97, c, c + r * 0.06, r * 1.16);
-  ao.addColorStop(0, "rgba(60,50,62,0.34)");
-  ao.addColorStop(0.4, "rgba(60,50,62,0.1)");
+  const ao = ctx.createRadialGradient(c, c + r * 0.06, r * 0.97, c, c + r * 0.06, r * 1.2);
+  ao.addColorStop(0, "rgba(60,50,62,0.42)");
+  ao.addColorStop(0.4, "rgba(60,50,62,0.12)");
   ao.addColorStop(1, "rgba(60,50,62,0)");
   ctx.fillStyle = ao;
   ctx.fillRect(0, 0, w, w);
   ctx.restore();
   // light ring: the meniscus lip, brightest top-left
-  const ring = ctx.createRadialGradient(c - r * 0.06, c - r * 0.08, r * 1.0, c - r * 0.06, c - r * 0.08, r * 1.14);
-  ring.addColorStop(0, "rgba(255,255,255,0)");
-  ring.addColorStop(0.35, "rgba(255,255,255,0.42)");
-  ring.addColorStop(0.7, "rgba(255,255,255,0.08)");
+  // the raised gel lip: a definite thin light ring hugging the bead – this is what makes it read
+  // as sitting *in* a hole rather than lying on the surface
+  const ring = ctx.createRadialGradient(c - r * 0.05, c - r * 0.07, r * 1.0, c - r * 0.05, c - r * 0.07, r * 1.17);
+  ring.addColorStop(0, "rgba(255,255,255,0.1)");
+  ring.addColorStop(0.3, "rgba(255,255,255,0.62)");
+  ring.addColorStop(0.65, "rgba(255,255,255,0.14)");
   ring.addColorStop(1, "rgba(255,255,255,0)");
   ctx.fillStyle = ring;
   ctx.fillRect(0, 0, w, w);

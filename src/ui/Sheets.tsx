@@ -5,9 +5,22 @@ import type { BeadType } from "../game/beads/BeadTypes";
 import { ULTRA_TYPES } from "../game/beads/BeadTypes";
 import { PADS, variantCount } from "../game/pads/PadTypes";
 import { SPECIAL_TYPES, RARE_TYPES } from "../game/rewards/treasure";
+import { HIDDEN_POOLS } from "../game/rewards/rates";
 import { haptics } from "../game/haptics";
 import { sfx } from "../game/audio/Sfx";
 import { PadSilhouette } from "./NextPanel";
+
+/** which pad hides this treasure most often – a nudge for the empty card, never a promise */
+function hidesIn(typeId: string): string {
+  let best: { pad: string; w: number } | null = null;
+  for (const [padId, pool] of Object.entries(HIDDEN_POOLS)) {
+    const e = pool.find((x) => x.id === typeId);
+    if (e && (!best || e.w > best.w)) best = { pad: padId, w: e.w };
+  }
+  if (!best) return "";
+  const pad = PADS.find((p) => p.id === best!.pad);
+  return pad ? `${pad.name} 근처?` : "";
+}
 
 /** small bottom sheet – the only kind of "screen" the game has */
 export function Sheet({ title, sub, onClose, children }: { title: string; sub?: string; onClose: () => void; children: ReactNode }) {
@@ -97,7 +110,7 @@ export function CollectionSheet({ game, onClose }: { game: Game; onClose: () => 
                 <div key={ty.id} className={"card" + (n ? "" : " unknown")}>
                   <BeadIcon type={ty} size={44} found={n > 0} />
                   <div className="card-name">{n ? ty.name : "???"}</div>
-                  <div className="card-n">{n ? `×${n}` : ""}</div>
+                  <div className="card-n">{n ? `×${n}` : hidesIn(ty.id)}</div>
                 </div>
               );
             })}

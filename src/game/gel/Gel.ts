@@ -149,7 +149,7 @@ function getSocketSprite(r: number, dpr: number, gel: string, type?: BeadType, r
   outside(0.98);
   shape(1.0);
   g.lineWidth = lipW;
-  g.strokeStyle = `rgba(255,255,255,${0.07 + 0.03 / k})`;
+  g.strokeStyle = `rgba(255,255,255,${(0.07 + 0.03 / Math.max(k, 0.9)) * Math.min(1, k + 0.4)})`;
   g.stroke();
   g.beginPath();
   g.moveTo(cx - size, cx + size);
@@ -159,7 +159,7 @@ function getSocketSprite(r: number, dpr: number, gel: string, type?: BeadType, r
   g.clip();
   shape(1.0);
   g.lineWidth = lipW * 0.8;
-  g.strokeStyle = `rgba(255,255,255,${0.14 + 0.04 / k})`;
+  g.strokeStyle = `rgba(255,255,255,${(0.14 + 0.04 / Math.max(k, 0.9)) * Math.min(1, k + 0.4)})`;
   g.stroke();
   g.restore();
   // the socket sits in a shallow dip: soft darkening outside the lip, top-left
@@ -199,7 +199,7 @@ export class Gel {
   shocks: Shock[] = [];
   dents: Dent[] = [];
   /** empty sockets: position, size, the shape/rotation of the bead that left, and how deep it reads */
-  sockets: { x: number; y: number; r: number; type?: BeadType; rot?: number; k?: number }[] = [];
+  sockets: { x: number; y: number; r: number; type?: BeadType; rot?: number; k?: number; t?: number }[] = [];
   pulls: PullInfluence[] = [];
   fade = 1;
   time = 0;

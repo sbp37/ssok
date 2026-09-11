@@ -51,6 +51,8 @@ export interface Bead {
   hidden?: boolean;
   /** already did its "almost… no" slip back into the hole (each bead does it at most once) */
   fakedOut?: boolean;
+  /** deep beads: radius of the hole above them – a bigger object shows small in it and grows as it's pulled out */
+  slotR?: number;
 }
 
 let nextId = 1;
@@ -140,9 +142,14 @@ export function generatePad(padR: number, rng: Rng, opts: PadOptions = {}): Bead
 
   // choose types first, biggest first for packing
   const picks: { type: BeadType; radius: number }[] = [];
+  // no single type may crowd the surface (a pad of ten identical crystals looks like a pattern)
+  const perType = new Map<string, number>();
+  const cap = Math.max(3, Math.ceil(surfaceCount * 0.26));
   for (let i = 0; i < surfaceCount; i++) {
     const forced = opts.forceTypes?.length ? BEAD_TYPES.find((t) => t.id === opts.forceTypes![i % opts.forceTypes!.length]) : undefined;
-    const type = forced ?? pickType(rng, skew, typeSkew);
+    let type = forced ?? pickType(rng, skew, typeSkew);
+    for (let k = 0; !forced && k < 6 && (perType.get(type.id) ?? 0) >= cap; k++) type = pickType(rng, skew, typeSkew);
+    perType.set(type.id, (perType.get(type.id) ?? 0) + 1);
     const radius = rng.range(type.radius[0], type.radius[1]) * s;
     picks.push({ type, radius });
   }
@@ -181,7 +188,9 @@ export function generatePad(padR: number, rng: Rng, opts: PadOptions = {}): Bead
         const dr = Math.min(footprint * 1.02, rng.range(dt.radius[0], dt.radius[1]) * s);
         const dcolor = rng.pick(dt.colors);
         const drot = dt.shape === "circle" ? 0 : rng.range(-Math.PI, Math.PI);
-        beads.push(makeBead(dt, dcolor, Math.max(dr, 7 * s), drot, 1, slot, x, y));
+        const deepBead = makeBead(dt, dcolor, Math.max(dr, 7 * s), drot, 1, slot, x, y);
+        deepBead.slotR = footprint;
+        beads.push(deepBead);
       }
       slot++;
       ok = true;
@@ -215,6 +224,7 @@ export function generatePad(padR: number, rng: Rng, opts: PadOptions = {}): Bead
         const hr = rng.range(ht.radius[0], ht.radius[1]) * s;
         const hb = makeBead(ht, rng.pick(ht.colors), hr, ht.shape === "circle" ? 0 : rng.range(-0.5, 0.5), 1, host.slot, host.rx, host.ry);
         hb.hidden = true;
+        hb.slotR = host.radius;
         beads.push(hb);
       }
     }

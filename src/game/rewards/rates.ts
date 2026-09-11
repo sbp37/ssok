@@ -5,13 +5,13 @@
 
 /**
  * Weighted hidden-object pool per pad: the same pad never reliably hides the
- * same thing. "none" is a real outcome (≈20%): an empty pad is what makes a
+ * same thing. "none" is a real outcome (≈28%): an empty pad is what makes a
  * treasure feel like one. Ultra entries are the "뭐야 이거?" moments.
  */
 export const NONE = "none";
 export const HIDDEN_POOLS: Record<string, { id: string; w: number }[]> = {
   cloud: [
-    { id: NONE, w: 20 },
+    { id: NONE, w: 38 },
     { id: "bigglass", w: 55 },
     { id: "candystar", w: 20 },
     { id: "smallshell", w: 12 },
@@ -20,7 +20,7 @@ export const HIDDEN_POOLS: Record<string, { id: string; w: number }[]> = {
     { id: "bigduck", w: 1 },
   ],
   flower: [
-    { id: NONE, w: 20 },
+    { id: NONE, w: 38 },
     { id: "candystar", w: 50 },
     { id: "bigopal", w: 22 },
     { id: "minicherry", w: 14 },
@@ -29,7 +29,7 @@ export const HIDDEN_POOLS: Record<string, { id: string; w: number }[]> = {
     { id: "holostar", w: 1 },
   ],
   donut: [
-    { id: NONE, w: 20 },
+    { id: NONE, w: 38 },
     { id: "key", w: 48 },
     { id: "bigglass", w: 24 },
     { id: "candystar", w: 14 },
@@ -38,7 +38,7 @@ export const HIDDEN_POOLS: Record<string, { id: string; w: number }[]> = {
     { id: "crown", w: 1 },
   ],
   paw: [
-    { id: NONE, w: 20 },
+    { id: NONE, w: 38 },
     { id: "eye", w: 50 },
     { id: "duck", w: 22 },
     { id: "minicherry", w: 14 },
@@ -47,7 +47,7 @@ export const HIDDEN_POOLS: Record<string, { id: string; w: number }[]> = {
     { id: "bigduck", w: 1 },
   ],
   ribbon: [
-    { id: NONE, w: 20 },
+    { id: NONE, w: 38 },
     { id: "bigopal", w: 50 },
     { id: "key", w: 22 },
     { id: "bigpearl", w: 15 },
@@ -56,7 +56,7 @@ export const HIDDEN_POOLS: Record<string, { id: string; w: number }[]> = {
     { id: "crown", w: 1 },
   ],
   shell: [
-    { id: NONE, w: 20 },
+    { id: NONE, w: 38 },
     { id: "bigpearl", w: 55 },
     { id: "bigopal", w: 23 },
     { id: "smallshell", w: 12 },
@@ -65,7 +65,7 @@ export const HIDDEN_POOLS: Record<string, { id: string; w: number }[]> = {
     { id: "crown", w: 1 },
   ],
   cherry: [
-    { id: NONE, w: 20 },
+    { id: NONE, w: 38 },
     { id: "minicherry", w: 55 },
     { id: "bigglass", w: 20 },
     { id: "eye", w: 12 },
@@ -74,7 +74,7 @@ export const HIDDEN_POOLS: Record<string, { id: string; w: number }[]> = {
     { id: "holostar", w: 1 },
   ],
   star: [
-    { id: NONE, w: 20 },
+    { id: NONE, w: 38 },
     { id: "duck", w: 45 },
     { id: "bigopal", w: 28 },
     { id: "candystar", w: 15 },

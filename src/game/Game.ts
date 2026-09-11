@@ -69,6 +69,12 @@ interface Flash {
 interface FingerState {
   sample: PointerSample;
   lastMove: number;
+  /** for bare-gel gestures: when/where it landed, how far it has travelled, last rub grain */
+  downAt: number;
+  x0: number;
+  y0: number;
+  moved: number;
+  lastRub: number;
 }
 
 /**
@@ -121,6 +127,7 @@ export class Game extends Emitter<GameEvents> {
   /** while > time, the buried object is shown clearly (the "살짝 보기" hint) */
   private peekUntil = -1;
   private padTotal = 0;
+  private lastSocketRefresh = 0;
   private ro: ResizeObserver;
   private tmp = { x: 0, y: 0 };
   /** `?test=5` → sparse 5-bead pad for tuning the hand-feel */
@@ -355,7 +362,7 @@ export class Game extends Emitter<GameEvents> {
       rare,
       rareNew: rare && !this.progressStore.isVariantDiscovered(pad.id),
       ultra: !!this.pendingHidden && ULTRA_TYPES.some((t) => t.id === this.pendingHidden),
-      hidden: !!this.pendingHidden && this.pendingHidden !== NONE,
+      hidden: !!this.pendingHidden && this.pendingHidden !== NONE && !this.treasure.has(this.pendingHidden),
       collection: this.progressStore.mode === "COLLECTION",
     };
   }
@@ -472,7 +479,7 @@ export class Game extends Emitter<GameEvents> {
   private onDown = (p: PointerSample) => {
     sfx.unlock();
     const l = this.toLocal(p.x, p.y);
-    this.fingers.set(p.id, { sample: p, lastMove: performance.now() });
+    this.fingers.set(p.id, { sample: p, lastMove: performance.now(), downAt: performance.now(), x0: p.x, y0: p.y, moved: 0, lastRub: 0 });
     if (!this.gel.inside(l.x, l.y) && !this.topBeadAt(l.x, l.y)) return;
     this.gel.fingerDown(p.id, l.x, l.y);
     sfx.press();
@@ -492,18 +499,29 @@ export class Game extends Emitter<GameEvents> {
     const f = this.fingers.get(p.id);
     if (!f) return;
     f.sample = p;
-    f.lastMove = performance.now();
+    const now = performance.now();
+    f.lastMove = now;
+    f.moved = Math.max(f.moved, Math.hypot(p.x - f.x0, p.y - f.y0));
     const l = this.toLocal(p.x, p.y);
     this.gel.fingerMove(p.id, l.x, l.y);
+    // rubbing bare gel: a soft grain every ~90ms while the finger really moves
+    if (!this.pulls.has(p.id) && this.gel.inside(l.x, l.y) && p.speed > 220 && now - f.lastRub > 90) {
+      f.lastRub = now;
+      sfx.rub(p.speed);
+    }
   };
 
   private onUp = (p: PointerSample) => {
+    const f = this.fingers.get(p.id);
     this.fingers.delete(p.id);
     this.gel.fingerUp(p.id);
     const pull = this.pulls.get(p.id);
     if (pull) {
       this.pulls.delete(p.id);
       this.releaseBead(pull.bead, pull);
+    } else if (f && performance.now() - f.downAt < 220 && f.moved < 8) {
+      // a quick tap on bare gel
+      sfx.tap();
     }
   };
 
@@ -626,7 +644,7 @@ export class Game extends Emitter<GameEvents> {
       const host = this.beads.find((o) => o.slot === b.slot && o.layer === 0);
       const slotR = host && host !== b ? host.radius * 1.12 : Infinity;
       const sr = Math.min(b.radius, slotR) * 0.92;
-      this.gel.sockets.push({ x: b.rx, y: b.ry, r: sr, type: b.type, rot: b.rot, k: 0.9 + rng.next() * 0.45 });
+      this.gel.sockets.push({ x: b.rx, y: b.ry, r: sr, type: b.type, rot: b.rot, k: 0.9 + rng.next() * 0.45, t: this.time });
       // fresh: crisp and dark for a couple of seconds, then it settles
       this.gel.addDent(b.rx, b.ry, sr, 2.4 + b.type.mass * 0.3, b.type, b.rot);
     }
@@ -671,6 +689,9 @@ export class Game extends Emitter<GameEvents> {
     if (this.remainingCount() === 0) {
       if (this.mode === "challenge" && this.challenge.running) this.schedule(0.35, () => this.newPad());
       else {
+        // the last one: the whole slab gives a bigger wobble and the pad hums once
+        this.schedule(0.06, () => this.gel.recoil(-dx * 110 * s, -dy * 110 * s));
+        this.schedule(0.18, () => sfx.done());
         this.progressStore.complete();
         this.schedule(0.4, () => this.emit("padEmpty", undefined));
       }
@@ -711,6 +732,11 @@ export class Game extends Emitter<GameEvents> {
       }
     }
 
+    // young sockets are still settling: refresh the base a few times a second while any is under 12s
+    if (this.time - this.lastSocketRefresh > 0.4 && this.gel.sockets.some((s) => this.time - (s.t ?? -99) < 12)) {
+      this.lastSocketRefresh = this.time;
+      this.gel.markDirty();
+    }
     // held beads pull the gel around them
     this.gel.pulls.length = 0;
     for (const p of this.pulls.values()) {
@@ -894,7 +920,12 @@ export class Game extends Emitter<GameEvents> {
   /** everything embedded in the gel, at rest positions (the mesh does the moving) */
   private drawBaseBeads(ctx: CanvasRenderingContext2D) {
     const gel = this.gel;
-    for (const s of gel.sockets) gel.drawSocket(ctx, s.x, s.y, s.r, s.type, s.rot, s.k);
+    // a hole is sharpest when fresh and settles to about a third of its depth over ~10s – the gel
+    // relaxes, the pad stops looking perforated
+    for (const s of gel.sockets) {
+      const age = this.time - (s.t ?? -99);
+      gel.drawSocket(ctx, s.x, s.y, s.r, s.type, s.rot, (s.k ?? 1) * (0.35 + 0.65 * Math.exp(-age / 3.5)));
+    }
     const covered = new Set<number>();
     for (const b of this.beads) if (b.layer === 0 && (b.state === "embedded" || b.state === "held")) covered.add(b.slot);
     const emptied = this.padTotal ? 1 - this.remainingCount() / this.padTotal : 0;
@@ -921,7 +952,7 @@ export class Game extends Emitter<GameEvents> {
             const vis = this.pad.hiddenVisibility ?? 1;
             const peek = this.time < this.peekUntil;
             ctx.globalAlpha = peek ? 0.85 : (0.12 + 0.55 * clamp(emptied * 1.4, 0, 1)) * vis;
-            this.drawEmbedded(ctx, b, false, true);
+            this.drawEmbedded(ctx, b, false, true, true);
             ctx.globalAlpha = 1;
           }
           continue;
@@ -931,7 +962,12 @@ export class Game extends Emitter<GameEvents> {
     }
   }
 
-  private drawEmbedded(ctx: CanvasRenderingContext2D, b: Bead, above = false, base = false) {
+  /** a deep bead wider than its hole: how much smaller it shows while still in it (1 = as is) */
+  private fitOf(b: Bead) {
+    return b.slotR !== undefined && b.radius > b.slotR * 0.95 ? (b.slotR * 0.95) / b.radius : 1;
+  }
+
+  private drawEmbedded(ctx: CanvasRenderingContext2D, b: Bead, above = false, base = false, peek = false) {
     const p = beadPos(b);
     if (base) {
       this.tmp.x = p.x;
@@ -942,8 +978,10 @@ export class Game extends Emitter<GameEvents> {
     // stayed hazy for good
     const depth = clamp(b.depth.x, 0, 1);
     const lift = b.lift;
-    // down in the hole it reads smaller and sits lower; rising brings it to full size
-    const scale = (1 - depth * 0.34) * (1 + lift * 0.2);
+    // down in the hole it reads smaller and sits lower; rising brings it to full size. A big object
+    // under a small hole shows hole-sized until it is pulled: the hole stretches and out comes a big one
+    const fit = peek ? 1 : this.fitOf(b);
+    const scale = (1 - depth * 0.34) * (fit + (1 - fit) * lift) * (1 + lift * 0.2);
     const x = this.tmp.x;
     const y = this.tmp.y + depth * b.radius * 0.22 - lift * 3 * this.s;
     const alpha = Math.min(1, (above ? 1 : 1 - depth * 0.5) * ctx.globalAlpha);
@@ -1007,7 +1045,10 @@ export class Game extends Emitter<GameEvents> {
    */
   private drawNeck(ctx: CanvasRenderingContext2D, b: Bead, pull: Pull) {
     const gel = this.gel;
-    const r = b.radius;
+    // the lip, hole and neck follow the bead's *visible* size: a big object in a small hole
+    // starts hole-sized and the hole stretches with it
+    const fit = this.fitOf(b);
+    const r = b.radius * (fit + (1 - fit) * b.lift);
     const s = this.s;
     const T = pull.tension;
     const P = pull.progress;

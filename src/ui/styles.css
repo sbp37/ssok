@@ -46,6 +46,19 @@ body,
   flex: 1 1 auto;
   min-height: 0;
 }
+/* a faint table under the pad so it sits somewhere instead of floating on white */
+.playfield::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 46%;
+  width: 118%;
+  height: 58%;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(120, 90, 110, 0.055), rgba(120, 90, 110, 0.02) 60%, rgba(120, 90, 110, 0) 100%);
+  pointer-events: none;
+}
 .ad-slot {
   flex: 0 0 auto;
   height: calc(var(--ad-banner-height) + env(safe-area-inset-bottom, 0px));
@@ -138,7 +151,7 @@ body,
   position: absolute;
   left: 0;
   right: 0;
-  top: 45.5%;
+  top: 78%;
   text-align: center;
   font-size: 15px;
   font-weight: 500;

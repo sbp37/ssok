@@ -219,14 +219,20 @@ export class Pull {
       if (d >= span) {
         const extra = d - span;
         this.holdT += dt;
-        // a stalled pull still gives up eventually – quickly for a small bead, only after a
-        // real struggle for a heavy or wedging one (that is where "too easy" came from)
+        // past the threshold. A small bead gives up on its own if you just hold or drag on;
+        // anything bigger needs a real yank – hold it there too slowly and the gel takes it back.
+        const small = b.type.mass < 0.9 && this.jam === 0;
         const holdLimit = 0.45 + 0.8 * clamp((b.type.mass - 0.5) / 1.5, 0, 1) + 0.6 * this.jam;
-        const forced = extra > (34 + 40 * this.jam) * (this.t2Base / 30) || this.holdT > holdLimit;
-        if (speed >= b.type.minSpeed || forced) {
+        const stalled = extra > (34 + 40 * this.jam) * (this.t2Base / 30) || this.holdT > holdLimit;
+        const yank = speed >= b.type.minSpeed;
+        if (yank || (stalled && (small || speed >= b.type.minSpeed * 0.45))) {
           const tooHard = speed > 1500 && this.rand() < 0.065;
           if (tooHard) events.push({ kind: "slipped" });
           else events.push({ kind: "pop", dirX: ux, dirY: uy, speed });
+          return events;
+        }
+        if (stalled) {
+          events.push({ kind: "slipped" });
           return events;
         }
         offMag += extra * 0.18;
