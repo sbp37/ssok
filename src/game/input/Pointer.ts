@@ -16,7 +16,7 @@ export class PointerInput {
   private hist = new Map<number, { t: number; x: number; y: number }[]>();
   onDown: Handler = () => {};
   onMove: Handler = () => {};
-  onUp: Handler = () => {};
+  onUp: (p: PointerSample, cancelled: boolean) => void = () => {};
 
   constructor(private el: HTMLElement) {
     el.style.touchAction = "none";
@@ -84,6 +84,6 @@ export class PointerInput {
     if (!this.hist.has(e.pointerId)) return;
     const s = this.sample(e);
     this.hist.delete(e.pointerId);
-    this.onUp(s);
+    this.onUp(s, e.type !== "pointerup");
   };
 }

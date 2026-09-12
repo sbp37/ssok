@@ -22,6 +22,7 @@ export function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const gameRef = useRef<Game | null>(null);
   const timers = useRef<number[]>([]);
+  const completionTimer = useRef<number | undefined>(undefined);
   const [phase, setPhase] = useState<Phase>("intro");
   const [hintHidden, setHintHidden] = useState(false);
   const [pulled, setPulled] = useState(0);
@@ -100,8 +101,10 @@ export function App() {
         setPadEmpty(true);
         setNext(game.nextInfo);
         // hold the empty pad (and the full jar) for a beat, say it quietly, then offer the door
-        later(() => setFlow("done"), 550);
-        later(() => setFlow("ready"), 1550);
+        setFlow("done");
+        window.clearTimeout(completionTimer.current);
+        completionTimer.current = window.setTimeout(() => setFlow("ready"), 650);
+        timers.current.push(completionTimer.current);
       }),
       game.on("progress", ({ emptied }) => {
         setEmptied(emptied);
@@ -120,6 +123,7 @@ export function App() {
         }
       }),
       game.on("padChange", ({ pad, newPad, newVariant }) => {
+        window.clearTimeout(completionTimer.current);
         setEmptied(0);
         setPadEmpty(false);
         setFlow("");

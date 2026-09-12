@@ -215,6 +215,8 @@ export class Gel {
   private grainR = -1;
   private formLight: HTMLCanvasElement | null = null;
   private formLightR = -1;
+  /** Six full-resolution RGBA maps (~2.4 MiB), scoped to this gel instance. */
+  private formLights = new Map<string, HTMLCanvasElement>();
   // mesh
   readonly gridN = 22;
   private vx = new Float32Array((this.gridN + 1) * (this.gridN + 1));
@@ -538,6 +540,14 @@ export class Gel {
   private ensureFormLight() {
     if (this.formLight && this.formLightR === this.R) return this.formLight;
     const R = this.R, E = R * 1.3;
+    const key = `${R}|${this.thick}|${this.color.r},${this.color.g},${this.color.b}|${this.restR.join(',')}|${this.holeR.join(',')}`;
+    const cached = this.formLights.get(key);
+    if (cached) {
+      this.formLights.delete(key);
+      this.formLights.set(key, cached);
+      this.formLight = cached; this.formLightR = R;
+      return cached;
+    }
     const c = document.createElement('canvas');
     c.width = c.height = 320;
     const g = c.getContext('2d')!, data = g.createImageData(320, 320);
@@ -571,6 +581,8 @@ export class Gel {
       data.data[k + 3] = Math.round(Math.min(light ? .3 : .2, Math.abs(response) * .85) * 255);
     }
     g.putImageData(data, 0, 0);
+    this.formLights.set(key, c);
+    if (this.formLights.size > 6) this.formLights.delete(this.formLights.keys().next().value!);
     this.formLight = c; this.formLightR = R;
     return c;
   }

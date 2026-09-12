@@ -75,6 +75,7 @@ interface FingerState {
   y0: number;
   moved: number;
   lastRub: number;
+  bareGel: boolean;
 }
 
 /**
@@ -128,6 +129,9 @@ export class Game extends Emitter<GameEvents> {
   private peekUntil = -1;
   private padTotal = 0;
   private lastSocketRefresh = 0;
+  /** Completion follows every flight and the existing collector sleep, not a POP timer. */
+  private finishing = false;
+  private finishQuiet = 0;
   private ro: ResizeObserver;
   private tmp = { x: 0, y: 0 };
   /** `?test=5` → sparse 5-bead pad for tuning the hand-feel */
@@ -217,6 +221,7 @@ export class Game extends Emitter<GameEvents> {
         b.rx *= k;
         b.ry *= k;
         b.radius *= k;
+        if (b.slotR !== undefined) b.slotR *= k;
       }
       for (const s of this.gel.sockets) {
         s.x *= k;
@@ -244,6 +249,9 @@ export class Game extends Emitter<GameEvents> {
 
   // ─── public API ───────────────────────────────────────────────
   newPad(instant = false) {
+    this.finishing = false;
+    this.finishQuiet = 0;
+    this.scheduled = [];
     for (const p of this.pulls.values()) this.releaseBead(p.bead);
     this.pulls.clear();
     const boundary = (th: number) => this.gel.boundary(th);
@@ -413,6 +421,7 @@ export class Game extends Emitter<GameEvents> {
 
   /** test/QA: empty the pad instantly (beads vanish, treasures are credited, completion logic runs) */
   debugFinishPad() {
+    this.finishing = false;
     for (const b of this.beads)
       if (b.state === "embedded" || b.state === "held") {
         b.state = "collected";
@@ -437,8 +446,7 @@ export class Game extends Emitter<GameEvents> {
   debugBeads() {
     const out: { id: number; x: number; y: number; r: number; type: string; layer: number; hidden: boolean; t1: number; t2: number }[] = [];
     for (const b of this.beads) {
-      if (b.state !== "embedded") continue;
-      if (b.layer === 1 && this.beads.some((o) => o.slot === b.slot && o.layer === 0 && o.state !== "collected" && o.state !== "gone" && o.state !== "flying")) continue;
+      if (!this.canGrab(b)) continue;
       const p = beadPos(b);
       this.gel.warp(p.x, p.y, this.tmp);
       const c = this.toCanvas(this.tmp.x, this.tmp.y);
@@ -457,18 +465,28 @@ export class Game extends Emitter<GameEvents> {
   }
 
   // ─── input ────────────────────────────────────────────────────
+  private canGrab(b: Bead) {
+    if (b.state !== "embedded") return false;
+    if (b.layer === 0) return true;
+    // Leave the empty socket alone during the 420ms pause; accept a bead only
+    // once it is at least halfway up. The depth spring itself is unchanged.
+    return b.depth.target === 0 && b.depth.x <= 0.5 && !this.beads.some(
+      (o) => o.slot === b.slot && o.layer === 0 && (o.state === "embedded" || o.state === "held"),
+    );
+  }
+
   private topBeadAt(lx: number, ly: number): Bead | null {
     let best: Bead | null = null;
     let bestD = Infinity;
     const tol = 9 * this.s;
     for (const b of this.beads) {
-      if (b.state !== "embedded") continue;
-      if (b.layer === 1 && this.beads.some((o) => o.slot === b.slot && o.layer === 0 && (o.state === "embedded" || o.state === "held"))) continue;
+      if (!this.canGrab(b)) continue;
       const p = beadPos(b);
       this.gel.warp(p.x, p.y, this.tmp);
-      const foot = b.type.shape === "oval" ? b.radius * (b.type.aspect ?? 1.7) * 0.78 : b.radius;
+      const foot = this.embeddedScale(b) * (b.type.shape === "oval" ? b.radius * (b.type.aspect ?? 1.7) * 0.78 : b.radius);
+      const dy = clamp(b.depth.x, 0, 1) * b.radius * 0.22 - b.lift * 3 * this.s;
       // accept the bead where it is drawn *or* where it rests – the gel may still be ringing from a pop
-      const d = Math.min(Math.hypot(this.tmp.x - lx, this.tmp.y - ly), Math.hypot(p.x - lx, p.y - ly));
+      const d = Math.min(Math.hypot(this.tmp.x - lx, this.tmp.y + dy - ly), Math.hypot(p.x - lx, p.y + dy - ly));
       if (d < foot + tol && d < bestD) {
         bestD = d;
         best = b;
@@ -480,13 +498,13 @@ export class Game extends Emitter<GameEvents> {
   private onDown = (p: PointerSample) => {
     sfx.unlock();
     const l = this.toLocal(p.x, p.y);
-    this.fingers.set(p.id, { sample: p, lastMove: performance.now(), downAt: performance.now(), x0: p.x, y0: p.y, moved: 0, lastRub: 0 });
-    if (!this.gel.inside(l.x, l.y) && !this.topBeadAt(l.x, l.y)) return;
+    const b = this.topBeadAt(l.x, l.y);
+    if (!this.gel.inside(l.x, l.y) && !b) return;
+    this.fingers.set(p.id, { sample: p, lastMove: performance.now(), downAt: performance.now(), x0: p.x, y0: p.y, moved: 0, lastRub: 0, bareGel: !b });
     this.gel.fingerDown(p.id, l.x, l.y);
     sfx.press();
     haptics.press();
     if (!this.grabEnabled) return;
-    const b = this.topBeadAt(l.x, l.y);
     if (b) {
       b.state = "held";
       const R = this.gel.R;
@@ -512,7 +530,7 @@ export class Game extends Emitter<GameEvents> {
     }
   };
 
-  private onUp = (p: PointerSample) => {
+  private onUp = (p: PointerSample, cancelled = false) => {
     const f = this.fingers.get(p.id);
     this.fingers.delete(p.id);
     this.gel.fingerUp(p.id);
@@ -520,7 +538,7 @@ export class Game extends Emitter<GameEvents> {
     if (pull) {
       this.pulls.delete(p.id);
       this.releaseBead(pull.bead, pull);
-    } else if (f && performance.now() - f.downAt < 220 && f.moved < 8) {
+    } else if (!cancelled && f?.bareGel && performance.now() - f.downAt < 220 && f.moved < 8) {
       // a quick tap on bare gel
       sfx.tap();
     }
@@ -603,6 +621,7 @@ export class Game extends Emitter<GameEvents> {
     this.gel.reanchor(fingerId);
     b.state = "flying";
     b.lift = 1;
+    const lastInFree = this.mode === "free" && this.remainingCount() === 0;
 
     // 0ms: freed – kicks toward the finger, hangs there ~150ms so the moment lands, then arcs into the cup
     // (treasures arc up to the treasure box instead)
@@ -657,11 +676,11 @@ export class Game extends Emitter<GameEvents> {
     // +30ms: gel snaps back the other way, dent appears
     this.schedule(0.03, () => {
       const m = Math.pow(b.type.mass, 0.6);
-      this.gel.recoil(-dx * 95 * s * m, -dy * 95 * s * m);
+      const strength = lastInFree ? 1.22 : 1;
+      this.gel.recoil(-dx * 95 * s * m * strength, -dy * 95 * s * m * strength);
     });
     // +40ms: the gel around the hole bulges outward and rings down – neighbours ride it
     this.schedule(0.04, () => this.gel.shock(b.rx, b.ry, b.radius, 5 * s * Math.pow(b.type.mass, 0.5)));
-    // +120ms: the bead underneath rises to the surface
     // the bead underneath waits at the bottom of the hole, then rises (slow spring, no overshoot)
     if (deeper) this.schedule(0.42, () => (deeper.depth.target = 0));
 
@@ -690,11 +709,11 @@ export class Game extends Emitter<GameEvents> {
     if (this.remainingCount() === 0) {
       if (this.mode === "challenge" && this.challenge.running) this.schedule(0.35, () => this.newPad());
       else {
-        // the last one: the whole slab gives a bigger wobble and the pad hums once
-        this.schedule(0.06, () => this.gel.recoil(-dx * 110 * s, -dy * 110 * s));
-        this.schedule(0.18, () => sfx.done());
+        // Keep the release readable as one recoil, then let the final flight and
+        // jar settle before the completion cue. Persist now even if the tab closes.
+        this.finishing = true;
+        this.finishQuiet = 0;
         this.progressStore.complete();
-        this.schedule(0.4, () => this.emit("padEmpty", undefined));
       }
     }
   }
@@ -803,6 +822,16 @@ export class Game extends Emitter<GameEvents> {
     }
 
     this.collector.step(dt);
+
+    if (this.finishing) {
+      const arrived = !this.beads.some((b) => b.state === "flying");
+      this.finishQuiet = arrived && this.collector.settled ? this.finishQuiet + dt : 0;
+      if (this.finishQuiet >= 0.12) {
+        this.finishing = false;
+        sfx.done();
+        this.emit("padEmpty", undefined);
+      }
+    }
 
     for (let i = this.threads.length - 1; i >= 0; i--) {
       const th = this.threads[i];
@@ -968,6 +997,12 @@ export class Game extends Emitter<GameEvents> {
     return b.slotR !== undefined && b.radius > b.slotR * 0.95 ? (b.slotR * 0.95) / b.radius : 1;
   }
 
+  /** Shared by the picture and picking: a king bead still in its slot is hole-sized. */
+  private embeddedScale(b: Bead, peek = false) {
+    const fit = peek ? 1 : this.fitOf(b);
+    return (1 - clamp(b.depth.x, 0, 1) * 0.34) * (fit + (1 - fit) * b.lift) * (1 + b.lift * 0.2);
+  }
+
   private drawEmbedded(ctx: CanvasRenderingContext2D, b: Bead, above = false, base = false, peek = false) {
     const p = beadPos(b);
     if (base) {
@@ -981,8 +1016,7 @@ export class Game extends Emitter<GameEvents> {
     const lift = b.lift;
     // down in the hole it reads smaller and sits lower; rising brings it to full size. A big object
     // under a small hole shows hole-sized until it is pulled: the hole stretches and out comes a big one
-    const fit = peek ? 1 : this.fitOf(b);
-    const scale = (1 - depth * 0.34) * (fit + (1 - fit) * lift) * (1 + lift * 0.2);
+    const scale = this.embeddedScale(b, peek);
     const x = this.tmp.x;
     const y = this.tmp.y + depth * b.radius * 0.22 - lift * 3 * this.s;
     const alpha = Math.min(1, (above ? 1 : 1 - depth * 0.5) * ctx.globalAlpha);
