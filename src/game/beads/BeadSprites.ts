@@ -436,8 +436,10 @@ const contourCache = new Map<string, Sprite>();
 
 /** Silicone follows the actual charm silhouette, including spaces between
  * petals/cherries. Cached masks retain the original depth/lift animation. */
-export function getContourMeniscus(type:BeadType,color:string,radius:number,dpr:number,gel:string):Sprite {
-  const r=Math.round(radius*2)/2,key=`${type.id}|${color}|${r}|${dpr}|${gel}`;
+export function getContourMeniscus(type:BeadType,color:string,radius:number,dpr:number,gel:string,rotation=0):Sprite {
+  // The contour rotates with the bead, but the light stays at screen top-left.
+  const angle=Math.round(rotation*16/Math.PI)*Math.PI/16;
+  const r=Math.round(radius*2)/2,key=`${type.id}|${color}|${r}|${dpr}|${gel}|${angle}`;
   const cached=contourCache.get(key);if(cached)return cached;
   const source=getBeadSprite(type,color,r,dpr);
   const {w,h}=source;
@@ -448,24 +450,41 @@ export function getContourMeniscus(type:BeadType,color:string,radius:number,dpr:
   // a big tilted halo ring around the bead
   {const img=m.getImageData(0,0,mask.width,mask.height),d=img.data;for(let i=3;i<d.length;i+=4)d[i]=d[i]>140?255:0;m.putImageData(img,0,0);}
   const canvas=make(),ctx=canvas.getContext('2d')!;ctx.scale(dpr,dpr);
-  // contact shadow just outside the outline, then the light lip on top of it
-  const aoW=Math.max(1.2,r*.16);
-  for(let i=0;i<12;i++){const a=i*Math.PI/6;ctx.drawImage(mask,Math.cos(a)*aoW,Math.sin(a)*aoW,w,h);}
-  ctx.globalCompositeOperation='source-in';ctx.fillStyle='rgba(60,50,62,0.3)';ctx.fillRect(0,0,w,h);
-  ctx.globalCompositeOperation='source-over';
-  const lip=document.createElement('canvas');lip.width=canvas.width;lip.height=canvas.height;const l=lip.getContext('2d')!;l.scale(dpr,dpr);
-  const rim=Math.max(.7,r*.075);
-  for(let i=0;i<12;i++){const a=i*Math.PI/6;l.drawImage(mask,Math.cos(a)*rim,Math.sin(a)*rim,w,h);}
-  l.globalCompositeOperation='source-in';
-  const reflection=l.createLinearGradient(0,0,w,h);
-  reflection.addColorStop(0,'rgba(255,255,255,.8)');reflection.addColorStop(.5,'rgba(255,255,255,.3)');reflection.addColorStop(1,gel.replace(/[\d.]+\)$/,'0.55)'));
-  l.fillStyle=reflection;l.fillRect(0,0,w,h);
-  ctx.drawImage(lip,0,0,w,h);
-  ctx.globalCompositeOperation='destination-out';ctx.drawImage(mask,0,0,w,h);
-  ctx.globalCompositeOperation='source-over';
+  const ux=-.6*Math.cos(angle)-.8*Math.sin(angle),uy=.6*Math.sin(angle)-.8*Math.cos(angle);
+  const spread=(size:number)=>{
+    const c=make(),g=c.getContext('2d')!;g.scale(dpr,dpr);
+    g.drawImage(mask,0,0,w,h);
+    for(let i=0;i<16;i++){const a=i*Math.PI/8;g.drawImage(mask,Math.cos(a)*size,Math.sin(a)*size,w,h);}
+    return c;
+  };
+  const outside=(c:HTMLCanvasElement)=>{
+    const g=c.getContext('2d')!;
+    g.globalCompositeOperation='destination-out';g.drawImage(mask,0,0,w,h);
+    g.globalCompositeOperation='source-in';
+    return g;
+  };
+  // A rounded, milk-coloured shoulder has area, not a wide dark outline.
+  const rim=Math.max(1.15,Math.min(2.4,r*.12));
+  const shoulder=spread(rim),lip=make(),l=lip.getContext('2d')!;l.scale(dpr,dpr);
+  l.drawImage(shoulder,0,0,w,h);outside(lip);
+  const span=Math.max(w,h)*.48;
+  const reflection=l.createLinearGradient(w/2+ux*span,h/2+uy*span,w/2-ux*span,h/2-uy*span);
+  reflection.addColorStop(0,'rgba(255,252,255,.92)');
+  reflection.addColorStop(.48,'rgba(255,244,254,.64)');
+  reflection.addColorStop(1,gel.replace(/[\d.]+\)$/,'0.66)'));
+  l.fillStyle=reflection;l.fillRect(0,0,w,h);ctx.drawImage(lip,0,0,w,h);
+  // Only the narrow seam touching the bead is shaded. No blurred AO halo.
+  const seam=spread(Math.max(.45,r*.032)),s=outside(seam);
+  s.fillStyle='rgba(101,68,107,.19)';s.fillRect(0,0,w,h);ctx.drawImage(seam,0,0,w,h);
+  // The raised outer crest catches a separate thin upper-left reflection.
+  const crest=make(),c0=crest.getContext('2d')!;c0.scale(dpr,dpr);
+  c0.drawImage(shoulder,0,0,w,h);c0.globalCompositeOperation='destination-out';
+  const shine=Math.max(.65,r*.04);
+  c0.drawImage(shoulder,-ux*shine,-uy*shine,w,h);outside(crest);
+  c0.fillStyle='rgba(255,255,255,.82)';c0.fillRect(0,0,w,h);ctx.drawImage(crest,0,0,w,h);
   const cap=make(),c=cap.getContext('2d')!;c.scale(dpr,dpr);c.drawImage(mask,0,0,w,h);c.globalCompositeOperation='source-in';
   const tint=c.createLinearGradient(0,h*.25,0,h*.82);
-  tint.addColorStop(0,gel.replace(/[\d.]+\)$/,'0)'));tint.addColorStop(.55,gel.replace(/[\d.]+\)$/,'0.06)'));tint.addColorStop(1,gel.replace(/[\d.]+\)$/,'0.5)'));
+  tint.addColorStop(0,gel.replace(/[\d.]+\)$/,'0)'));tint.addColorStop(.55,gel.replace(/[\d.]+\)$/,'0.04)'));tint.addColorStop(1,gel.replace(/[\d.]+\)$/,'0.33)'));
   c.fillStyle=tint;c.fillRect(0,0,w,h);ctx.drawImage(cap,0,0,w,h);
   const sp={canvas,w,h};contourCache.set(key,sp);return sp;
 }

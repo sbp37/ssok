@@ -156,6 +156,9 @@ export class Game extends Emitter<GameEvents> {
     this.input.onDown = this.onDown;
     this.input.onMove = this.onMove;
     this.input.onUp = this.onUp;
+    // Safari also gets its native activation event, including when dragging
+    // suppresses a synthetic click. This listener never handles game input.
+    canvas.addEventListener("touchend", this.unlockAudio, { passive: true });
     this.ro = new ResizeObserver(() => this.resize());
     this.ro.observe(canvas);
     this.resize();
@@ -189,6 +192,7 @@ export class Game extends Emitter<GameEvents> {
     cancelAnimationFrame(this.raf);
     this.ro.disconnect();
     this.input.destroy();
+    this.canvas.removeEventListener("touchend", this.unlockAudio);
     this.glCanvas?.remove();
   }
 
@@ -495,6 +499,8 @@ export class Game extends Emitter<GameEvents> {
     return best;
   }
 
+  private unlockAudio = () => sfx.unlock();
+
   private onDown = (p: PointerSample) => {
     sfx.unlock();
     const l = this.toLocal(p.x, p.y);
@@ -531,6 +537,7 @@ export class Game extends Emitter<GameEvents> {
   };
 
   private onUp = (p: PointerSample, cancelled = false) => {
+    if (!cancelled) sfx.unlock();
     const f = this.fingers.get(p.id);
     this.fingers.delete(p.id);
     this.gel.fingerUp(p.id);
@@ -1024,7 +1031,7 @@ export class Game extends Emitter<GameEvents> {
 
     // shadow: tighter when embedded, lifts & offsets as the bead comes out
     const sh = getShadowSprite(b.radius * scale, dpr);
-    ctx.globalAlpha = alpha * ((b.type.material === "glass" ? 0.3 : 0.55) + lift * 0.35);
+    ctx.globalAlpha = alpha * ((b.type.material === "glass" ? 0.14 : 0.22) + lift * 0.55);
     ctx.drawImage(sh.canvas, x - sh.w / 2 + lift * 4 * this.s, y - sh.h / 2 + b.radius * (0.18 + lift * 0.5), sh.w, sh.h);
 
     // seen through gel → a softened sprite variant (blur baked in, cached); crisp once it lifts out
@@ -1046,7 +1053,7 @@ export class Game extends Emitter<GameEvents> {
     // top-left, gel-coloured bottom-right) and a contact shadow – the look the rainbow bead had
     const men = (1 - lift) * (1 - depth) * alpha;
     if (men > 0.02) {
-      const ms = getContourMeniscus(b.type, b.color, b.radius * scale, dpr, this.gel.col(1));
+      const ms = getContourMeniscus(b.type, b.color, b.radius * scale, dpr, this.gel.col(1), b.rot);
       ctx.globalAlpha = men;
       ctx.save();ctx.translate(x,y);ctx.rotate(b.rot);ctx.translate(-x,-y);
       ctx.drawImage(ms.canvas, x - ms.w / 2, y - ms.h / 2, ms.w, ms.h);

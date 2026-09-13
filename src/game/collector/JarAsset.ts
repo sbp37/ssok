@@ -29,8 +29,7 @@ export function jarLayers(w: number, h: number, dpr: number) {
     return c;
   };
   const back = make(), front = make();
-  // Preserve the source aspect. The glass may extend <2px vertically beyond
-  // the old cup to align its inner bottom with the unchanged collision floor.
+  // Preserve the source aspect. Collector.floor leaves room for the thick glass foot.
   const dh = w * crop.h / crop.w;
   const draw = (ctx: CanvasRenderingContext2D) => {
     ctx.drawImage(image!, crop.x, crop.y, crop.w, crop.h, 0, h - dh, w, dh);

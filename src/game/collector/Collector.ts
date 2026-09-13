@@ -74,15 +74,32 @@ export class Collector {
   static readonly MAX_ITEMS = 100; // above any pad's plain-bead count (max seen: 94) – nothing is ever silently dropped mid-pad
 
   layout(x: number, y: number, w: number, h: number) {
+    const oldX = this.x, oldFloor = this.floor, scale = w / this.w;
     this.x = x;
     this.y = y;
     this.w = w;
     this.h = h;
+    // Keep the pile attached to the inner floor on rotation/resize. Preserve
+    // sleep state: relayout must not restart gravity or shake a settled jar.
+    for (const it of this.items) {
+      it.x = x + (it.x - oldX) * scale;
+      it.y = this.floor - (oldFloor - it.y) * scale;
+      it.r *= scale;
+      it.vx *= scale;
+      it.vy *= scale;
+      it.px = it.x;
+      it.py = it.y;
+    }
   }
 
   /** entry point in canvas coords (top centre of the cup) */
   get entry() {
     return { x: this.x + this.w / 2, y: this.y - 10 };
+  }
+
+  /** The visible inner floor sits above the thick glass foot, not at its outer edge. */
+  get floor() {
+    return this.y + this.h - Math.max(12, this.h * 0.12);
   }
 
   clear() {
@@ -168,7 +185,7 @@ export class Collector {
     if (!anyAwake) return;
 
     const g = 1500;
-    const floor = this.y + this.h - 5;
+    const floor = this.floor;
     const left = this.x + 6;
     const right = this.x + this.w - 6;
 

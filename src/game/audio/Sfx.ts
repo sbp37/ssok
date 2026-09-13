@@ -13,6 +13,8 @@ class Sfx {
   private master: GainNode | null = null;
   private noise: AudioBuffer | null = null;
   private bank = new SampleBank();
+  private pendingPop: { kind: PopSound; mass: number; rare: boolean; at: number } | null = null;
+  private startAt = 0;
   enabled = true;
 
   constructor() {
@@ -26,6 +28,7 @@ class Sfx {
 
   setEnabled(v: boolean) {
     this.enabled = v;
+    if (!v) this.pendingPop = null;
     try {
       localStorage.setItem(KEY, v ? "1" : "0");
     } catch {
@@ -36,10 +39,18 @@ class Sfx {
 
   /** Must be called from a user gesture once. Safe to call repeatedly. */
   unlock() {
-    if (!this.ctx) {
+    if (!this.ctx || this.ctx.state === "closed") {
       try {
         const AC = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
         this.ctx = new AC({ latencyHint: "interactive" });
+        this.warmed = false;
+        const ctx = this.ctx;
+        ctx.onstatechange = () => {
+          if (ctx.state === "running") {
+            this.startAt = ctx.currentTime + 0.025;
+            this.flushPendingPop();
+          }
+        };
         this.master = this.ctx.createGain();
         this.master.gain.value = this.enabled ? 0.55 : 0;
         // gentle limiter so overlapping pops never clip
@@ -58,23 +69,41 @@ class Sfx {
         this.ctx = null;
       }
     }
-    if (this.ctx?.state === "suspended") void this.ctx.resume();
+    // A touch pointerdown need not activate audio. Retry from pointerup/touchend
+    // as well; a rejected/pending resume must never become an unhandled rejection.
+    if (this.ctx && this.ctx.state !== "running") {
+      void this.ctx.resume().then(() => this.flushPendingPop()).catch(() => { /* next gesture retries */ });
+    }
     if (this.ctx && !this.warmed) {
-      // a silent one-sample buffer opens the output path now, so the very first
-      // real sound (the first POP) is not swallowed by the hardware warming up
-      this.warmed = true;
+      // Keep the output path open for a short block, not a single sample.
       try {
         const src = this.ctx.createBufferSource();
-        src.buffer = this.ctx.createBuffer(1, 1, this.ctx.sampleRate);
+        src.buffer = this.ctx.createBuffer(1, Math.ceil(this.ctx.sampleRate * 0.04), this.ctx.sampleRate);
         src.connect(this.ctx.destination);
         src.start();
+        src.onended = () => src.disconnect();
+        this.warmed = true;
+        this.startAt = this.ctx.currentTime + 0.025;
       } catch {
         /* ignore */
       }
     }
     if (this.ctx) this.bank.load(this.ctx);
+    this.flushPendingPop();
   }
   private warmed = false;
+
+  private flushPendingPop() {
+    if (!this.ready || !this.pendingPop) return;
+    const p = this.pendingPop;
+    this.pendingPop = null;
+    // Only the recent POP survives an audio unlock, never a backlog of creaks.
+    if (performance.now() - p.at <= 1500) this.pop(p.kind, p.mass, p.rare);
+  }
+
+  private get soundTime() {
+    return Math.max(this.ctx!.currentTime, this.startAt);
+  }
 
   /** play a recorded sample if we have one; returns false to ask for the procedural fallback */
   private sample(name: SampleName, rate = 1, gain = 1, delay = 0) {
@@ -87,14 +116,12 @@ class Sfx {
     const g = ctx.createGain();
     g.gain.value = gain * this.j(0.1);
     src.connect(g).connect(this.master);
-    src.start(ctx.currentTime + delay);
+    src.start(this.soundTime + delay);
     return true;
   }
 
   private get ready() {
-    // a context still resuming queues what we schedule and plays it the moment it runs –
-    // requiring "running" here silently ate the first sounds after every unlock
-    return !!this.ctx && !!this.master && this.enabled && this.ctx.state !== "closed";
+    return !!this.ctx && !!this.master && this.enabled && this.ctx.state === "running";
   }
   private j(pct = 0.08) {
     return 1 + (Math.random() * 2 - 1) * pct;
@@ -110,7 +137,7 @@ class Sfx {
     opts: { attack?: number; curve?: number; delay?: number; filter?: number } = {},
   ) {
     const ctx = this.ctx!;
-    const t = ctx.currentTime + (opts.delay ?? 0);
+    const t = this.soundTime + (opts.delay ?? 0);
     const o = ctx.createOscillator();
     o.type = type;
     o.frequency.setValueAtTime(f0, t);
@@ -139,7 +166,7 @@ class Sfx {
     opts: { type?: BiquadFilterType; freq?: number; freq1?: number; q?: number; delay?: number; attack?: number } = {},
   ) {
     const ctx = this.ctx!;
-    const t = ctx.currentTime + (opts.delay ?? 0);
+    const t = this.soundTime + (opts.delay ?? 0);
     const src = ctx.createBufferSource();
     src.buffer = this.noise!;
     src.loop = true;
@@ -225,7 +252,13 @@ class Sfx {
   }
 
   pop(kind: PopSound, mass: number, rare = false) {
-    if (!this.ready) return;
+    if (!this.enabled) return;
+    if (!this.ready) {
+      if (this.ctx && (!this.pendingPop || performance.now() - this.pendingPop.at > 1500)) {
+        this.pendingPop = { kind, mass, rare, at: performance.now() };
+      }
+      return;
+    }
     const m = Math.pow(mass, 0.45);
     const jp = this.j(0.08);
     const jv = this.j(0.1);
