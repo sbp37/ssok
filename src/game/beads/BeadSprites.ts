@@ -371,13 +371,17 @@ export function getBeadSprite(type: BeadType, color: string, radius: number, dpr
       ctx.globalCompositeOperation = "color";
       ctx.fillStyle = color;
       ctx.fillRect(-w / 2, -h / 2, w, h);
-      // a light bead colour (white, cream, pastel) must not end up as the photo's mid grey:
-      // lift the whole thing toward white by how light the target is
+      // Keep the photographed body-to-glint contrast. A large white screen
+      // lift washed every pastel into milk; only a small exposure correction
+      // is needed after recolouring (the source already contains highlights).
       const [tr, tg, tb] = hexToRgb(color);
       const light = (Math.max(tr, tg, tb) + Math.min(tr, tg, tb)) / 510;
       if (light > 0.55) {
+        // White resin/pearls still need a pale body, not a grey metal sphere.
+        const nearWhite = Math.max(0, (light - 0.85) / 0.15);
+        const exposure = Math.min(0.16, (light - 0.55) * 0.4) + nearWhite * 0.14;
         ctx.globalCompositeOperation = "screen";
-        ctx.fillStyle = `rgba(255,255,255,${Math.min(0.85, (light - 0.55) * 1.7)})`;
+        ctx.fillStyle = `rgba(255,255,255,${exposure})`;
         ctx.fillRect(-w / 2, -h / 2, w, h);
       } else if (light < 0.42) {
         // navy, onyx, wine: pull the photo's mid-light body down to the stone's depth, keep its glints
@@ -451,27 +455,45 @@ export function getContourMeniscus(type:BeadType,color:string,radius:number,dpr:
   {const img=m.getImageData(0,0,mask.width,mask.height),d=img.data;for(let i=3;i<d.length;i+=4)d[i]=d[i]>140?255:0;m.putImageData(img,0,0);}
   const canvas=make(),ctx=canvas.getContext('2d')!;ctx.scale(dpr,dpr);
   const ux=-.6*Math.cos(angle)-.8*Math.sin(angle),uy=.6*Math.sin(angle)-.8*Math.cos(angle);
-  const spread=(size:number)=>{
+  const fx=Math.sin(angle),fy=Math.cos(angle);
+  const [gr,gg,gb]=gel.match(/[\d.]+/g)!.map(Number);
+  const spread=(size:number,shape=mask)=>{
     const c=make(),g=c.getContext('2d')!;g.scale(dpr,dpr);
-    g.drawImage(mask,0,0,w,h);
-    for(let i=0;i<16;i++){const a=i*Math.PI/8;g.drawImage(mask,Math.cos(a)*size,Math.sin(a)*size,w,h);}
+    g.drawImage(shape,0,0,w,h);
+    for(let i=0;i<16;i++){const a=i*Math.PI/8;g.drawImage(shape,Math.cos(a)*size,Math.sin(a)*size,w,h);}
     return c;
   };
-  const outside=(c:HTMLCanvasElement)=>{
+  const outside=(c:HTMLCanvasElement,shape=mask)=>{
     const g=c.getContext('2d')!;
-    g.globalCompositeOperation='destination-out';g.drawImage(mask,0,0,w,h);
+    g.globalCompositeOperation='destination-out';g.drawImage(shape,0,0,w,h);
     g.globalCompositeOperation='source-in';
     return g;
   };
-  // A rounded, milk-coloured shoulder has area, not a wide dark outline.
-  const rim=Math.max(1.15,Math.min(2.4,r*.12));
-  const shoulder=spread(rim),lip=make(),l=lip.getContext('2d')!;l.scale(dpr,dpr);
-  l.drawImage(shoulder,0,0,w,h);outside(lip);
+  // A visible inset wall separates the bead from the raised outer lip. The
+  // opening is slightly wider and extends toward the viewer, like the existing
+  // pulled socket, but much shallower. Never paint its shading over the bead.
+  const opening=make(),o=opening.getContext('2d')!;o.scale(dpr,dpr);
+  const seat=Math.max(1.2,Math.min(2.4,r*.11));
+  const forward=Math.min(1.7,r*.1);
+  o.drawImage(spread(seat),fx*forward,fy*forward,w,h);
+  const cavity=make(),v=cavity.getContext('2d')!;v.scale(dpr,dpr);
+  v.drawImage(opening,0,0,w,h);outside(cavity);
+  const wallShade=v.createLinearGradient(w/2-fx*r,h/2-fy*r,w/2+fx*r,h/2+fy*r);
+  wallShade.addColorStop(0,`rgba(${Math.round(gr*.52)},${Math.round(gg*.52)},${Math.round(gb*.57)},.38)`);
+  wallShade.addColorStop(.5,`rgba(${Math.round(gr*.62)},${Math.round(gg*.62)},${Math.round(gb*.68)},.24)`);
+  wallShade.addColorStop(1,`rgba(${Math.round(gr*.65)},${Math.round(gg*.65)},${Math.round(gb*.72)},.3)`);
+  v.fillStyle=wallShade;v.fillRect(0,0,w,h);ctx.drawImage(cavity,0,0,w,h);
+  // A narrow silicone shoulder, with light concentrated on its upper-left
+  // face. The entire circumference must not become a white sticker border.
+  const rim=Math.max(.8,Math.min(1.65,r*.085));
+  const shoulder=spread(rim,opening),lip=make(),l=lip.getContext('2d')!;l.scale(dpr,dpr);
+  l.drawImage(shoulder,0,0,w,h);outside(lip,opening);
   const span=Math.max(w,h)*.48;
   const reflection=l.createLinearGradient(w/2+ux*span,h/2+uy*span,w/2-ux*span,h/2-uy*span);
-  reflection.addColorStop(0,'rgba(255,252,255,.92)');
-  reflection.addColorStop(.48,'rgba(255,244,254,.64)');
-  reflection.addColorStop(1,gel.replace(/[\d.]+\)$/,'0.66)'));
+  reflection.addColorStop(0,'rgba(255,252,255,.68)');
+  reflection.addColorStop(.4,'rgba(255,244,254,.25)');
+  reflection.addColorStop(.62,gel.replace(/[\d.]+\)$/,'0.18)'));
+  reflection.addColorStop(1,gel.replace(/[\d.]+\)$/,'0.46)'));
   l.fillStyle=reflection;l.fillRect(0,0,w,h);ctx.drawImage(lip,0,0,w,h);
   // Only the narrow seam touching the bead is shaded. No blurred AO halo.
   const seam=spread(Math.max(.45,r*.032)),s=outside(seam);
@@ -480,12 +502,34 @@ export function getContourMeniscus(type:BeadType,color:string,radius:number,dpr:
   const crest=make(),c0=crest.getContext('2d')!;c0.scale(dpr,dpr);
   c0.drawImage(shoulder,0,0,w,h);c0.globalCompositeOperation='destination-out';
   const shine=Math.max(.65,r*.04);
-  c0.drawImage(shoulder,-ux*shine,-uy*shine,w,h);outside(crest);
-  c0.fillStyle='rgba(255,255,255,.82)';c0.fillRect(0,0,w,h);ctx.drawImage(crest,0,0,w,h);
-  const cap=make(),c=cap.getContext('2d')!;c.scale(dpr,dpr);c.drawImage(mask,0,0,w,h);c.globalCompositeOperation='source-in';
-  const tint=c.createLinearGradient(0,h*.25,0,h*.82);
-  tint.addColorStop(0,gel.replace(/[\d.]+\)$/,'0)'));tint.addColorStop(.55,gel.replace(/[\d.]+\)$/,'0.04)'));tint.addColorStop(1,gel.replace(/[\d.]+\)$/,'0.33)'));
-  c.fillStyle=tint;c.fillRect(0,0,w,h);ctx.drawImage(cap,0,0,w,h);
+  c0.drawImage(shoulder,-ux*shine,-uy*shine,w,h);outside(crest,opening);
+  c0.fillStyle='rgba(255,255,255,.68)';c0.fillRect(0,0,w,h);ctx.drawImage(crest,0,0,w,h);
+  // The rear wall casts a SHORT shadow inside the opening, onto the bead.
+  // Subtracted silhouette masks keep this out of the exposed central body.
+  const inset=(dx:number,dy:number)=>{
+    const c=make(),g=c.getContext('2d')!;g.scale(dpr,dpr);
+    g.drawImage(mask,0,0,w,h);g.globalCompositeOperation='destination-out';
+    g.drawImage(mask,dx,dy,w,h);g.globalCompositeOperation='source-in';
+    return {canvas:c,ctx:g};
+  };
+  const wallDepth=Math.max(.8,Math.min(1.6,r*.085));
+  const wall=inset(-ux*wallDepth,-uy*wallDepth);
+  wall.ctx.fillStyle='rgba(77,53,88,.28)';wall.ctx.fillRect(0,0,w,h);
+  ctx.drawImage(wall.canvas,0,0,w,h);
+
+  // The front gel physically covers the lower silhouette, rather than tinting
+  // the whole lower half. Front remains screen-down even for rotated charms.
+  const cover=Math.max(1.2,Math.min(2.8,r*.16));
+  const front=inset(-fx*cover,-fy*cover);
+  front.ctx.fillStyle=`rgba(${Math.round(gr+(255-gr)*.38)},${Math.round(gg+(255-gg)*.38)},${Math.round(gb+(255-gb)*.38)},.9)`;
+  front.ctx.fillRect(0,0,w,h);ctx.drawImage(front.canvas,0,0,w,h);
+  // A small reflection on the INNER crest connects the covering ledge to the
+  // existing bright outer rim. It is not another complete ring around the bead.
+  const frontCrest=make(),fc=frontCrest.getContext('2d')!;fc.scale(dpr,dpr);
+  fc.drawImage(front.canvas,0,0,w,h);fc.globalCompositeOperation='destination-out';
+  fc.drawImage(front.canvas,fx*.65,fy*.65,w,h);fc.globalCompositeOperation='source-in';
+  fc.fillStyle='rgba(255,250,255,.55)';fc.fillRect(0,0,w,h);
+  ctx.drawImage(frontCrest,0,0,w,h);
   const sp={canvas,w,h};contourCache.set(key,sp);return sp;
 }
 /**

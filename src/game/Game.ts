@@ -1031,7 +1031,9 @@ export class Game extends Emitter<GameEvents> {
 
     // shadow: tighter when embedded, lifts & offsets as the bead comes out
     const sh = getShadowSprite(b.radius * scale, dpr);
-    ctx.globalAlpha = alpha * ((b.type.material === "glass" ? 0.14 : 0.22) + lift * 0.55);
+    // At rest the socket wall supplies contact shade; a cast shadow underneath
+    // the entire bead made it look perched on top. Keep that shadow for lift.
+    ctx.globalAlpha = alpha * ((b.type.material === "glass" ? 0.06 : 0.1) + lift * 0.65);
     ctx.drawImage(sh.canvas, x - sh.w / 2 + lift * 4 * this.s, y - sh.h / 2 + b.radius * (0.18 + lift * 0.5), sh.w, sh.h);
 
     // seen through gel → a softened sprite variant (blur baked in, cached); crisp once it lifts out
