@@ -12,9 +12,8 @@ import { clamp } from "../util/math";
  *         the neck between socket and bead thins. Big beads *wedge* on the
  *         way out: once or twice the bead stops while the finger keeps going
  *         (the gel tents further, the bead quivers), then it gives with a lurch.
- *  pop    past the pull distance *and* moving fast enough → resistance
- *         vanishes at once. (Pulling too violently can instead slip out
- *         of your fingers ~6% of the time.)
+ *  pop    past the required pull distance → resistance vanishes at once.
+ *         Slow and fast pulls both succeed; no random drop or forced reset.
  *
  * Order of motion, always: finger → gel (stretch spring, ~30ms behind) →
  * bead (off spring, slower) → ticks → neck → POP. Nothing moves in unison.
@@ -61,7 +60,6 @@ export class Pull {
   private lastStep = 0;
   private wiggle = 0;
   private lastAng: number | null = null;
-  private holdT = 0;
   readonly t1: number;
   readonly t2Base: number;
   private catchHold = 0;
@@ -74,11 +72,8 @@ export class Pull {
   jammed = false;
   /** 0..1 how far the finger has strained through the current wedge */
   over = 0;
-  private quiver = 0;
   private strained = false;
   private readonly neck: number;
-  /** progress at which this bead may slip back in (rolled once per grab) */
-  private readonly fakeAt: number | null;
   /** bookkeeping for the creak grains played while wedged (owned by the caller) */
   creakT = 0;
 
@@ -87,7 +82,7 @@ export class Pull {
     fx: number,
     fy: number,
     padR: number,
-    private rand: () => number,
+    rand: () => number,
     /** pad-level × local grip multiplier (thin petal tips <1, a knot >1) */
     resist = 1,
   ) {
@@ -102,8 +97,6 @@ export class Pull {
     // big pearl ≈0.5 (≈13px of extra travel), a buried treasure 1 (two wedges, ≈44px)
     this.jam = bead.type.jam ?? clamp((bead.radius / s - JAM_R0) / 8, 0, 1);
     this.neck = bead.type.neck ?? 1;
-    // "almost out… and it's back in": once per bead, only if the type does that at all
-    this.fakeAt = !bead.fakedOut && bead.type.fakeout && rand() < bead.type.fakeout ? 0.68 + rand() * 0.2 : null;
     if (this.jam > 0) {
       this.jams.push({ p: 0.38 + (rand() - 0.5) * 0.16, w: this.jam * 30 * s, hit: false, freed: false });
       if (this.jam > 0.55) this.jams.push({ p: 0.72 + (rand() - 0.5) * 0.1, w: this.jam * 14 * s, hit: false, freed: false });
@@ -199,43 +192,17 @@ export class Pull {
         }
       }
       this.progress = p;
-      if (this.fakeAt !== null && p >= this.fakeAt) {
-        events.push({ kind: "slipped" });
-        return events;
-      }
       // creeps out to ~2.4 radii by the threshold (further for a long-necked charm), curve set by friction
       const creep = Math.pow(p, 1 + b.type.friction * 1.4) * b.radius * 2.4 * this.neck;
       offMag = 1.6 * s + creep;
-      if (jammed) {
-        // wedged: the bead quivers in place while the finger strains against it
-        this.quiver += dt;
-        offMag += Math.sin(this.quiver * Math.PI * 2 * 22) * 0.55 * s * over;
-      }
       const step = Math.floor(p * 6);
       if (step > this.lastStep && p < 1) {
         this.lastStep = step;
         events.push({ kind: "tick", step });
       }
       if (d >= span) {
-        const extra = d - span;
-        this.holdT += dt;
-        // past the threshold. A small bead gives up on its own if you just hold or drag on;
-        // anything bigger needs a real yank – hold it there too slowly and the gel takes it back.
-        const small = b.type.mass < 0.9 && this.jam === 0;
-        const holdLimit = 0.45 + 0.8 * clamp((b.type.mass - 0.5) / 1.5, 0, 1) + 0.6 * this.jam;
-        const stalled = extra > (34 + 40 * this.jam) * (this.t2Base / 30) || this.holdT > holdLimit;
-        const yank = speed >= b.type.minSpeed;
-        if (yank || (stalled && (small || speed >= b.type.minSpeed * 0.45))) {
-          const tooHard = speed > 1500 && this.rand() < 0.065;
-          if (tooHard) events.push({ kind: "slipped" });
-          else events.push({ kind: "pop", dirX: ux, dirY: uy, speed });
-          return events;
-        }
-        if (stalled) {
-          events.push({ kind: "slipped" });
-          return events;
-        }
-        offMag += extra * 0.18;
+        events.push({ kind: "pop", dirX: ux, dirY: uy, speed });
+        return events;
       }
     }
     // gel around the socket is dragged toward the finger: 6~18px at full grip, a bit more while

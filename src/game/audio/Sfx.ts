@@ -359,11 +359,19 @@ class Sfx {
     });
   }
 
-  /** the last bead left the pad: a quiet, warm two-note settle (no fanfare) */
+  /** Three low-level cues as the last pull advances; no continuous hiss/loop. */
+  finishCharge(step: number) {
+    if (!this.ready) return;
+    const f = 330 + Math.min(3, step) * 55;
+    this.tone("sine", f * 0.92, f, 0.11, 0.035 + step * 0.006, { attack: 0.025 });
+  }
+
+  /** Everything arrived and settled: a warm cadence with one final star note. */
   done() {
     if (!this.ready) return;
     this.tone("sine", 523 * this.j(0.02), 520, 0.28, 0.1, { attack: 0.01 });
     this.tone("sine", 784 * this.j(0.02), 780, 0.42, 0.08, { attack: 0.01, delay: 0.11 });
+    this.tone("sine", 1046, 1042, 0.34, 0.045, { attack: 0.015, delay: 0.25 });
     this.burst(0.12, 0.03, { type: "lowpass", freq: 700, q: 0.7, attack: 0.03, delay: 0.02 });
   }
 

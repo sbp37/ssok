@@ -132,6 +132,12 @@ export class Game extends Emitter<GameEvents> {
   /** Completion follows every flight and the existing collector sleep, not a POP timer. */
   private finishing = false;
   private finishQuiet = 0;
+  /** Short, bounded closing gesture; never a reward or a timing gate. */
+  private finaleT = -1;
+  private finaleCharge = 0;
+  private finalePull: Pull | null = null;
+  private finaleNote = 0;
+  private readonly reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   private ro: ResizeObserver;
   private tmp = { x: 0, y: 0 };
   /** `?test=5` → sparse 5-bead pad for tuning the hand-feel */
@@ -255,6 +261,10 @@ export class Game extends Emitter<GameEvents> {
   newPad(instant = false) {
     this.finishing = false;
     this.finishQuiet = 0;
+    this.finaleT = -1;
+    this.finaleCharge = 0;
+    this.finalePull = null;
+    this.finaleNote = 0;
     this.scheduled = [];
     for (const p of this.pulls.values()) this.releaseBead(p.bead);
     this.pulls.clear();
@@ -672,8 +682,8 @@ export class Game extends Emitter<GameEvents> {
       const slotR = host && host !== b ? host.radius * 1.12 : Infinity;
       const sr = Math.min(b.radius, slotR) * 0.92;
       this.gel.sockets.push({ x: b.rx, y: b.ry, r: sr, type: b.type, rot: b.rot, k: 0.9 + rng.next() * 0.45, t: this.time });
-      // fresh: crisp and dark for a couple of seconds, then it settles
-      this.gel.addDent(b.rx, b.ry, sr, 2.4 + b.type.mass * 0.3, b.type, b.rot);
+      // Freshness is shaded once in the base socket. A separate unwarped
+      // dent copy drifted over the mesh and made non-round holes look doubled.
     }
     if (b.type.rarity === "special") this.treasure.noteSpecial(b.type.id);
     this.gel.markDirty();
@@ -787,6 +797,18 @@ export class Game extends Emitter<GameEvents> {
 
     // pulls
     const now = performance.now();
+    const finalPull = this.mode === "free" && this.remainingCount() === 1 ? [...this.pulls.values()][0] ?? null : null;
+    if (finalPull !== this.finalePull) {
+      this.finalePull = finalPull;
+      this.finaleNote = 0;
+    }
+    const charge = finalPull ? finalPull.tension * 0.25 + finalPull.progress * 0.75 : 0;
+    this.finaleCharge += (charge - this.finaleCharge) * (1 - Math.exp(-dt * 12));
+    const note = Math.floor(charge * 3.2);
+    if (finalPull && note > this.finaleNote) {
+      this.finaleNote = note;
+      sfx.finishCharge(note);
+    }
     for (const [id, pull] of [...this.pulls]) {
       const f = this.fingers.get(id);
       if (!f) continue;
@@ -835,9 +857,15 @@ export class Game extends Emitter<GameEvents> {
       this.finishQuiet = arrived && this.collector.settled ? this.finishQuiet + dt : 0;
       if (this.finishQuiet >= 0.12) {
         this.finishing = false;
+        this.finaleT = 0;
+        if (!this.reducedMotion) this.gel.recoil(0, 18 * this.s);
         sfx.done();
         this.emit("padEmpty", undefined);
       }
+    }
+    if (this.finaleT >= 0) {
+      this.finaleT += dt;
+      if (this.finaleT > 1.15) this.finaleT = -1;
     }
 
     for (let i = this.threads.length - 1; i >= 0; i--) {
@@ -933,6 +961,13 @@ export class Game extends Emitter<GameEvents> {
     for (const p of this.pulls.values()) {
       this.drawNeck(ctx, p.bead, p);
       this.drawEmbedded(ctx, p.bead, true);
+      if (p === this.finalePull && this.finaleCharge > 0.1) {
+        const b = p.bead;
+        this.gel.warp(b.rx + b.off.x, b.ry + b.off.y, this.tmp);
+        const q = this.finaleCharge;
+        this.drawFinishStar(ctx, this.tmp.x - b.radius * 1.2, this.tmp.y - b.radius * 0.6, (1.5 + q * 3) * this.s, q * 0.75);
+        this.drawFinishStar(ctx, this.tmp.x + b.radius * 1.05, this.tmp.y + b.radius * 0.35, (1 + q * 2.2) * this.s, q * 0.55);
+      }
     }
     for (const th of this.threads) this.drawThread(ctx, th);
     for (const f of this.flashes) {
@@ -948,20 +983,51 @@ export class Game extends Emitter<GameEvents> {
       ctx.arc(f.x, f.y, r, 0, Math.PI * 2);
       ctx.fill();
     }
+    this.drawFinale(ctx);
     ctx.restore();
 
     for (const b of this.beads) if (b.state === "flying" && b.fly) this.drawFlying(ctx, b);
     this.collector.draw(ctx, dpr);
   }
 
+  private drawFinishStar(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, alpha: number) {
+    ctx.save();
+    ctx.globalAlpha = clamp(alpha, 0, 1);
+    ctx.fillStyle = "#fff9e8";
+    ctx.beginPath();
+    ctx.moveTo(x, y - r);
+    ctx.quadraticCurveTo(x + r * 0.2, y - r * 0.2, x + r, y);
+    ctx.quadraticCurveTo(x + r * 0.2, y + r * 0.2, x, y + r);
+    ctx.quadraticCurveTo(x - r * 0.2, y + r * 0.2, x - r, y);
+    ctx.quadraticCurveTo(x - r * 0.2, y - r * 0.2, x, y - r);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  private drawFinale(ctx: CanvasRenderingContext2D) {
+    if (this.finaleT < 0) return;
+    // Six quiet glints, staggered once, all gone within 1.15 seconds.
+    for (let i = 0; i < 6; i++) {
+      const p = (this.finaleT - i * 0.07) / 0.72;
+      if (p <= 0 || p >= 1) continue;
+      const angle = -Math.PI * 0.8 + i * 2.39996;
+      const radius = this.gel.R * (0.25 + (i % 3) * 0.12);
+      const rise = this.reducedMotion ? 0 : p * 7 * this.s;
+      const size = (4 + i % 3) * this.s;
+      this.drawFinishStar(ctx, Math.cos(angle) * radius, Math.sin(angle) * radius - rise, size, Math.sin(p * Math.PI) * 0.95);
+    }
+  }
+
   /** everything embedded in the gel, at rest positions (the mesh does the moving) */
   private drawBaseBeads(ctx: CanvasRenderingContext2D) {
     const gel = this.gel;
-    // a hole is sharpest when fresh and settles to about a third of its depth over ~10s – the gel
+    // a hole is sharpest when fresh and settles to 10% more residual depth than before – the gel
     // relaxes, the pad stops looking perforated
     for (const s of gel.sockets) {
       const age = this.time - (s.t ?? -99);
-      gel.drawSocket(ctx, s.x, s.y, s.r, s.type, s.rot, (s.k ?? 1) * (0.35 + 0.65 * Math.exp(-age / 3.5)));
+      const healing = 0.385 + 0.615 * Math.exp(-age / 3.5);
+      const fresh = 1 + 0.12 * Math.exp(-age / 0.8);
+      gel.drawSocket(ctx, s.x, s.y, s.r, s.type, s.rot, (s.k ?? 1) * healing * fresh);
     }
     const covered = new Set<number>();
     for (const b of this.beads) if (b.layer === 0 && (b.state === "embedded" || b.state === "held")) covered.add(b.slot);
@@ -985,7 +1051,7 @@ export class Game extends Emitter<GameEvents> {
         if (layer === 1 && covered.has(b.slot)) {
           // the hidden object is bigger than the bead sitting on it: its edges show
           // around the host, fading in as the pad empties – "what's that in there?"
-          if (b.hidden) {
+          if (b.hidden && b.type.id !== "king") {
             const vis = this.pad.hiddenVisibility ?? 1;
             const peek = this.time < this.peekUntil;
             ctx.globalAlpha = peek ? 0.85 : (0.12 + 0.55 * clamp(emptied * 1.4, 0, 1)) * vis;

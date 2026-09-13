@@ -195,22 +195,25 @@ function paintBody(ctx: CanvasRenderingContext2D, type: BeadType, color: string,
   }
 
   if (m === "shell") {
-    // iridescent bands
+    // Broad nacre colour fields, not elliptical planet-like stripes.
     ctx.save();
     ctx.clip();
     const bands = ["#f7b8d0", "#b8e0f7", "#d9f7c8", "#f7e6b8"];
-    ctx.lineWidth = r * 0.16;
-    ctx.globalAlpha = 0.35;
     bands.forEach((b, i) => {
-      ctx.strokeStyle = b;
-      ctx.beginPath();
-      ctx.ellipse(-r * 0.5 + i * r * 0.32, r * 0.2, r * 1.2, r * 0.5, -0.6, 0, Math.PI * 2);
-      ctx.stroke();
+      const x = -r * 0.55 + (i % 2) * r * 0.95;
+      const y = -r * 0.4 + Math.floor(i / 2) * r * 0.85;
+      const sheen = ctx.createRadialGradient(x, y, 0, x, y, r * 1.05);
+      sheen.addColorStop(0, b + "88");
+      sheen.addColorStop(1, b + "00");
+      ctx.fillStyle = sheen;
+      ctx.fillRect(-r, -r, r * 2, r * 2);
     });
     ctx.restore();
   }
 
   // rim
+  // Canvas save/restore does not restore paths; always outline the bead.
+  shapePath(ctx, type, r);
   ctx.lineWidth = Math.max(0.8, r * 0.07);
   ctx.strokeStyle = m === "glass" ? lighten(color, 0.4, 0.35) : darken(color, 0.4, 0.3);
   ctx.stroke();
@@ -452,7 +455,7 @@ export function getContourMeniscus(type:BeadType,color:string,radius:number,dpr:
   m.drawImage(source.canvas,0,0);m.globalCompositeOperation='source-in';m.fillStyle='#fff';m.fillRect(0,0,mask.width,mask.height);
   // hard outline: the photo cutouts carry a faint baked-in drop shadow; left in the mask it became
   // a big tilted halo ring around the bead
-  {const img=m.getImageData(0,0,mask.width,mask.height),d=img.data;for(let i=3;i<d.length;i+=4)d[i]=d[i]>140?255:0;m.putImageData(img,0,0);}
+  {const img=m.getImageData(0,0,mask.width,mask.height),d=img.data;for(let i=3;i<d.length;i+=4)d[i]=Math.max(0,Math.min(255,(d[i]-140)*255/48));m.putImageData(img,0,0);}
   const canvas=make(),ctx=canvas.getContext('2d')!;ctx.scale(dpr,dpr);
   const ux=-.6*Math.cos(angle)-.8*Math.sin(angle),uy=.6*Math.sin(angle)-.8*Math.cos(angle);
   const fx=Math.sin(angle),fy=Math.cos(angle);
@@ -470,12 +473,11 @@ export function getContourMeniscus(type:BeadType,color:string,radius:number,dpr:
     return g;
   };
   // A visible inset wall separates the bead from the raised outer lip. The
-  // opening is slightly wider and extends toward the viewer, like the existing
-  // pulled socket, but much shallower. Never paint its shading over the bead.
+  // opening is slightly wider, without a projecting bottom ledge. Never paint
+  // its shading over the bead.
   const opening=make(),o=opening.getContext('2d')!;o.scale(dpr,dpr);
   const seat=Math.max(1.2,Math.min(2.4,r*.11));
-  const forward=Math.min(1.7,r*.1);
-  o.drawImage(spread(seat),fx*forward,fy*forward,w,h);
+  o.drawImage(spread(seat),0,0,w,h);
   const cavity=make(),v=cavity.getContext('2d')!;v.scale(dpr,dpr);
   v.drawImage(opening,0,0,w,h);outside(cavity);
   const wallShade=v.createLinearGradient(w/2-fx*r,h/2-fy*r,w/2+fx*r,h/2+fy*r);
@@ -492,8 +494,8 @@ export function getContourMeniscus(type:BeadType,color:string,radius:number,dpr:
   const reflection=l.createLinearGradient(w/2+ux*span,h/2+uy*span,w/2-ux*span,h/2-uy*span);
   reflection.addColorStop(0,'rgba(255,252,255,.68)');
   reflection.addColorStop(.4,'rgba(255,244,254,.25)');
-  reflection.addColorStop(.62,gel.replace(/[\d.]+\)$/,'0.18)'));
-  reflection.addColorStop(1,gel.replace(/[\d.]+\)$/,'0.46)'));
+  reflection.addColorStop(.62,'rgba(255,250,255,.06)');
+  reflection.addColorStop(1,'rgba(255,250,255,0)');
   l.fillStyle=reflection;l.fillRect(0,0,w,h);ctx.drawImage(lip,0,0,w,h);
   // Only the narrow seam touching the bead is shaded. No blurred AO halo.
   const seam=spread(Math.max(.45,r*.032)),s=outside(seam);
@@ -517,19 +519,7 @@ export function getContourMeniscus(type:BeadType,color:string,radius:number,dpr:
   wall.ctx.fillStyle='rgba(77,53,88,.28)';wall.ctx.fillRect(0,0,w,h);
   ctx.drawImage(wall.canvas,0,0,w,h);
 
-  // The front gel physically covers the lower silhouette, rather than tinting
-  // the whole lower half. Front remains screen-down even for rotated charms.
-  const cover=Math.max(1.2,Math.min(2.8,r*.16));
-  const front=inset(-fx*cover,-fy*cover);
-  front.ctx.fillStyle=`rgba(${Math.round(gr+(255-gr)*.38)},${Math.round(gg+(255-gg)*.38)},${Math.round(gb+(255-gb)*.38)},.9)`;
-  front.ctx.fillRect(0,0,w,h);ctx.drawImage(front.canvas,0,0,w,h);
-  // A small reflection on the INNER crest connects the covering ledge to the
-  // existing bright outer rim. It is not another complete ring around the bead.
-  const frontCrest=make(),fc=frontCrest.getContext('2d')!;fc.scale(dpr,dpr);
-  fc.drawImage(front.canvas,0,0,w,h);fc.globalCompositeOperation='destination-out';
-  fc.drawImage(front.canvas,fx*.65,fy*.65,w,h);fc.globalCompositeOperation='source-in';
-  fc.fillStyle='rgba(255,250,255,.55)';fc.fillRect(0,0,w,h);
-  ctx.drawImage(frontCrest,0,0,w,h);
+  // No coloured front cap: it read as a pink pedestal under every bead.
   const sp={canvas,w,h};contourCache.set(key,sp);return sp;
 }
 /**

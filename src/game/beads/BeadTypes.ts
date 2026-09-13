@@ -26,7 +26,7 @@ export interface BeadType {
   pull: number;
   /** 0..1 – how reluctantly the bead creeps in stage 2 (curve exponent) */
   friction: number;
-  /** finger speed (px/s) needed at the threshold to actually pop. Slow pulls just stretch. */
+  /** Legacy tuning value (px/s); release now depends on distance, not a speed gate. */
   minSpeed: number;
   /** relative mass: fly time, recoil, sound pitch */
   mass: number;
@@ -40,7 +40,7 @@ export interface BeadType {
   jam?: number;
   /** how far the gel neck stretches before release, relative (1 = normal; soft charms 1.5+, hard heavy beads <1) */
   neck?: number;
-  /** chance (0..1) that the bead, almost out, slips back into its hole once – you grab it again */
+  /** Legacy fakeout tuning, retained for catalogue compatibility; no longer applied. */
   fakeout?: number;
   /** base weight when a pad rolls beads of this rarity (default 1; 0 = only placed on purpose) */
   pick?: number;

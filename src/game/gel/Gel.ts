@@ -162,15 +162,23 @@ function getSocketSprite(r: number, dpr: number, gel: string, type?: BeadType, r
   g.strokeStyle = `rgba(255,255,255,${(0.14 + 0.04 / Math.max(k, 0.9)) * Math.min(1, k + 0.4)})`;
   g.stroke();
   g.restore();
-  // the socket sits in a shallow dip: soft darkening outside the lip, top-left
+  // Non-round sockets have a contour-following dip, not a round shadow behind
+  // the shape. The old radial annulus read as a second circular hole.
   g.save();
   outside(1.08);
-  const dip = g.createRadialGradient(cx - rr * 0.1, cx - rr * 0.12, rr * 1.05 * ext, cx - rr * 0.1, cx - rr * 0.12, rr * 1.5 * ext);
-  dip.addColorStop(0, `rgba(60,45,60,${0.12 * k})`);
-  dip.addColorStop(0.5, `rgba(60,45,60,${0.04 * k})`);
-  dip.addColorStop(1, "rgba(60,45,60,0)");
-  g.fillStyle = dip;
-  g.fillRect(0, 0, size, size);
+  if (type && type.shape !== "circle" && type.shape !== "smile" && type.shape !== "eye") {
+    shape(1.13);
+    g.lineWidth = rr * 0.12;
+    g.strokeStyle = `rgba(60,45,60,${0.055 * k})`;
+    g.stroke();
+  } else {
+    const dip = g.createRadialGradient(cx - rr * 0.1, cx - rr * 0.12, rr * 1.05 * ext, cx - rr * 0.1, cx - rr * 0.12, rr * 1.5 * ext);
+    dip.addColorStop(0, `rgba(60,45,60,${0.12 * k})`);
+    dip.addColorStop(0.5, `rgba(60,45,60,${0.04 * k})`);
+    dip.addColorStop(1, "rgba(60,45,60,0)");
+    g.fillStyle = dip;
+    g.fillRect(0, 0, size, size);
+  }
   g.restore();
   socketCache.set(key, c);
   return c;
@@ -611,13 +619,13 @@ export class Gel {
     const img = g.getImageData(0, 0, size, size);
     const d = img.data;
     for (let i = 0; i < d.length; i += 4) {
-      const n = (Math.random() - 0.5) * 20;
+      const n = (Math.random() - 0.5) * 10;
       const empty = d[i + 3] === 0;
       const base = empty ? 128 : 0;
       d[i] = Math.min(255, Math.max(0, d[i] + base + n));
       d[i + 1] = Math.min(255, Math.max(0, d[i + 1] + base + n));
       d[i + 2] = Math.min(255, Math.max(0, d[i + 2] + base + n));
-      d[i + 3] = Math.min(255, d[i + 3] + 6 + Math.abs(n) * 0.4);
+      d[i + 3] = Math.min(255, d[i + 3] + 3 + Math.abs(n) * 0.25);
     }
     g.putImageData(img, 0, 0);
     this.grain = c;

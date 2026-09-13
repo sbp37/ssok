@@ -94,7 +94,7 @@ export const REF_PAD_R = 170;
 
 function pickType(rng: Rng, skew: Partial<Record<Rarity, number>> = {}, typeSkew: Record<string, number> = {}): BeadType {
   const rarity = rng.weighted(Object.keys(RARITY_WEIGHT) as Rarity[], (r) => RARITY_WEIGHT[r] * (skew[r] ?? 1));
-  const pool = BEAD_TYPES.filter((t) => t.rarity === rarity);
+  const pool = BEAD_TYPES.filter((t) => t.rarity === rarity && (t.pick ?? 1) > 0);
   return rng.weighted(pool, (t) => (typeSkew[t.id] ?? 1) * (t.pick ?? 1));
 }
 
@@ -128,7 +128,7 @@ export interface PadOptions {
   ultraChance?: number;
   /** average chance of a second bead under a surface bead (default 0.4); 1.5× at the centre, 0.5× at the rim */
   deeperChance?: number;
-  /** chance that this pad carries one 왕비즈 (a giant bead, placed first so it gets room) */
+  /** chance that this pad carries one 왕비즈 hidden below a surface bead */
   kingChance?: number;
 }
 
@@ -155,10 +155,9 @@ export function generatePad(padR: number, rng: Rng, opts: PadOptions = {}): Bead
     const radius = rng.range(type.radius[0], type.radius[1]) * s;
     picks.push({ type, radius });
   }
-  if (opts.kingChance && rng.chance(opts.kingChance)) {
-    const king = BEAD_TYPES.find((t) => t.id === "king")!;
-    picks.push({ type: king, radius: rng.range(king.radius[0], king.radius[1]) * s });
-  }
+  const king = opts.deeper !== false && opts.kingChance && rng.chance(opts.kingChance)
+    ? BEAD_TYPES.find((t) => t.id === "king") : undefined;
+  const kingRadius = king ? rng.range(king.radius[0], king.radius[1]) * s : 0;
   picks.sort((a, b) => b.radius - a.radius);
 
   const beads: Bead[] = [];
@@ -246,6 +245,26 @@ export function generatePad(padR: number, rng: Rng, opts: PadOptions = {}): Bead
       b.radius = Math.max(b.radius, rng.range(ut.radius[0], ut.radius[1]) * s * 0.8);
       b.rot = 0;
       b.hidden = true;
+    }
+  }
+  // The giant is a discovery, never a surface pick. Keep existing treasures
+  // intact and prefer an empty deep slot so no ordinary bead is replaced.
+  if (king) {
+    const surface = beads.filter((b) => b.layer === 0);
+    const empty = surface.filter((host) => !beads.some((b) => b.slot === host.slot && b.layer === 1));
+    const eligible = empty.length ? empty : surface.filter((host) =>
+      !beads.some((b) => b.slot === host.slot && b.layer === 1 && b.hidden));
+    const near = eligible.sort((a, b) => Math.hypot(a.rx, a.ry) - Math.hypot(b.rx, b.ry))
+      .slice(0, Math.max(1, Math.ceil(eligible.length * 0.3)));
+    if (near.length) {
+      const host = rng.pick(near);
+      for (let i = beads.length - 1; i >= 0; i--) {
+        if (beads[i].slot === host.slot && beads[i].layer === 1) beads.splice(i, 1);
+      }
+      const buried = makeBead(king, rng.pick(king.colors), kingRadius, 0, 1, host.slot, host.rx, host.ry);
+      buried.hidden = true;
+      buried.slotR = host.radius;
+      beads.push(buried);
     }
   }
   return beads;
