@@ -30,8 +30,6 @@ export interface Bead {
   id: number;
   type: BeadType;
   color: string;
-  /** Visual asset family, travels with the bead into the collector. */
-  art?: "heart";
   /** live radius in px */
   radius: number;
   rot: number;
@@ -100,6 +98,20 @@ function pickType(rng: Rng, skew: Partial<Record<Rarity, number>> = {}, typeSkew
   return rng.weighted(pool, (t) => (typeSkew[t.id] ?? 1) * (t.pick ?? 1));
 }
 
+/** Break the repeated-sticker look without making the shared top-left light
+ * incoherent. Round glass/pearls only roll a little; faceted metal may turn
+ * freely, while shaped charms keep their existing full rotation. */
+function beadRotation(type: BeadType, rng: Rng, ordinal = 0) {
+  if (type.shape !== "circle" || type.material === "metal") return rng.range(-Math.PI, Math.PI);
+  if (type.material === "glass" || type.material === "pearl") {
+    // Golden-ratio stepping prevents two consecutive photographic spheres
+    // from accidentally receiving the same baked-highlight direction.
+    const turn = (ordinal * 0.61803398875 + rng.next() * 0.18) % 1;
+    return (turn - 0.5) * 1.1;
+  }
+  return rng.range(-0.24, 0.24);
+}
+
 /**
  * Lay out a fresh pad. Two layers:
  *  - layer 0: the surface, skewed toward small easy beads (first ~10s feel great)
@@ -110,8 +122,6 @@ function pickType(rng: Rng, skew: Partial<Record<Rarity, number>> = {}, typeSkew
  */
 export interface PadOptions {
   surface?: number;
-  /** Uniform real radius/packing/hit-area scale, never a draw-only enlargement. */
-  radiusScale?: number;
   /** rest outline radius multiplier at angle θ (lobed silhouette) */
   boundary?: (theta: number) => number;
   /** add the deeper layer (default true) */
@@ -147,17 +157,28 @@ export function generatePad(padR: number, rng: Rng, opts: PadOptions = {}): Bead
   const gap = (opts.spacing ?? 4.5) * s;
 
   // choose types first, biggest first for packing
-  const picks: { type: BeadType; radius: number }[] = [];
+  const picks: { type: BeadType; radius: number; rot: number }[] = [];
   // no single type may crowd the surface (a pad of ten identical crystals looks like a pattern)
   const perType = new Map<string, number>();
   const cap = Math.max(3, Math.ceil(surfaceCount * 0.26));
   for (let i = 0; i < surfaceCount; i++) {
     const forced = opts.forceTypes?.length ? BEAD_TYPES.find((t) => t.id === opts.forceTypes![i % opts.forceTypes!.length]) : undefined;
     let type = forced ?? pickType(rng, skew, typeSkew);
-    for (let k = 0; !forced && k < 6 && (perType.get(type.id) ?? 0) >= cap; k++) type = pickType(rng, skew, typeSkew);
-    perType.set(type.id, (perType.get(type.id) ?? 0) + 1);
-    const radius = rng.range(type.radius[0], type.radius[1]) * s * (opts.radiusScale ?? 1);
-    picks.push({ type, radius });
+    const typeCap = (t: BeadType) => t.id === "pearl" ? Math.min(4, cap) : cap;
+    for (let k = 0; !forced && k < 8 && (perType.get(type.id) ?? 0) >= typeCap(type); k++) type = pickType(rng, skew, typeSkew);
+    if (!forced && type.id === "pearl" && (perType.get(type.id) ?? 0) >= typeCap(type)) {
+      type = BEAD_TYPES.find((candidate) => candidate.id === "bigmatte")!;
+    }
+    const ordinal = perType.get(type.id) ?? 0;
+    perType.set(type.id, ordinal + 1);
+    // The photographed pearl is visually prominent, so five near-identical
+    // copies read as a stamp. Spread repeats across the existing radius range
+    // while keeping the hit radius and rendered size identical.
+    const pearlT = (ordinal * 0.37 + rng.next() * 0.28) % 1;
+    const radius = (type.id === "pearl"
+      ? type.radius[0] + (type.radius[1] - type.radius[0]) * pearlT
+      : rng.range(type.radius[0], type.radius[1])) * s;
+    picks.push({ type, radius, rot: beadRotation(type, rng, ordinal) });
   }
   const king = opts.deeper !== false && opts.kingChance && rng.chance(opts.kingChance)
     ? BEAD_TYPES.find((t) => t.id === "king") : undefined;
@@ -165,7 +186,7 @@ export function generatePad(padR: number, rng: Rng, opts: PadOptions = {}): Bead
   picks.sort((a, b) => b.radius - a.radius);
 
   const beads: Bead[] = [];
-  const placed: { x: number; y: number; r: number }[] = [];
+  const placed: { x: number; y: number; r: number; material: BeadType["material"] }[] = [];
   let slot = 0;
   for (const p of picks) {
     const footprint = p.type.shape === "oval" ? p.radius * (p.type.aspect ?? 1.7) * 0.78 : p.radius;
@@ -180,15 +201,18 @@ export function generatePad(padR: number, rng: Rng, opts: PadOptions = {}): Bead
       const y = Math.sin(ang) * rad;
       let clear = true;
       for (const q of placed) {
-        if (Math.hypot(q.x - x, q.y - y) < q.r + footprint + gap) {
+        const pearlGap = p.type.material === "pearl" && q.material === "pearl"
+          ? Math.min(q.r, footprint) * 0.65
+          : 0;
+        if (Math.hypot(q.x - x, q.y - y) < q.r + footprint + gap + pearlGap) {
           clear = false;
           break;
         }
       }
       if (!clear) continue;
-      placed.push({ x, y, r: footprint });
+      placed.push({ x, y, r: footprint, material: p.type.material });
       const color = rng.pick(p.type.colors);
-      const rot = p.type.shape === "circle" ? 0 : rng.range(-Math.PI, Math.PI);
+      const rot = p.rot;
       beads.push(makeBead(p.type, color, p.radius, rot, 0, slot, x, y));
       // deeper bead under this slot? denser toward the middle so the pad has a "core"
       const toEdge = edge > inner ? (rad - inner) / (edge - inner) : 1;
@@ -196,7 +220,7 @@ export function generatePad(padR: number, rng: Rng, opts: PadOptions = {}): Bead
         const dt = pickType(rng, { common: 0.6, big: 1.6, odd: 1.5, special: 1.1 }, typeSkew);
         const dr = Math.min(footprint * 1.02, rng.range(dt.radius[0], dt.radius[1]) * s);
         const dcolor = rng.pick(dt.colors);
-        const drot = dt.shape === "circle" ? 0 : rng.range(-Math.PI, Math.PI);
+        const drot = beadRotation(dt, rng, slot);
         const deepBead = makeBead(dt, dcolor, Math.max(dr, 7 * s), drot, 1, slot, x, y);
         deepBead.slotR = footprint;
         beads.push(deepBead);
@@ -231,7 +255,7 @@ export function generatePad(padR: number, rng: Rng, opts: PadOptions = {}): Bead
         const host = rng.pick(near).b;
         for (let i = beads.length - 1; i >= 0; i--) if (beads[i].slot === host.slot && beads[i].layer === 1) beads.splice(i, 1);
         const hr = rng.range(ht.radius[0], ht.radius[1]) * s;
-        const hb = makeBead(ht, rng.pick(ht.colors), hr, ht.shape === "circle" ? 0 : rng.range(-0.5, 0.5), 1, host.slot, host.rx, host.ry);
+        const hb = makeBead(ht, rng.pick(ht.colors), hr, beadRotation(ht, rng), 1, host.slot, host.rx, host.ry);
         hb.hidden = true;
         hb.slotR = host.radius;
         beads.push(hb);
@@ -265,7 +289,7 @@ export function generatePad(padR: number, rng: Rng, opts: PadOptions = {}): Bead
       for (let i = beads.length - 1; i >= 0; i--) {
         if (beads[i].slot === host.slot && beads[i].layer === 1) beads.splice(i, 1);
       }
-      const buried = makeBead(king, rng.pick(king.colors), kingRadius, 0, 1, host.slot, host.rx, host.ry);
+      const buried = makeBead(king, rng.pick(king.colors), kingRadius, beadRotation(king, rng), 1, host.slot, host.rx, host.ry);
       buried.hidden = true;
       buried.slotR = host.radius;
       beads.push(buried);

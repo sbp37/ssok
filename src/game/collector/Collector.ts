@@ -347,7 +347,7 @@ export class Collector {
       ctx.globalAlpha = 0.5 * fade;
       ctx.drawImage(sh.canvas, it.x - sh.w / 2, it.y - sh.h / 2 + it.r * 0.35 + sink, sh.w, sh.h);
       ctx.globalAlpha = fade;
-      const sp = getBeadSprite(it.bead.type, it.bead.color, it.r, dpr, 0, it.bead.art);
+      const sp = getBeadSprite(it.bead.type, it.bead.color, it.r, dpr);
       ctx.save();
       ctx.translate(it.x, it.y + sink);
       ctx.rotate(it.rot);

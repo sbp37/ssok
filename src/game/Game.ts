@@ -285,7 +285,6 @@ export class Game extends Emitter<GameEvents> {
           hole,
           // Shorter pads requested: keep type/deeper/treasure rolls unchanged.
           surface: Math.max(1, Math.round(preset.surface * 0.7)),
-          radiusScale: preset.radiusScale,
           // how layered this pad is – some pads are mostly one layer, some hide a second one
           // under half their beads; always denser toward the middle than at the rim
           deeperChance: 0.26 + rng.next() * 0.3,
@@ -296,9 +295,6 @@ export class Game extends Emitter<GameEvents> {
           hiddenObject: this.hiddenForThisPad(),
           ultraChance: ULTRA_SURFACE_CHANCE,
         });
-    if ((this.pad.variantOf ?? this.pad.id) === "heart") {
-      for (const bead of this.beads) bead.art = "heart";
-    }
     this.padTotal = this.beads.length;
     this.peekUntil = -1;
     this.gel.sockets = [];
@@ -1106,7 +1102,7 @@ export class Game extends Emitter<GameEvents> {
     ctx.drawImage(sh.canvas, x - sh.w / 2 + lift * 4 * this.s, y - sh.h / 2 + b.radius * (0.18 + lift * 0.5), sh.w, sh.h);
 
     // seen through gel → a softened sprite variant (blur baked in, cached); crisp once it lifts out
-    const sp = getBeadSprite(b.type, b.color, b.radius, dpr, base ? depth * 0.7 * this.s : 0, b.art);
+    const sp = getBeadSprite(b.type, b.color, b.radius, dpr, base ? depth * 0.7 * this.s : 0);
     ctx.save();
     ctx.translate(x, y);
     ctx.rotate(b.rot);
@@ -1124,7 +1120,7 @@ export class Game extends Emitter<GameEvents> {
     // top-left, gel-coloured bottom-right) and a contact shadow – the look the rainbow bead had
     const men = (1 - lift) * (1 - depth) * alpha;
     if (men > 0.02) {
-      const ms = getContourMeniscus(b.type, b.color, b.radius * scale, dpr, this.gel.col(1), b.rot, b.art);
+      const ms = getContourMeniscus(b.type, b.color, b.radius * scale, dpr, this.gel.col(1), b.rot);
       ctx.globalAlpha = men;
       ctx.save();ctx.translate(x,y);ctx.rotate(b.rot);ctx.translate(-x,-y);
       ctx.drawImage(ms.canvas, x - ms.w / 2, y - ms.h / 2, ms.w, ms.h);
@@ -1272,10 +1268,9 @@ export class Game extends Emitter<GameEvents> {
     // The strand is narrower than the bead at both ends (it was a triangle when its base
     // spanned the whole lip) and has a waist that thins as the bead comes out.
     if (offL > r * (0.45 - 0.12 * J)) {
-      const plump = b.art === "heart" ? 1.35 : 1;
-      const w0 = r * (0.6 + 0.1 * J - 0.15 * P) * plump;
-      const w1 = r * (0.5 - 0.2 * P) * (1 + 0.1 * J) * plump;
-      const wm = Math.max(r * 0.12, r * (0.4 - 0.24 * P) * (1 + 0.25 * J + 0.3 * J * O)) * plump;
+      const w0 = r * (0.6 + 0.1 * J - 0.15 * P);
+      const w1 = r * (0.5 - 0.2 * P) * (1 + 0.1 * J);
+      const wm = Math.max(r * 0.12, r * (0.4 - 0.24 * P) * (1 + 0.25 * J + 0.3 * J * O));
       const mx = hx + b.off.x * 0.5;
       const my = hy + b.off.y * 0.5;
       const neck = () => {
@@ -1416,7 +1411,7 @@ export class Game extends Emitter<GameEvents> {
     ctx.globalAlpha = 0.35;
     ctx.drawImage(sh.canvas, x - sh.w / 2, y - sh.h / 2 + b.radius * (0.6 + flyT * 0.6), sh.w, sh.h);
     ctx.globalAlpha = 1;
-    const sp = getBeadSprite(b.type, b.color, b.radius, dpr, 0, b.art);
+    const sp = getBeadSprite(b.type, b.color, b.radius, dpr);
     ctx.save();
     ctx.translate(x, y);
     ctx.rotate(b.rot + f.spin * Math.max(0, f.t - f.hang));

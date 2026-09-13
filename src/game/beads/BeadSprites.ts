@@ -325,15 +325,15 @@ function paintSpecular(ctx: CanvasRenderingContext2D, type: BeadType, r: number)
  *              through gel use a softened variant; cached per bucket so the
  *              base texture never pays for a filter at render time.
  */
-export function getBeadSprite(type: BeadType, color: string, radius: number, dpr: number, soft = 0, art?: "heart"): Sprite {
+export function getBeadSprite(type: BeadType, color: string, radius: number, dpr: number, soft = 0): Sprite {
   const r = Math.round(radius * 2) / 2;
   const sb = Math.round(soft * 4) / 4;
-  const key = `${type.id}|${color}|${r}|${dpr}|${sb}|${art ?? ""}`;
+  const key = `${type.id}|${color}|${r}|${dpr}|${sb}`;
   const hit = cache.get(key);
   if (hit) return hit;
 
   const aspect = type.shape === "oval" ? (type.aspect ?? 1.7) * 0.78 : 1;
-  const pad = art === "heart" ? 12 : 6;
+  const pad = 6;
   const w = Math.ceil((r * aspect + pad) * 2);
   const h = Math.ceil((r + pad) * 2);
   const canvas = document.createElement("canvas");
@@ -344,7 +344,7 @@ export function getBeadSprite(type: BeadType, color: string, radius: number, dpr
   ctx.translate(w / 2, h / 2);
   if (sb > 0 && "filter" in ctx) {
     // draw the crisp sprite once, then re-draw it blurred into this canvas
-    const crisp = getBeadSprite(type, color, radius, dpr, 0, art);
+    const crisp = getBeadSprite(type, color, radius, dpr, 0);
     ctx.filter = `blur(${sb}px)`;
     ctx.drawImage(crisp.canvas, -crisp.w / 2, -crisp.h / 2, crisp.w, crisp.h);
     ctx.filter = "none";
@@ -353,7 +353,7 @@ export function getBeadSprite(type: BeadType, color: string, radius: number, dpr
     return sp;
   }
 
-  const photo = beadAsset(type, art);
+  const photo = beadAsset(type);
   if (photo) {
     // the cutout fits the bead's long axis, aspect preserved; a tall photo of an
     // oval bead is laid down so the type's long axis stays horizontal
@@ -369,7 +369,7 @@ export function getBeadSprite(type: BeadType, color: string, radius: number, dpr
       ctx.restore();
     };
     draw();
-    if (beadAssetTinted(type, art)) {
+    if (beadAssetTinted(type)) {
       // recolour: keep the photo's light and shade, take the bead's hue
       ctx.globalCompositeOperation = "color";
       ctx.fillStyle = color;
@@ -441,77 +441,21 @@ export function getShadowSprite(radius: number, dpr: number): Sprite {
 const meniscusCache = new Map<string, Sprite>();
 const contourCache = new Map<string, Sprite>();
 
-/** Cached distance-to-silhouette lighting: a rounded cup, not a blurred ring.
- * This height profile is strictly visual; input and spring forces never use it. */
-function studioCup(mask: HTMLCanvasElement, dpr: number, r: number, gel: string, angle: number): HTMLCanvasElement {
-  const w=mask.width,h=mask.height;
-  const alpha=mask.getContext("2d")!.getImageData(0,0,w,h).data;
-  const dist=new Float32Array(w*h);
-  for(let i=0;i<dist.length;i++)dist[i]=alpha[i*4+3]>127?0:1e5;
-  const diagonal=Math.SQRT2;
-  for(let y=1;y<h-1;y++)for(let x=1;x<w-1;x++){
-    const i=y*w+x;dist[i]=Math.min(dist[i],dist[i-1]+1,dist[i-w]+1,dist[i-w-1]+diagonal,dist[i-w+1]+diagonal);
-  }
-  for(let y=h-2;y>0;y--)for(let x=w-2;x>0;x--){
-    const i=y*w+x;dist[i]=Math.min(dist[i],dist[i+1]+1,dist[i+w]+1,dist[i+w-1]+diagonal,dist[i+w+1]+diagonal);
-  }
-  // Smooth the *visual distance*, not the bead: a hard alpha staircase must
-  // not turn into glittering normal changes at mobile resolution.
-  const smoothed=new Float32Array(w*h),radius=Math.ceil(dpr*1.6);
-  const weights=Array.from({length:radius*2+1},(_,i)=>Math.exp(-.5*Math.pow((i-radius)/(dpr*.9),2)));
-  const total=weights.reduce((a,b)=>a+b,0);
-  for(let y=0;y<h;y++)for(let x=0;x<w;x++){
-    let sum=0;for(let k=-radius;k<=radius;k++)sum+=dist[y*w+Math.max(0,Math.min(w-1,x+k))]*weights[k+radius];
-    smoothed[y*w+x]=sum/total;
-  }
-  for(let y=0;y<h;y++)for(let x=0;x<w;x++){
-    let sum=0;for(let k=-radius;k<=radius;k++)sum+=smoothed[Math.max(0,Math.min(h-1,y+k))*w+x]*weights[k+radius];
-    dist[y*w+x]=sum/total;
-  }
-  const c=document.createElement("canvas");c.width=w;c.height=h;
-  const ctx=c.getContext("2d")!,img=ctx.createImageData(w,h),pixels=img.data;
-  const rgb=gel.match(/[\d.]+/g)!.slice(0,3).map(Number);
-  const width=Math.min(8,Math.max(3.8,r*.32));
-  const lx=-.6*Math.cos(angle)-.8*Math.sin(angle),ly=.6*Math.sin(angle)-.8*Math.cos(angle);
-  for(let y=1;y<h-1;y++)for(let x=1;x<w-1;x++){
-    const i=y*w+x,d=dist[i]/dpr,t=d/width;if(d===0||t>=1||alpha[i*4+3]===255)continue;
-    const dx=(dist[i+1]-dist[i-1])*.5,dy=(dist[i+w]-dist[i-w])*.5;
-    // Deep inner wall rising to a small soft shoulder, then merging with the pad.
-    const crest=Math.exp(-Math.pow((t-.76)/.2,2));
-    const slope=1.75*(1-t)-.16*crest*2*(t-.76)/.04;
-    const diffuse=(-dx*slope*lx-dy*slope*ly+.85)/Math.hypot(dx*slope,dy*slope,1);
-    const shade=(diffuse-.85)*.3-.12*(1-t)*(1-t);
-    const facing=dx*lx+dy*ly;
-    const shine=.52*crest*(.18+.82*Math.max(0,facing))
-      +.25*Math.exp(-Math.pow((t-.32)/.28,2))*Math.max(0,-facing);
-    for(let ch=0;ch<3;ch++){
-      const body=rgb[ch]+(shade>0?(255-rgb[ch])*shade*2:rgb[ch]*shade);
-      pixels[i*4+ch]=Math.max(0,Math.min(255,body+(255-body)*shine));
-    }
-    pixels[i*4+3]=Math.round((255-alpha[i*4+3])*.88*Math.min(1,(1-t)*5));
-  }
-  ctx.putImageData(img,0,0);return c;
-}
-
 /** Silicone follows the actual charm silhouette, including spaces between
  * petals/cherries. Cached masks retain the original depth/lift animation. */
-export function getContourMeniscus(type:BeadType,color:string,radius:number,dpr:number,gel:string,rotation=0,art?:"heart"):Sprite {
+export function getContourMeniscus(type:BeadType,color:string,radius:number,dpr:number,gel:string,rotation=0):Sprite {
   // The contour rotates with the bead, but the light stays at screen top-left.
   const angle=Math.round(rotation*16/Math.PI)*Math.PI/16;
-  const r=Math.round(radius*2)/2,key=`${type.id}|${color}|${r}|${dpr}|${gel}|${angle}|${art ?? ""}`;
+  const r=Math.round(radius*2)/2,key=`${type.id}|${color}|${r}|${dpr}|${gel}|${angle}`;
   const cached=contourCache.get(key);if(cached)return cached;
-  const source=getBeadSprite(type,color,r,dpr,0,art);
+  const source=getBeadSprite(type,color,r,dpr);
   const {w,h}=source;
   const make=()=>{const c=document.createElement('canvas');c.width=source.canvas.width;c.height=source.canvas.height;return c;};
-  const mask=make(),m=mask.getContext('2d',{willReadFrequently:true})!;
+  const mask=make(),m=mask.getContext('2d')!;
   m.drawImage(source.canvas,0,0);m.globalCompositeOperation='source-in';m.fillStyle='#fff';m.fillRect(0,0,mask.width,mask.height);
   // hard outline: the photo cutouts carry a faint baked-in drop shadow; left in the mask it became
   // a big tilted halo ring around the bead
   {const img=m.getImageData(0,0,mask.width,mask.height),d=img.data;for(let i=3;i<d.length;i+=4)d[i]=Math.max(0,Math.min(255,(d[i]-140)*255/48));m.putImageData(img,0,0);}
-  if (art === "heart") {
-    const canvas=studioCup(mask,dpr,r,gel,angle);
-    const sp={canvas,w,h};contourCache.set(key,sp);return sp;
-  }
   const canvas=make(),ctx=canvas.getContext('2d')!;ctx.scale(dpr,dpr);
   const ux=-.6*Math.cos(angle)-.8*Math.sin(angle),uy=.6*Math.sin(angle)-.8*Math.cos(angle);
   const fx=Math.sin(angle),fy=Math.cos(angle);

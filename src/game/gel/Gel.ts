@@ -77,10 +77,10 @@ const socketCache = new Map<string, HTMLCanvasElement>();
  * this particular socket reads (0.75 shallow … 1.3 deep). Every radial gradient
  * is clipped: a stop-0 colour must never flood a disc.
  */
-function getSocketSprite(r: number, dpr: number, gel: string, type?: BeadType, rot = 0, k = 1, studio = false) {
+function getSocketSprite(r: number, dpr: number, gel: string, type?: BeadType, rot = 0, k = 1) {
   const rq = Math.round(rot * 20) / 20;
   const kq = Math.round(k * 20) / 20;
-  const key = `${Math.round(r)}|${dpr}|${gel}|${type?.id ?? "o"}|${rq}|${kq}|${originalMaterial}|${studio}`;
+  const key = `${Math.round(r)}|${dpr}|${gel}|${type?.id ?? "o"}|${rq}|${kq}|${originalMaterial}`;
   const hit = socketCache.get(key);
   if (hit) return hit;
   const rr = Math.round(r);
@@ -98,18 +98,8 @@ function getSocketSprite(r: number, dpr: number, gel: string, type?: BeadType, r
     g.save();
     g.translate(cx, cx);
     g.rotate(rq);
-    g.scale(sc * (studio ? 1.10 : 1), sc * (studio ? 1.10 : 1));
-    if (studio && type?.shape === "heart") {
-      g.beginPath();g.moveTo(0, rr * .87);
-      g.bezierCurveTo(-rr * .18,rr * .87,-rr * 1.12,-rr * .12,-rr * .91,-rr * .54);
-      g.bezierCurveTo(-rr * .72,-rr,-rr * .25,-rr * .94,0,-rr * .52);
-      g.bezierCurveTo(rr * .25,-rr * .94,rr * .72,-rr,rr * .91,-rr * .54);
-      g.bezierCurveTo(rr * 1.12,-rr * .12,rr * .18,rr * .87,0,rr * .87);g.closePath();
-    } else if (studio && type?.shape === "star") {
-      const pts=Array.from({length:10},(_,i)=>{const a=i*Math.PI/5-Math.PI/2,r0=rr*(i%2?.63:1.13);return {x:Math.cos(a)*r0,y:Math.sin(a)*r0};});
-      g.beginPath();g.moveTo((pts[9].x+pts[0].x)/2,(pts[9].y+pts[0].y)/2);
-      for(let i=0;i<10;i++){const p=pts[i],n=pts[(i+1)%10];g.quadraticCurveTo(p.x,p.y,(p.x+n.x)/2,(p.y+n.y)/2);}g.closePath();
-    } else if (type) shapePath(g, type, rr);
+    g.scale(sc, sc);
+    if (type) shapePath(g, type, rr);
     else {
       g.beginPath();
       g.arc(0, 0, rr, 0, Math.PI * 2);
@@ -314,10 +304,6 @@ export class Gel {
 
   get thick() {
     return this.R * 0.085 * this.thickK;
-  }
-
-  private get studioHeart() {
-    return !originalMaterial && (this.pad.variantOf ?? this.pad.id) === "heart";
   }
 
   /** rest boundary radius multiplier at angle θ */
@@ -586,12 +572,6 @@ export class Gel {
       if (this.holeR.length) d = Math.min(d, r - sampleRadius(a, this.holeR));
       if (d <= 0) return 0;
       // A rounded shoulder at each petal, with a gently domed centre.
-      if (this.studioHeart) {
-        // A continuous soft bevel, not several concentric outline strokes.
-        // Visual height only: the spring mesh and collision surface are unchanged.
-        return this.thick * (1.6 * (1 - Math.exp(-d / (R * .10)))
-          + .65 * Math.exp(-r * r / (R * R * .85)));
-      }
       return this.thick * (0.85 * (1 - Math.exp(-d / (R * 0.095))) + 0.36 * Math.exp(-r * r / (R * R * .7)));
     };
     for (let j = 0; j < 320; j++) for (let i = 0; i < 320; i++) {
@@ -606,7 +586,7 @@ export class Gel {
       data.data[k] = light ? 255 : Math.round(this.color.r * .67);
       data.data[k + 1] = light ? 250 : Math.round(this.color.g * .63);
       data.data[k + 2] = light ? 254 : Math.round(this.color.b * .71);
-      data.data[k + 3] = Math.round(Math.min(light ? .3 : .2, Math.abs(response) * (this.studioHeart ? 1.4 : .85)) * 255);
+      data.data[k + 3] = Math.round(Math.min(light ? .3 : .2, Math.abs(response) * .85) * 255);
     }
     g.putImageData(data, 0, 0);
     this.formLights.set(key, c);
@@ -670,8 +650,7 @@ export class Gel {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, size, size);
     ctx.setTransform(dpr, 0, 0, dpr, E * dpr, E * dpr);
-    const heart = this.studioHeart;
-    const t = this.thick * (heart ? 1.25 : 1);
+    const t = this.thick;
 
     // ── side wall: the outline swept down by the slab thickness
     const steps = 7;
@@ -703,7 +682,7 @@ export class Gel {
     this.restPath(ctx);
     ctx.clip("evenodd");
     this.restPath(ctx, t * 0.35);
-    ctx.fillStyle = this.col(heart ? 0.09 : originalMaterial ? 0.25 : 0.17, 0.25);
+    ctx.fillStyle = this.col(originalMaterial ? 0.25 : 0.17, 0.25);
     ctx.fill("evenodd");
     ctx.restore();
 
@@ -711,13 +690,7 @@ export class Gel {
     this.restPath(ctx);
     const tr = 1 / this.transparency;
     const body = ctx.createRadialGradient(-R * 0.1, -R * 0.15, R * 0.05, 0, 0, R * 1.08);
-    if (heart) {
-      // Milk suspended in warm translucent silicone. No grey veil over beads.
-      body.addColorStop(0, this.col(.68 * tr, -.32));
-      body.addColorStop(.4, this.col(.64 * tr, -.17));
-      body.addColorStop(.75, this.col(.71 * tr, -.07));
-      body.addColorStop(1, this.col(.82 * tr, .04));
-    } else if (this.centerThick) {
+    if (this.centerThick) {
       // this pad is thickest in the middle: denser colour at the centre, thinning toward the tips
       body.addColorStop(0, this.col((originalMaterial ? 0.42 : 0.36) * tr, 0.06));
       body.addColorStop(0.4, this.col((originalMaterial ? 0.3 : 0.25) * tr, -0.02));
@@ -735,7 +708,7 @@ export class Gel {
     ctx.save();
     ctx.clip("evenodd");
     // thickness band hugging the actual (lobed) outline: several inset strokes
-    for (let i = 0; i < (heart ? 0 : 4); i++) {
+    for (let i = 0; i < 4; i++) {
       this.restPath(ctx, 0, 1 - i * 0.028);
       ctx.lineWidth = R * 0.075;
       ctx.strokeStyle = this.col((0.1 - i * 0.02) * (originalMaterial ? 1 : 0.75), 0.3);
@@ -753,11 +726,11 @@ export class Gel {
     }
     this.restPath(ctx);
     ctx.lineWidth = R * 0.014;
-    ctx.strokeStyle = this.col(heart ? 0.1 : 0.3, 0.35);
+    ctx.strokeStyle = this.col(0.3, 0.35);
     ctx.stroke();
     // micro texture
     const grain = this.ensureGrain();
-    ctx.globalAlpha=heart ? 0.3 : originalMaterial ? 1 : 0.55;
+    ctx.globalAlpha=originalMaterial ? 1 : 0.55;
     ctx.drawImage(grain, -grain.width / 2, -grain.height / 2, grain.width, grain.height);
     ctx.globalAlpha=1;
 
@@ -775,7 +748,7 @@ export class Gel {
 
     // ── sockets + embedded beads (caller)
     inner(ctx);
-    if (!originalMaterial && !heart) {
+    if (!originalMaterial) {
       // Low, rounded perimeter bead on the top face. It follows only the outer
       // silhouette: centre holes keep their own wall treatment and no gameplay
       // geometry changes. Broad colour carries the form; hairline shine only
@@ -880,7 +853,7 @@ export class Gel {
 
   /** draw a socket (empty hole) – for `inner` callbacks */
   drawSocket(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, type?: BeadType, rot = 0, k = 1) {
-    const sp = getSocketSprite(r, this.texDpr, this.col(1), type, rot, k, this.studioHeart);
+    const sp = getSocketSprite(r, this.texDpr, this.col(1), type, rot, k);
     const w = sp.width / this.texDpr;
     ctx.drawImage(sp, x - w / 2, y - w / 2, w, w);
   }
