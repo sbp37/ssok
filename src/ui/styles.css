@@ -68,10 +68,6 @@ body,
   justify-content: center;
   border-top: 1px solid rgba(43, 39, 48, 0.06);
   background: rgba(255, 255, 255, 0.35);
-  font-size: 11px;
-  letter-spacing: 0.12em;
-  color: var(--ink-faint);
-  user-select: none;
 }
 /* only the game canvases fill the playfield – icon canvases in sheets/panels size themselves */
 .playfield > canvas {

@@ -12,7 +12,7 @@ import { sfx } from "./audio/Sfx";
 import { haptics } from "./haptics";
 import { clamp, easeOutCubic, rng } from "./util/math";
 import { PADS, padById, resolvePad, type PadType } from "./pads/PadTypes";
-import { DiscoveryProvider, MockRewardedProvider, PadProgress, isRareVariant, type NextPadProvider, type RewardedUnlockProvider } from "./pads/progress";
+import { DiscoveryProvider, PadProgress, isRareVariant, type NextPadProvider } from "./pads/progress";
 import { DAY_NONE_FACTOR, FIRST_TREASURE_GUARANTEE, HIDDEN_POOLS, NONE, ULTRA_SURFACE_CHANCE } from "./rewards/rates";
 import { ULTRA_TYPES } from "./beads/BeadTypes";
 import { TreasureStore, treasureKind, type TreasureKind } from "./rewards/treasure";
@@ -117,7 +117,6 @@ export class Game extends Emitter<GameEvents> {
   /** pads */
   progressStore = new PadProgress();
   nextProvider: NextPadProvider = new DiscoveryProvider();
-  rewarded: RewardedUnlockProvider = new MockRewardedProvider();
   treasure = new TreasureStore();
   /** the pad after this one – rolled once (and saved) so NEXT, the door and a restart all agree */
   private pendingNext: PadType | null = null;
@@ -390,7 +389,7 @@ export class Game extends Emitter<GameEvents> {
     };
   }
 
-  /** is the next pad a rare variant passing by? (the only thing an ad is offered for) */
+  /** is the next pad a rare variant passing by? */
   get nextIsRare() {
     return isRareVariant(this.nextPad);
   }

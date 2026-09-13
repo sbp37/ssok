@@ -4,6 +4,7 @@ import { preloadBeadAssets } from "../game/beads/BeadAssets";
 import { sfx } from "../game/audio/Sfx";
 import { NextPanel, type NextView } from "./NextPanel";
 import { CollectionSheet, SettingsSheet } from "./Sheets";
+import { AdPolicy, type AdKind } from "../game/ads/AdPolicy";
 
 interface Toast {
   id: number;
@@ -23,6 +24,8 @@ export function App() {
   const gameRef = useRef<Game | null>(null);
   const timers = useRef<number[]>([]);
   const completionTimer = useRef<number | undefined>(undefined);
+  const ads = useRef<AdPolicy | null>(null);
+  const transitioning = useRef(false);
   const [phase, setPhase] = useState<Phase>("intro");
   const [hintHidden, setHintHidden] = useState(false);
   const [pulled, setPulled] = useState(0);
@@ -60,11 +63,14 @@ export function App() {
     void Promise.race([preloadBeadAssets(), new Promise<void>((r) => setTimeout(r, 350))]).then(() => {
       if (cancelled) return;
       game = new Game(canvas);
+      ads.current = new AdPolicy();
       gameRef.current = game;
       offs.push(...bind(game));
     });
     return () => {
       cancelled = true;
+      ads.current?.cancel();
+      ads.current = null;
       offs.forEach((off) => off());
       timers.current.forEach((t) => window.clearTimeout(t));
       game?.destroy();
@@ -103,7 +109,8 @@ export function App() {
         // hold the empty pad (and the full jar) for a beat, say it quietly, then offer the door
         setFlow("done");
         window.clearTimeout(completionTimer.current);
-        completionTimer.current = window.setTimeout(() => setFlow("ready"), 650);
+        // Finale stars last 1.15s: never invite an ad before that gesture ends.
+        completionTimer.current = window.setTimeout(() => setFlow("ready"), 1200);
         timers.current.push(completionTimer.current);
       }),
       game.on("progress", ({ emptied }) => {
@@ -143,23 +150,27 @@ export function App() {
     return offs;
   };
 
-  const openNext = () => {
+  const transition = async (kind: AdKind, plain = false) => {
     const g = gameRef.current;
-    if (!g) return;
-    sfx.unlock();
-    g.openPad(g.nextPad);
-  };
-  /** a rare variant is passing: "광고 보고 잡기" → (mock) rewarded → open it. "그냥 다음" → the plain pad. */
-  const catchRare = async () => {
-    const g = gameRef.current;
-    if (!g || watching) return;
+    const policy = ads.current;
+    if (!g || !policy || transitioning.current || flow !== "ready" || !padEmpty) return;
+    transitioning.current = true;
     setWatching(true);
-    const ok = await g.rewarded.watch();
-    setWatching(false);
-    if (ok) g.openPad(g.nextPad);
-    else g.openNextPlain();
+    sfx.unlock();
+    const current = g.pad;
+    try {
+      const result = await policy.next(kind, g.progressStore.totalCompleted);
+      if (result === null || gameRef.current !== g || g.pad !== current) return;
+      if (plain || (kind === "rewarded" && result !== "rewarded")) g.openNextPlain();
+      else g.openPad(g.nextPad);
+    } finally {
+      transitioning.current = false;
+      if (gameRef.current === g) setWatching(false);
+    }
   };
-  const skipRare = () => gameRef.current?.openNextPlain();
+  const openNext = () => transition("interstitial");
+  const catchRare = () => transition("rewarded");
+  const skipRare = () => transition("interstitial", true);
 
   return (
     <div className="stage">
@@ -207,8 +218,8 @@ export function App() {
           <div className="bottom">
             {phase === "free" && next && (emptied >= 0.68 || padEmpty) && <NextPanel info={next} emphasis={padEmpty ? 1 : 0} reveal={padEmpty ? 1 : Math.max(0, Math.min(1, (emptied - 0.5) / 0.4))} />}
             {phase === "free" && padEmpty && flow === "ready" && next && !next.rare && (
-              <button className="btn" onClick={openNext}>
-                다음 패드 열기
+              <button className="btn" onClick={openNext} disabled={watching}>
+                {watching ? "잠깐…" : "다음 패드 열기"}
               </button>
             )}
             {phase === "free" && padEmpty && flow === "ready" && next && next.rare && (
@@ -217,7 +228,7 @@ export function App() {
                   {watching ? "잠깐…" : "광고 보고 잡기"}
                   <small>희귀 패드</small>
                 </button>
-                <button className="link" onClick={skipRare}>
+                <button className="link" onClick={skipRare} disabled={watching}>
                   그냥 다음
                 </button>
               </div>
@@ -228,9 +239,7 @@ export function App() {
         {sheet === "settings" && <SettingsSheet onClose={() => setSheet("")} />}
       </div>
       {/* reserved for the bottom banner ad – no game content ever draws here */}
-      <div className="ad-slot" aria-hidden="true">
-        <span>광고 영역</span>
-      </div>
+      <div className="ad-slot" aria-hidden="true" />
     </div>
   );
 }

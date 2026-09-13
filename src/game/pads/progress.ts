@@ -250,21 +250,7 @@ export class DiscoveryProvider implements NextPadProvider {
   }
 }
 
-/** Future rewarded-ad seam. Mock today: "watching" just succeeds after a beat. */
-export interface RewardedUnlockProvider {
-  canWatch(): boolean;
-  watch(): Promise<boolean>;
-}
-export class MockRewardedProvider implements RewardedUnlockProvider {
-  canWatch() {
-    return true;
-  }
-  watch() {
-    return new Promise<boolean>((res) => setTimeout(() => res(true), 450));
-  }
-}
-
-/** a variant pad is the only thing an ad is ever offered for – and it can always be skipped */
+/** Variants may be selected via the optional rewarded transition. */
 export function isRareVariant(p: PadType) {
   return !!p.tier;
 }
