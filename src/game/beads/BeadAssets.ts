@@ -34,9 +34,19 @@ const assetIds: Record<string, string> = {
 
 /** photos that get recoloured to the bead's colour (keeps their shading and sparkle, swaps the hue) */
 const TINTED = new Set(["pink", "violet", "faceted", "pearl", "star", "long"]);
+const heartAssets: Record<string, string> = {
+  tiny: "studio-glass", marble: "studio-glass", bigglass: "studio-glass",
+  pearl: "studio-pearl", bigpearl: "studio-pearl", heart: "studio-heart",
+};
+// Fall back to the previous photograph if a studio asset fails to decode.
+function assetName(type: BeadType, art?: "heart") {
+  const studio = art === "heart" ? heartAssets[type.id] : undefined;
+  return studio && images.has(studio) ? studio : assetIds[type.id];
+}
 
-export function beadAssetTinted(type: BeadType) {
-  return TINTED.has(assetIds[type.id]);
+export function beadAssetTinted(type: BeadType, art?: "heart") {
+  const name = assetName(type, art);
+  return TINTED.has(name) || name === "studio-glass";
 }
 
 const images = new Map<string, HTMLImageElement>();
@@ -46,7 +56,7 @@ let pending: Promise<void> | undefined;
 export function preloadBeadAssets(): Promise<void> {
   if (originalMaterial) return Promise.resolve();
   pending ??= Promise.all(
-    [...new Set(Object.values(assetIds))].map(
+    [...new Set([...Object.values(assetIds), ...Object.values(heartAssets)])].map(
       (name) =>
         new Promise<void>((resolve) => {
           const img = new Image();
@@ -68,6 +78,6 @@ export function preloadBeadAssets(): Promise<void> {
   return pending;
 }
 
-export function beadAsset(type: BeadType) {
-  return originalMaterial ? undefined : images.get(assetIds[type.id]);
+export function beadAsset(type: BeadType, art?: "heart") {
+  return originalMaterial ? undefined : images.get(assetName(type, art));
 }

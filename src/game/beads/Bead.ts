@@ -30,6 +30,8 @@ export interface Bead {
   id: number;
   type: BeadType;
   color: string;
+  /** Visual asset family, travels with the bead into the collector. */
+  art?: "heart";
   /** live radius in px */
   radius: number;
   rot: number;
@@ -108,6 +110,8 @@ function pickType(rng: Rng, skew: Partial<Record<Rarity, number>> = {}, typeSkew
  */
 export interface PadOptions {
   surface?: number;
+  /** Uniform real radius/packing/hit-area scale, never a draw-only enlargement. */
+  radiusScale?: number;
   /** rest outline radius multiplier at angle θ (lobed silhouette) */
   boundary?: (theta: number) => number;
   /** add the deeper layer (default true) */
@@ -152,7 +156,7 @@ export function generatePad(padR: number, rng: Rng, opts: PadOptions = {}): Bead
     let type = forced ?? pickType(rng, skew, typeSkew);
     for (let k = 0; !forced && k < 6 && (perType.get(type.id) ?? 0) >= cap; k++) type = pickType(rng, skew, typeSkew);
     perType.set(type.id, (perType.get(type.id) ?? 0) + 1);
-    const radius = rng.range(type.radius[0], type.radius[1]) * s;
+    const radius = rng.range(type.radius[0], type.radius[1]) * s * (opts.radiusScale ?? 1);
     picks.push({ type, radius });
   }
   const king = opts.deeper !== false && opts.kingChance && rng.chance(opts.kingChance)

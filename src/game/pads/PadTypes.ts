@@ -12,6 +12,7 @@ import type { Rarity } from "../beads/BeadTypes";
 export interface BeadPreset {
   /** surface bead count */
   surface: number;
+  radiusScale?: number;
   /** rarity weight multipliers */
   raritySkew?: Partial<Record<Rarity, number>>;
   /** per-type weight multipliers (within a rarity) */
@@ -412,7 +413,7 @@ export const PADS: readonly PadType[] = [
     glyph: "♥",
     outline: heartR,
     noise: 0.008,
-    gelColor: { r: 255, g: 168, b: 178 },
+    gelColor: { r: 255, g: 174, b: 184 },
     transparency: 1,
     thickness: 1.05,
     softness: 1.2,
@@ -421,7 +422,8 @@ export const PADS: readonly PadType[] = [
     // the dip between the lobes is thin: pops a little easier there
     resistance: (xn, yn) => (yn < -0.35 && Math.abs(xn) < 0.22 ? 0.85 : 1),
     grip: 1,
-    beads: { surface: 50, typeSkew: { heart: 3, cherry: 1.6 }, raritySkew: { special: 1.5 } },
+    // 23 × the existing 0.7 session scale = 16 surface beads, plus discoveries.
+    beads: { surface: 23, radiusScale: 1.28, typeSkew: { heart: 3, cherry: 1.6 }, raritySkew: { special: 1.5 } },
     hint: { color: "#ffd0d8", label: "하트" },
   },
   {
