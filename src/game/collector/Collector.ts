@@ -72,6 +72,18 @@ export class Collector {
   /** beads are drawn a bit smaller than on the pad – it reads as depth – sized so a pad's worth (≈55) fills the jar */
   static readonly BEAD_SCALE = 0.62;
   static readonly MAX_ITEMS = 100; // above any pad's plain-bead count (max seen: 94) – nothing is ever silently dropped mid-pad
+  private capacityScale = 1;
+
+  /** Decide jar bead size once per pad, before any landing. Leave room for
+   * packing gaps and an uneven top; never shrink or rearrange a settled pile. */
+  preparePad(beads: readonly Bead[]) {
+    const area = beads.reduce((sum, bead) => {
+      const r = Math.min(bead.radius * Collector.BEAD_SCALE, this.w * 0.11);
+      return sum + Math.PI * r * r;
+    }, 0);
+    const insideArea = Math.max(1, (this.w - 12) * (this.floor - this.y - this.h * 0.08));
+    this.capacityScale = Math.min(1, Math.sqrt(insideArea * 0.6 / Math.max(1, area)));
+  }
 
   layout(x: number, y: number, w: number, h: number) {
     const oldX = this.x, oldFloor = this.floor, scale = w / this.w;
@@ -139,7 +151,7 @@ export class Collector {
       this.items = [];
       this.dismissT = -1;
     }
-    const r = Math.min(bead.radius * Collector.BEAD_SCALE, this.w * 0.11);
+    const r = Math.min(bead.radius * Collector.BEAD_SCALE, this.w * 0.11) * this.capacityScale;
     this.items.push({
       bead,
       x: this.x + this.w / 2 + (Math.random() - 0.5) * this.w * 0.5,
@@ -337,6 +349,13 @@ export class Collector {
     }
     ctx.save();
     path();
+    // The cup has walls and a floor, but no lid. Previously the body path
+    // clipped at y and sliced every bead projecting above the open rim.
+    // Union an open space above the mouth so incoming beads and a full pile
+    // keep their complete silhouettes; retain the existing wall/floor clip.
+    const viewW = ctx.canvas.width / dpr;
+    const viewH = ctx.canvas.height / dpr;
+    ctx.rect(x - viewW, y - viewH, viewW * 2, viewH + 0.5);
     ctx.clip();
     // beads (while tidying: they sink ~10px and fade – no shake, no spin)
     const k = this.dismissT >= 0 ? Math.min(1, this.dismissT / Collector.DISMISS) : 0;

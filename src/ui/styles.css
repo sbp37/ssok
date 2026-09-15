@@ -29,10 +29,6 @@ body,
   overscroll-behavior: none;
 }
 
-:root {
-  /* the bottom banner's height, set once here; the ad SDK's real size goes here later */
-  --ad-banner-height: 56px;
-}
 .stage {
   position: fixed;
   inset: 0;
@@ -58,16 +54,6 @@ body,
   border-radius: 50%;
   background: radial-gradient(closest-side, rgba(120, 90, 110, 0.055), rgba(120, 90, 110, 0.02) 60%, rgba(120, 90, 110, 0) 100%);
   pointer-events: none;
-}
-.ad-slot {
-  flex: 0 0 auto;
-  height: calc(var(--ad-banner-height) + env(safe-area-inset-bottom, 0px));
-  padding-bottom: env(safe-area-inset-bottom, 0px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-top: 1px solid rgba(43, 39, 48, 0.06);
-  background: rgba(255, 255, 255, 0.35);
 }
 /* only the game canvases fill the playfield – icon canvases in sheets/panels size themselves */
 .playfield > canvas {
@@ -365,13 +351,22 @@ body,
 .right {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
+}
+.pill.box {
+  min-height: 42px;
+  padding: 9px 14px;
+  font-size: 13.5px;
 }
 .pill.tiny {
-  padding: 5px 8px;
-  font-size: 13px;
+  width: 42px;
+  height: 42px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  font-size: 16px;
   line-height: 1;
-  opacity: 0.6;
+  opacity: 0.68;
 }
 .pill.blink {
   animation: blink 0.4s ease-out;

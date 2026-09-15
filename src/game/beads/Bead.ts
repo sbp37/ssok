@@ -122,6 +122,10 @@ function beadRotation(type: BeadType, rng: Rng, ordinal = 0) {
  */
 export interface PadOptions {
   surface?: number;
+  /** safe inset from the outer silhouette, as a fraction of pad radius */
+  edgeInset?: number;
+  /** reserved pad-local pockets (x/R, y/R) filled with small surface beads */
+  smallFillZones?: { x: number; y: number }[];
   /** rest outline radius multiplier at angle θ (lobed silhouette) */
   boundary?: (theta: number) => number;
   /** add the deeper layer (default true) */
@@ -151,10 +155,28 @@ export function generatePad(padR: number, rng: Rng, opts: PadOptions = {}): Bead
   const surfaceCount = opts.surface ?? 52;
   const boundary = opts.boundary ?? (() => 1);
   const hole = opts.hole;
-  const margin = padR * 0.16;
+  const margin = padR * (opts.edgeInset ?? 0.16);
   const skew = { common: 1.25, big: 0.7, odd: 0.8, ...(opts.raritySkew ?? {}) } as Partial<Record<Rarity, number>>;
   const typeSkew = opts.typeSkew ?? {};
   const gap = (opts.spacing ?? 4.5) * s;
+  const smallFillTypes = BEAD_TYPES.filter((type) => type.id === "tiny" || type.id === "marble");
+
+  const clearsVisibleRim = (x: number, y: number, footprint: number) => {
+    if (opts.edgeInset === undefined) return true;
+    // Ribbon has a broad raised inner rim. Clear that visible band, not merely
+    // the mathematical outer silhouette. Sampling the complete circumference
+    // also protects the steep diagonal sides of the bow.
+    const visualBand = padR * 0.13;
+    const probeR = footprint + gap * 0.5;
+    for (let i = 0; i < 16; i++) {
+      const a = i * Math.PI / 8;
+      const px = x + Math.cos(a) * probeR;
+      const py = y + Math.sin(a) * probeR;
+      const theta = Math.atan2(py, px);
+      if (Math.hypot(px, py) > padR * boundary(theta) - visualBand) return false;
+    }
+    return true;
+  };
 
   // choose types first, biggest first for packing
   const picks: { type: BeadType; radius: number; rot: number }[] = [];
@@ -200,6 +222,19 @@ export function generatePad(padR: number, rng: Rng, opts: PadOptions = {}): Bead
       const x = Math.cos(ang) * rad;
       const y = Math.sin(ang) * rad;
       let clear = true;
+      if (!clearsVisibleRim(x, y, footprint)) clear = false;
+      if (!clear) continue;
+      // Leave the requested accent pockets available for their small beads;
+      // otherwise a random large bead can consume the space first.
+      for (const zone of opts.smallFillZones ?? []) {
+        const zx = zone.x * padR;
+        const zy = zone.y * padR;
+        if (Math.hypot(zx - x, zy - y) < footprint + 11 * s + gap * 0.75) {
+          clear = false;
+          break;
+        }
+      }
+      if (!clear) continue;
       for (const q of placed) {
         const pearlGap = p.type.material === "pearl" && q.material === "pearl"
           ? Math.min(q.r, footprint) * 0.65
@@ -227,6 +262,27 @@ export function generatePad(padR: number, rng: Rng, opts: PadOptions = {}): Bead
       }
       slot++;
       ok = true;
+    }
+  }
+
+  // Purposeful little accents for unusually shaped pads. They use normal
+  // beads and hit areas; only their empty pockets are authored. If jittered
+  // placement cannot remain clear, skip instead of forcing an overlap.
+  for (const [index, zone] of (opts.smallFillZones ?? []).entries()) {
+    const type = smallFillTypes[index % smallFillTypes.length];
+    if (!type) break;
+    const radius = rng.range(type.radius[0], type.radius[0] + (type.radius[1] - type.radius[0]) * 0.38) * s;
+    const footprint = radius;
+    let added = false;
+    for (let tries = 0; tries < 24 && !added; tries++) {
+      const jitter = tries === 0 ? 0 : padR * 0.018;
+      const x = zone.x * padR + rng.range(-jitter, jitter);
+      const y = zone.y * padR + rng.range(-jitter, jitter);
+      if (!clearsVisibleRim(x, y, footprint)) continue;
+      if (placed.some((q) => Math.hypot(q.x - x, q.y - y) < q.r + footprint + gap * 0.75)) continue;
+      placed.push({ x, y, r: footprint, material: type.material });
+      beads.push(makeBead(type, rng.pick(type.colors), radius, beadRotation(type, rng, index), 0, slot++, x, y));
+      added = true;
     }
   }
 

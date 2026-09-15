@@ -69,6 +69,38 @@ const wobbleP = springParams(0.19, 0.28);
 const shockP = springParams(0.16, 0.26);
 
 const socketCache = new Map<string, HTMLCanvasElement>();
+
+/** A socket is relaxed silicone, not a cookie-cutter copy of a hard charm.
+ * Keep the overall silhouette while rounding star points and the heart tip. */
+function socketShapePath(g: CanvasRenderingContext2D, type: BeadType, r: number) {
+  if (type.shape === "heart") {
+    g.beginPath();
+    g.moveTo(0, r * 0.86);
+    g.bezierCurveTo(-r * 0.24, r * 0.86, -r * 1.08, -r * 0.08, -r * 0.9, -r * 0.53);
+    g.bezierCurveTo(-r * 0.72, -r * 0.96, -r * 0.25, -r * 0.92, 0, -r * 0.5);
+    g.bezierCurveTo(r * 0.25, -r * 0.92, r * 0.72, -r * 0.96, r * 0.9, -r * 0.53);
+    g.bezierCurveTo(r * 1.08, -r * 0.08, r * 0.24, r * 0.86, 0, r * 0.86);
+    g.closePath();
+    return;
+  }
+  if (type.shape === "star") {
+    const points = Array.from({ length: 10 }, (_, i) => {
+      const angle = i * Math.PI / 5 - Math.PI / 2;
+      const radius = r * (i % 2 ? 0.56 : 1.06);
+      return { x: Math.cos(angle) * radius, y: Math.sin(angle) * radius };
+    });
+    const last = points[points.length - 1], first = points[0];
+    g.beginPath();
+    g.moveTo((last.x + first.x) / 2, (last.y + first.y) / 2);
+    for (let i = 0; i < points.length; i++) {
+      const p = points[i], next = points[(i + 1) % points.length];
+      g.quadraticCurveTo(p.x, p.y, (p.x + next.x) / 2, (p.y + next.y) / 2);
+    }
+    g.closePath();
+    return;
+  }
+  shapePath(g, type, r);
+}
 /**
  * Empty socket: a cup carved into the gel in the shape of the bead that left
  * it (a star leaves a star). The floor is seen through more silicone (denser
@@ -99,7 +131,7 @@ function getSocketSprite(r: number, dpr: number, gel: string, type?: BeadType, r
     g.translate(cx, cx);
     g.rotate(rq);
     g.scale(sc, sc);
-    if (type) shapePath(g, type, rr);
+    if (type) socketShapePath(g, type, rr);
     else {
       g.beginPath();
       g.arc(0, 0, rr, 0, Math.PI * 2);

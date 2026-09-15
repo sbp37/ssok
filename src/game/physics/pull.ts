@@ -44,6 +44,12 @@ const JAM_R0 = 12;
 
 const stretchP = springParams(0.13, 0.5);
 
+/** Visual intensity from actual size, independent of rarity and reward odds. */
+export function pullSizeStrength(bead: Bead, padR: number): number {
+  const t = clamp((bead.radius / (padR / REF_PAD_R) - 14) / 18, 0, 1);
+  return Math.max(bead.type.rarity === "big" ? 0.32 : 0, t * t * (3 - 2 * t));
+}
+
 export class Pull {
   phase: PullPhase = "grip";
   /** 0..1 how hard the gel is holding on (grip build-up); stays 1 through slip */
@@ -67,6 +73,7 @@ export class Pull {
   /** 0..1 how much this bead wedges on the way out – from its actual size, so two
    *  beads of one type never feel identical (tiny/marble: 0, big pearl ≈0.5, treasures 1) */
   readonly jam: number;
+  readonly sizeStrength: number;
   private readonly jams: Jam[] = [];
   /** true while wedged */
   jammed = false;
@@ -96,7 +103,10 @@ export class Pull {
     this.t2Base = bead.type.pull * s * (bead.layer === 1 ? 1.35 : 1) * resist * seat;
     // big pearl ≈0.5 (≈13px of extra travel), a buried treasure 1 (two wedges, ≈44px)
     this.jam = bead.type.jam ?? clamp((bead.radius / s - JAM_R0) / 8, 0, 1);
-    this.neck = bead.type.neck ?? 1;
+    this.sizeStrength = pullSizeStrength(bead, padR);
+    const originalNeck = bead.type.neck ?? 1;
+    this.neck = this.sizeStrength > 0
+      ? Math.max(originalNeck, 1 + this.sizeStrength * 0.4) : originalNeck;
     if (this.jam > 0) {
       this.jams.push({ p: 0.38 + (rand() - 0.5) * 0.16, w: this.jam * 30 * s, hit: false, freed: false });
       if (this.jam > 0.55) this.jams.push({ p: 0.72 + (rand() - 0.5) * 0.1, w: this.jam * 14 * s, hit: false, freed: false });
@@ -194,7 +204,10 @@ export class Pull {
       this.progress = p;
       // creeps out to ~2.4 radii by the threshold (further for a long-necked charm), curve set by friction
       const creep = Math.pow(p, 1 + b.type.friction * 1.4) * b.radius * 2.4 * this.neck;
-      offMag = 1.6 * s + creep;
+      // A long elastic neck remains behind a rigid bead. Keep it behind the
+      // finger even for king beads; the existing success distance is unchanged.
+      offMag = this.sizeStrength > 0
+        ? Math.min(1.6 * s + creep, Math.max(1.6 * s, dist * 0.9)) : 1.6 * s + creep;
       const step = Math.floor(p * 6);
       if (step > this.lastStep && p < 1) {
         this.lastStep = step;
@@ -207,7 +220,8 @@ export class Pull {
     }
     // gel around the socket is dragged toward the finger: 6~18px at full grip, a bit more while
     // slipping – and further still while straining against a wedge (that IS the visible effort)
-    const stretchLen = this.tension * 16 * s + this.progress * 5 * s * this.neck + this.over * this.jam * 14 * s;
+    const stretchLen = (this.tension * 16 * s + this.progress * 5 * s * this.neck + this.over * this.jam * 14 * s)
+      * (1 + this.sizeStrength * 0.55) + this.sizeStrength * this.progress * 8 * s;
     this.stretch.setTarget(ux * stretchLen, uy * stretchLen);
     // Same spring / resistance at 60Hz. A 50ms frame exceeds this stiff
     // spring's stable Euler step and used to send the rendered tent offscreen.

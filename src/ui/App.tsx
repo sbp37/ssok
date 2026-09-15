@@ -4,7 +4,8 @@ import { preloadBeadAssets } from "../game/beads/BeadAssets";
 import { sfx } from "../game/audio/Sfx";
 import { NextPanel, type NextView } from "./NextPanel";
 import { CollectionSheet, SettingsSheet } from "./Sheets";
-import { AdPolicy, type AdKind } from "../game/ads/AdPolicy";
+import { AdPolicy, createAdProvider, type AdKind } from "../game/ads/AdPolicy";
+import { PromotionRewards } from "../game/rewards/PromotionRewards";
 
 interface Toast {
   id: number;
@@ -14,6 +15,9 @@ interface Toast {
 }
 
 type Phase = "intro" | "free";
+type SheetName = "" | "collection" | "settings";
+
+const SHEET_HISTORY_KEY = "__ssokSheet";
 
 /**
  * The whole UI: a count, one treasure-box button, a tiny settings button, the
@@ -25,6 +29,7 @@ export function App() {
   const timers = useRef<number[]>([]);
   const completionTimer = useRef<number | undefined>(undefined);
   const ads = useRef<AdPolicy | null>(null);
+  const promotions = useRef<PromotionRewards | null>(null);
   const transitioning = useRef(false);
   const [phase, setPhase] = useState<Phase>("intro");
   const [hintHidden, setHintHidden] = useState(false);
@@ -40,7 +45,7 @@ export function App() {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [boxPulse, setBoxPulse] = useState<{ n: number; strong: boolean }>({ n: 0, strong: false });
   const [glimmer, setGlimmer] = useState(false);
-  const [sheet, setSheet] = useState<"" | "collection" | "settings">("");
+  const [sheet, setSheet] = useState<SheetName>("");
   const [collLabel, setCollLabel] = useState("컬렉션");
   const toastId = useRef(0);
 
@@ -63,7 +68,8 @@ export function App() {
     void Promise.race([preloadBeadAssets(), new Promise<void>((r) => setTimeout(r, 350))]).then(() => {
       if (cancelled) return;
       game = new Game(canvas);
-      ads.current = new AdPolicy();
+      ads.current = new AdPolicy(createAdProvider());
+      promotions.current = new PromotionRewards();
       gameRef.current = game;
       offs.push(...bind(game));
     });
@@ -71,12 +77,36 @@ export function App() {
       cancelled = true;
       ads.current?.cancel();
       ads.current = null;
+      promotions.current = null;
       offs.forEach((off) => off());
       timers.current.forEach((t) => window.clearTimeout(t));
       game?.destroy();
       gameRef.current = null;
     };
   }, []);
+
+  useEffect(() => {
+    const onPopState = (event: PopStateEvent) => {
+      const next = event.state?.[SHEET_HISTORY_KEY];
+      setSheet(next === "collection" || next === "settings" ? next : "");
+    };
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
+
+  const openSheet = (next: Exclude<SheetName, "">) => {
+    if (!sheet) {
+      window.history.pushState({ ...window.history.state, [SHEET_HISTORY_KEY]: next }, "");
+    } else {
+      window.history.replaceState({ ...window.history.state, [SHEET_HISTORY_KEY]: next }, "");
+    }
+    setSheet(next);
+  };
+
+  const closeSheet = () => {
+    if (window.history.state?.[SHEET_HISTORY_KEY]) window.history.back();
+    else setSheet("");
+  };
 
   /** wire the game's events to the UI; returns the unsubscribers */
   const bind = (game: Game): (() => void)[] => {
@@ -93,6 +123,18 @@ export function App() {
     label();
     // a new day: one quiet line, and the first pad is a touch more generous. No streaks, no stamps.
     if (game.progressStore.newDay) later(() => pushToast({ tone: "soft", text: "오늘은 뭔가 좀 다르다. ✦" }), 900);
+    promotions.current?.onVisit(game.progressStore.newDay, game.progressStore.totalCompleted);
+    // AIT QA bundles use TEST_ codes, so opening the ordinary console test
+    // push is enough to verify every promotion without a custom deep link.
+    if (promotions.current?.mode === "test") {
+      later(() => {
+        void promotions.current?.runTestMilestones().then((granted) => {
+          if (granted?.includes("returnVisit")) {
+            pushToast({ tone: "soft", text: "재방문 보상 테스트 완료", sub: "2원" });
+          }
+        });
+      }, 900);
+    }
     const offs = [
       game.progressStore.subscribe(label),
       game.on("pop", ({ pulled }) => {
@@ -104,6 +146,7 @@ export function App() {
         setPhase("free");
       }),
       game.on("padEmpty", () => {
+        promotions.current?.onPadCompleted(game.progressStore.totalCompleted);
         setPadEmpty(true);
         setNext(game.nextInfo);
         // hold the empty pad (and the full jar) for a beat, say it quietly, then offer the door
@@ -190,11 +233,11 @@ export function App() {
               <button
                 className={"pill box" + (boxPulse.n ? (boxPulse.strong ? " pulse" : " blink") : "")}
                 key={boxPulse.n}
-                onClick={() => setSheet("collection")}
+                onClick={() => openSheet("collection")}
               >
                 {collLabel}
               </button>
-              <button className="pill tiny" onClick={() => setSheet("settings")} aria-label="설정">
+              <button className="pill tiny" onClick={() => openSheet("settings")} aria-label="설정">
                 ⚙
               </button>
             </div>
@@ -235,11 +278,9 @@ export function App() {
             )}
           </div>
         </div>
-        {sheet === "collection" && gameRef.current && <CollectionSheet game={gameRef.current} onClose={() => setSheet("")} />}
-        {sheet === "settings" && <SettingsSheet onClose={() => setSheet("")} />}
+        {sheet === "collection" && gameRef.current && <CollectionSheet game={gameRef.current} onClose={closeSheet} />}
+        {sheet === "settings" && <SettingsSheet onClose={closeSheet} />}
       </div>
-      {/* reserved for the bottom banner ad – no game content ever draws here */}
-      <div className="ad-slot" aria-hidden="true" />
     </div>
   );
 }

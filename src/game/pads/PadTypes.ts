@@ -12,6 +12,10 @@ import type { Rarity } from "../beads/BeadTypes";
 export interface BeadPreset {
   /** surface bead count */
   surface: number;
+  /** extra safe inset from the silhouette, as a fraction of pad radius */
+  edgeInset?: number;
+  /** reserved pad-local pockets (x/R, y/R) filled with small surface beads */
+  smallFillZones?: { x: number; y: number }[];
   /** rarity weight multipliers */
   raritySkew?: Partial<Record<Rarity, number>>;
   /** per-type weight multipliers (within a rarity) */
@@ -200,7 +204,7 @@ const ribbonR = (() => {
   // piecewise-linear closed polygon by arc length
   const segs = P.map((p, i) => { const q = P[(i + 1) % P.length]; return Math.hypot(q[0] - p[0], q[1] - p[1]); });
   const total = segs.reduce((a, b) => a + b, 0);
-  return polarOf((t) => {
+  const base = polarOf((t) => {
     let d = (t / TAU) * total;
     for (let i = 0; i < P.length; i++) {
       if (d <= segs[i]) { const p = P[i], q = P[(i + 1) % P.length], u = d / segs[i]; return [p[0] + (q[0] - p[0]) * u, p[1] + (q[1] - p[1]) * u]; }
@@ -208,6 +212,9 @@ const ribbonR = (() => {
     }
     return P[0];
   }, 720, 7);
+  // Give the bow more silicone around its contents without approaching the
+  // 1.3R texture edge used by the common gel renderer.
+  return (th: number) => base(th) * 1.1;
 })();
 
 /** polar boundary of a union of circles: r(θ) = the farthest circle surface along θ */
@@ -342,7 +349,24 @@ export const PADS: readonly PadType[] = [
     // the knot holds on hardest, the wings are thin and easy
     resistance: (xn) => (Math.abs(xn) < 0.28 ? 1.28 : Math.abs(xn) > 0.65 ? 0.88 : 1),
     grip: 1,
-    beads: { surface: 46, rareCenterChance: 0.09, typeSkew: { gold: 2.5 } },
+    beads: {
+      surface: 46,
+      edgeInset: 0.23,
+      // Keep the raised rim clear, then fill both broad ribbon tips with a
+      // small three-bead cluster. The knot keeps two tiny accents as well.
+      smallFillZones: [
+        { x: -0.66, y: -0.28 },
+        { x: -0.7, y: 0 },
+        { x: -0.66, y: 0.28 },
+        { x: 0.66, y: -0.28 },
+        { x: 0.7, y: 0 },
+        { x: 0.66, y: 0.28 },
+        { x: -0.08, y: -0.07 },
+        { x: 0.09, y: 0.08 },
+      ],
+      rareCenterChance: 0.09,
+      typeSkew: { gold: 2.5 },
+    },
     hint: { color: "#f2e6ff", label: "오팔" },
   },
   {
