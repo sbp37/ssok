@@ -12,7 +12,7 @@ import { sfx } from "../game/audio/Sfx";
 import { PadSilhouette } from "./NextPanel";
 
 const SHARE_PAGE_URL = "https://sbp37.github.io/ssok/";
-const SHARE_IMAGE_URL = `${SHARE_PAGE_URL}branding/share-stretch.jpg`;
+const SHARE_IMAGE_URL = `${SHARE_PAGE_URL}branding/share-stretch.jpg?v=20260915`;
 
 async function shareCollection(): Promise<"shared" | "copied"> {
   let inToss = false;
