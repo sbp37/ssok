@@ -635,6 +635,7 @@ export class Game extends Emitter<GameEvents> {
   private doPop(b: Bead, fingerId: number, dx: number, dy: number, speed: number) {
     const s = this.s;
     const sizeStrength = pullSizeStrength(b, this.gel.R);
+    const king = b.type.id === "king";
     const rare = b.type.rarity === "rare";
     const pos = beadPos(b);
     this.pulls.delete(fingerId);
@@ -645,14 +646,23 @@ export class Game extends Emitter<GameEvents> {
 
     // 0ms: freed – kicks toward the finger, hangs there ~150ms so the moment lands, then arcs into the cup
     // (treasures arc up to the treasure box instead)
-    const kick = b.type.bounce * s * (1 + Math.min(speed, 1400) / 2800);
-    const start = this.toCanvas(pos.x + dx * kick, pos.y + dy * kick);
+    const kick = b.type.bounce * s * (1 + Math.min(speed, 1400) / 2800) * (king ? 1.65 : 1);
+    let kx = dx * kick;
+    let ky = king ? Math.min(dy * kick, -kick * 0.25) - 12 * s : dy * kick;
+    const start = this.toCanvas(pos.x + kx, pos.y + ky);
+    if (king) {
+      const margin = b.radius * 1.25;
+      start.x = clamp(start.x, margin, this.w - margin);
+      start.y = clamp(start.y, margin, this.h - margin);
+      kx = start.x - this.padCx - pos.x;
+      ky = (start.y - this.padCy) / this.gel.tilt - pos.y;
+    }
     const kind = treasureKind(b.type);
     const end = kind ? this.treasureEntry : this.collector.entry;
     const mx = (start.x + end.x) / 2 + dx * 30 * s;
-    const my = Math.min(start.y, end.y) - (70 + 60 * Math.random()) * s;
-    const dur = (0.46 + b.type.mass * 0.11) * (0.92 + Math.random() * 0.16);
-    const hang = 0.12 + b.type.mass * 0.03;
+    const my = Math.max(b.radius * 1.25, Math.min(start.y, end.y) - (70 + 60 * Math.random() + (king ? 40 : 0)) * s);
+    const dur = (king ? 0.48 : 0.46 + b.type.mass * 0.11) * (0.92 + Math.random() * 0.16);
+    const hang = king ? 0.15 : 0.12 + b.type.mass * 0.03;
     b.fly = {
       hang,
       x0: start.x,
@@ -663,15 +673,15 @@ export class Game extends Emitter<GameEvents> {
       y1: end.y,
       t: 0,
       dur,
-      kx: dx * kick,
-      ky: dy * kick,
+      kx,
+      ky,
       px: pos.x,
       py: pos.y,
       spin: (Math.random() - 0.5) * 9,
     };
 
     // t = 0: sound + haptic land exactly with the release
-    sfx.pop(b.type.sound, b.type.mass, rare || !!kind);
+    sfx.pop(b.type.sound, b.type.mass, rare || !!kind, king ? 1.3 : 1);
     if (kind) this.schedule(0.05, () => haptics.rare());
     else haptics.pop(b.type.mass);
     if (kind === "ultra") this.schedule(0.12, () => sfx.chime(true));
@@ -696,7 +706,7 @@ export class Game extends Emitter<GameEvents> {
     // +30ms: gel snaps back the other way, dent appears
     this.schedule(0.03, () => {
       const m = Math.pow(b.type.mass, 0.6);
-      const strength = (lastInFree ? 1.22 : 1) * (1 + sizeStrength * 0.18);
+      const strength = (lastInFree ? 1.22 : 1) * (1 + sizeStrength * 0.18) * (king ? 1.3 : 1);
       this.gel.recoil(-dx * 95 * s * m * strength, -dy * 95 * s * m * strength);
     });
     // +40ms: the gel around the hole bulges outward and rings down – neighbours ride it
@@ -846,7 +856,7 @@ export class Game extends Emitter<GameEvents> {
             const vx = (f.x1 - f.cx) * 2;
             const vy = (f.y1 - f.cy) * 2;
             this.collector.add(b, vx, vy);
-            sfx.land(b.type.material, b.type.mass);
+            sfx.land(b.type.id === "king" ? "glass" : b.type.material, b.type.mass);
           }
           b.fly = undefined;
         }
@@ -1274,9 +1284,10 @@ export class Game extends Emitter<GameEvents> {
     // The strand is narrower than the bead at both ends (it was a triangle when its base
     // spanned the whole lip) and has a waist that thins as the bead comes out.
     if (offL > r * (0.45 - 0.12 * J)) {
-      const w0 = r * (0.6 + 0.1 * J - 0.15 * P + opening * 0.13);
-      const w1 = r * (0.5 - 0.2 * P) * (1 + 0.1 * J);
-      const wm = Math.max(r * 0.12, r * (0.4 - 0.24 * P) * (1 + 0.25 * J + 0.3 * J * O));
+      const kingWidth = b.type.id === "king" ? 1 : 0;
+      const w0 = r * (0.6 + 0.1 * J - 0.15 * P + opening * 0.13 + kingWidth * 0.13);
+      const w1 = r * (0.5 - 0.2 * P + kingWidth * 0.1) * (1 + 0.1 * J);
+      const wm = Math.max(r * 0.12, r * (0.4 - 0.24 * P + kingWidth * 0.14) * (1 + 0.25 * J + 0.3 * J * O));
       const mx = hx + b.off.x * 0.5;
       const my = hy + b.off.y * 0.5;
       const neck = () => {

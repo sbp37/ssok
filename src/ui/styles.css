@@ -584,6 +584,31 @@ body,
   font-size: 12px;
   color: var(--ink-faint);
 }
+.collection-share {
+  width: 100%;
+  min-height: 48px;
+  margin-top: 14px;
+  border: 1px solid rgba(145, 80, 108, 0.12);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.86);
+  color: #8b526b;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 650;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  cursor: pointer;
+}
+.collection-share:active { transform: scale(0.99); }
+.collection-share:disabled { opacity: 0.55; cursor: default; }
+.share-notice {
+  margin-top: 8px;
+  color: var(--ink-soft);
+  font-size: 12px;
+  text-align: center;
+}
 .grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);

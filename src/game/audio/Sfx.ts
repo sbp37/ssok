@@ -13,7 +13,7 @@ class Sfx {
   private master: GainNode | null = null;
   private noise: AudioBuffer | null = null;
   private bank = new SampleBank();
-  private pendingPop: { kind: PopSound; mass: number; rare: boolean; at: number } | null = null;
+  private pendingPop: { kind: PopSound; mass: number; rare: boolean; gain: number; at: number } | null = null;
   private startAt = 0;
   enabled = true;
 
@@ -98,7 +98,7 @@ class Sfx {
     const p = this.pendingPop;
     this.pendingPop = null;
     // Only the recent POP survives an audio unlock, never a backlog of creaks.
-    if (performance.now() - p.at <= 1500) this.pop(p.kind, p.mass, p.rare);
+    if (performance.now() - p.at <= 1500) this.pop(p.kind, p.mass, p.rare, p.gain);
   }
 
   private get soundTime() {
@@ -251,19 +251,19 @@ class Sfx {
     if (mass > 1.05) this.burst(0.05, 0.018 * Math.min(1, mass - 1), { type: "bandpass", freq: 620 / Math.pow(mass, 0.3), freq1: 760 / Math.pow(mass, 0.3), q: 6, attack: 0.012 });
   }
 
-  pop(kind: PopSound, mass: number, rare = false) {
+  pop(kind: PopSound, mass: number, rare = false, gain = 1) {
     if (!this.enabled) return;
     if (!this.ready) {
       if (this.ctx && (!this.pendingPop || performance.now() - this.pendingPop.at > 1500)) {
-        this.pendingPop = { kind, mass, rare, at: performance.now() };
+        this.pendingPop = { kind, mass, rare, gain, at: performance.now() };
       }
       return;
     }
     const m = Math.pow(mass, 0.45);
     const jp = this.j(0.08);
-    const jv = this.j(0.1);
+    const jv = this.j(0.1) * Math.max(0, Math.min(1.3, gain));
     const big = mass > 1.1;
-    if (kind !== "ting" && this.sample(big ? "pop_big" : "pop_small", 1 / m, 0.9)) {
+    if (kind !== "ting" && this.sample(big ? "pop_big" : "pop_small", 1 / m, 0.9 * Math.max(0, Math.min(1.3, gain)))) {
       if (rare) this.sample("rare", 1, 0.6, 0.04);
       return;
     }

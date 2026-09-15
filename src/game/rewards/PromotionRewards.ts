@@ -14,6 +14,9 @@ const LIVE_CODES: Record<PromotionMilestone, string> = {
   returnVisit: "01M2G7GN8PMTXBNVJWJXJ2V8MH",
 };
 
+const LIVE_MODE = import.meta.env.VITE_PROMOTION_MODE === "live";
+const ACTIVE_CODES = LIVE_MODE ? LIVE_CODES : TEST_CODES;
+
 const AMOUNTS: Record<PromotionMilestone, number> = {
   firstPad: 1,
   thirdPad: 3,
@@ -34,7 +37,7 @@ interface SavedPromotionState {
  * local or QA build much less likely.
  */
 export class PromotionRewards {
-  readonly mode = import.meta.env.VITE_PROMOTION_MODE === "live" ? "live" : "test";
+  readonly mode = LIVE_MODE ? "live" : "test";
   private granted = new Set<string>();
   private inFlight = new Set<PromotionMilestone>();
 
@@ -48,10 +51,6 @@ export class PromotionRewards {
     }
   }
 
-  private get codes() {
-    return this.mode === "live" ? LIVE_CODES : TEST_CODES;
-  }
-
   private save() {
     try {
       this.storage?.setItem(STORAGE_KEY, JSON.stringify({ granted: [...this.granted] }));
@@ -61,7 +60,7 @@ export class PromotionRewards {
   }
 
   async grant(milestone: PromotionMilestone): Promise<boolean> {
-    const code = this.codes[milestone];
+    const code = ACTIVE_CODES[milestone];
     if (this.granted.has(code) || this.inFlight.has(milestone)) return false;
     try {
       if (!Promotion.grantReward.isSupported()) return false;

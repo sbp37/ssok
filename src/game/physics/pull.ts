@@ -105,7 +105,7 @@ export class Pull {
     this.jam = bead.type.jam ?? clamp((bead.radius / s - JAM_R0) / 8, 0, 1);
     this.sizeStrength = pullSizeStrength(bead, padR);
     const originalNeck = bead.type.neck ?? 1;
-    this.neck = this.sizeStrength > 0
+    this.neck = bead.type.id === "king" ? 2.1 : this.sizeStrength > 0
       ? Math.max(originalNeck, 1 + this.sizeStrength * 0.4) : originalNeck;
     if (this.jam > 0) {
       this.jams.push({ p: 0.38 + (rand() - 0.5) * 0.16, w: this.jam * 30 * s, hit: false, freed: false });
@@ -203,11 +203,12 @@ export class Pull {
       }
       this.progress = p;
       // creeps out to ~2.4 radii by the threshold (further for a long-necked charm), curve set by friction
-      const creep = Math.pow(p, 1 + b.type.friction * 1.4) * b.radius * 2.4 * this.neck;
+      const king = b.type.id === "king";
+      const creep = Math.pow(p, 1 + b.type.friction * (king ? 0.7 : 1.4)) * b.radius * 2.4 * this.neck;
       // A long elastic neck remains behind a rigid bead. Keep it behind the
       // finger even for king beads; the existing success distance is unchanged.
       offMag = this.sizeStrength > 0
-        ? Math.min(1.6 * s + creep, Math.max(1.6 * s, dist * 0.9)) : 1.6 * s + creep;
+        ? Math.min(1.6 * s + creep, Math.max(1.6 * s, dist * (king ? 0.96 : 0.9))) : 1.6 * s + creep;
       const step = Math.floor(p * 6);
       if (step > this.lastStep && p < 1) {
         this.lastStep = step;

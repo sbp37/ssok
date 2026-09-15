@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Environment, Share } from "@apps-in-toss/web-framework";
 import type { Game } from "../game/Game";
 import { getBeadSprite } from "../game/beads/BeadSprites";
 import type { BeadType } from "../game/beads/BeadTypes";
@@ -9,6 +10,40 @@ import { HIDDEN_POOLS } from "../game/rewards/rates";
 import { haptics } from "../game/haptics";
 import { sfx } from "../game/audio/Sfx";
 import { PadSilhouette } from "./NextPanel";
+
+const SHARE_PAGE_URL = "https://sbp37.github.io/ssok/";
+const SHARE_IMAGE_URL = `${SHARE_PAGE_URL}branding/share-stretch.jpg`;
+
+async function shareCollection(): Promise<"shared" | "copied"> {
+  let inToss = false;
+  try {
+    inToss = Environment.environment === "toss" || Environment.environment === "sandbox";
+  } catch {
+    // The normal web build has no Toss host constants.
+  }
+
+  if (inToss) {
+    const link = await Share.createLink({
+      path: "intoss://ssok-picky-pad/",
+      ogImageUrl: SHARE_IMAGE_URL,
+    });
+    await Share.sendMessage({
+      message: `쭈우욱… 쏙!\n말랑한 젤 비즈를 뽑아봐\n${link}`,
+    });
+    return "shared";
+  }
+
+  if (navigator.share) {
+    await navigator.share({
+      title: "쏙: 피키패드",
+      text: "쭈우욱… 쏙! 말랑한 젤 비즈를 뽑아봐",
+      url: SHARE_PAGE_URL,
+    });
+    return "shared";
+  }
+  await navigator.clipboard.writeText(SHARE_PAGE_URL);
+  return "copied";
+}
 
 /** which pad hides this treasure most often – a nudge for the empty card, never a promise */
 function hidesIn(typeId: string): string {
@@ -67,6 +102,9 @@ export function BeadIcon({ type, size, found }: { type: BeadType; size: number; 
  */
 export function CollectionSheet({ game, onClose }: { game: Game; onClose: () => void }) {
   const [, tick] = useState(0);
+  const sharing = useRef(false);
+  const [shareBusy, setShareBusy] = useState(false);
+  const [shareNotice, setShareNotice] = useState("");
   useEffect(() => {
     const a = game.treasure.subscribe(() => tick((n) => n + 1));
     const b = game.progressStore.subscribe(() => tick((n) => n + 1));
@@ -78,6 +116,23 @@ export function CollectionSheet({ game, onClose }: { game: Game; onClose: () => 
   const t = game.treasure;
   const prog = game.progressStore;
   const foundPads = PADS.filter((p) => prog.isDiscovered(p.id)).length;
+  const onShare = async () => {
+    if (sharing.current) return;
+    sharing.current = true;
+    setShareBusy(true);
+    setShareNotice("");
+    try {
+      const result = await shareCollection();
+      if (result === "copied") setShareNotice("링크를 복사했어.");
+    } catch (error) {
+      if (!(error instanceof Error && error.name === "AbortError")) {
+        setShareNotice("공유를 열지 못했어. 잠시 후 다시 눌러 줘.");
+      }
+    } finally {
+      sharing.current = false;
+      setShareBusy(false);
+    }
+  };
   return (
     <Sheet title="컬렉션" sub={`패드 ${foundPads}/${PADS.length} · 보물 ${t.found}/${t.total}`} onClose={onClose}>
       <div className="section">패드</div>
@@ -118,6 +173,11 @@ export function CollectionSheet({ game, onClose }: { game: Game; onClose: () => 
         </div>
       ))}
       <div className="sheet-foot">빈칸은 어느 패드에 숨어 있을까.</div>
+      <button className="collection-share" disabled={shareBusy} onClick={() => void onShare()}>
+        <span aria-hidden="true">↗</span>
+        {shareBusy ? "공유 준비 중…" : "친구에게 공유하기"}
+      </button>
+      {shareNotice && <div className="share-notice" role="status">{shareNotice}</div>}
     </Sheet>
   );
 }

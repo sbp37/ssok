@@ -2,7 +2,14 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import ts from 'typescript';
 const source = readFileSync(new URL('../src/game/ads/AdPolicy.ts', import.meta.url), 'utf8');
-const js = ts.transpileModule(source, {compilerOptions:{target:ts.ScriptTarget.ES2020,module:ts.ModuleKind.ES2020}}).outputText;
+// This test exercises policy timing only. Stub the host SDK so the transpiled
+// data URL stays self-contained in Node and cannot attempt a real ad bridge.
+const isolatedSource = source.replace(
+  'import { loadFullScreenAd, showFullScreenAd } from "@apps-in-toss/web-framework";',
+  'const loadFullScreenAd = Object.assign(() => () => {}, {isSupported: () => false});\n' +
+  'const showFullScreenAd = Object.assign(() => () => {}, {isSupported: () => false});',
+);
+const js = ts.transpileModule(isolatedSource, {compilerOptions:{target:ts.ScriptTarget.ES2020,module:ts.ModuleKind.ES2020}}).outputText;
 const {AdPolicy, MockAdProvider} = await import(`data:text/javascript;base64,${Buffer.from(js).toString('base64')}`);
 let clock = 1000, calls = 0;
 const data = new Map();

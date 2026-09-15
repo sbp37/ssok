@@ -351,5 +351,19 @@ export function generatePad(padR: number, rng: Rng, opts: PadOptions = {}): Bead
       beads.push(buried);
     }
   }
+  // Independent random angles can cluster (several hearts pointing the same
+  // way). Keep a random first angle, then spread repeats around the circle.
+  // Reuse existing angles as jitter: no extra RNG calls or layout/odds changes.
+  const orientations = new Map<string, { phase: number; count: number }>();
+  for (const bead of beads) {
+    if (bead.type.shape === "circle") continue;
+    const group = orientations.get(bead.type.id) ?? { phase: bead.rot, count: 0 };
+    const period = bead.type.shape === "star" ? Math.PI * 2 / 5
+      : bead.type.shape === "oval" ? Math.PI : Math.PI * 2;
+    bead.rot = group.phase + group.count * period * 0.61803398875 + Math.sin(bead.rot) * period * 0.025;
+    bead.rot = Math.atan2(Math.sin(bead.rot), Math.cos(bead.rot));
+    group.count++;
+    orientations.set(bead.type.id, group);
+  }
   return beads;
 }
