@@ -1,3 +1,5 @@
+import { Device, type HapticFeedbackType } from "@apps-in-toss/web-framework";
+
 const KEY = "ssok.haptics";
 
 class Haptics {
@@ -20,12 +22,27 @@ class Haptics {
     }
   }
   private buzz(p: number | number[]) {
-    if (!this.enabled || !this.supported) return;
-    try {
-      navigator.vibrate(p);
-    } catch {
-      /* ignore */
+    if (!this.enabled) return;
+    if (this.supported) {
+      try {
+        navigator.vibrate(p);
+        return;
+      } catch {
+        /* Fall through to the Toss bridge. */
+      }
     }
+    const type: HapticFeedbackType = Array.isArray(p)
+      ? "success"
+      : p <= 5
+        ? "tickWeak"
+        : p <= 9
+          ? "tap"
+          : p <= 13
+            ? "softMedium"
+            : "basicMedium";
+    void Device.triggerHaptic({ type }).catch(() => {
+      /* Normal browsers and older Toss versions may not expose the bridge. */
+    });
   }
   press() {
     this.buzz(5);

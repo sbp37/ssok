@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from "react";
+import { TossAds } from "@apps-in-toss/web-framework";
 import { Game } from "../game/Game";
 import { preloadBeadAssets } from "../game/beads/BeadAssets";
 import { sfx } from "../game/audio/Sfx";
+import { haptics } from "../game/haptics";
 import { NextPanel, type NextView } from "./NextPanel";
 import { CollectionSheet, SettingsSheet } from "./Sheets";
 import { AdPolicy, createAdProvider, type AdKind } from "../game/ads/AdPolicy";
@@ -18,6 +20,54 @@ type Phase = "intro" | "free";
 type SheetName = "" | "collection" | "settings";
 
 const SHEET_HISTORY_KEY = "__ssokSheet";
+const BANNER_AD_GROUP_ID = "ait.v2.live.fa7e951585b7468c";
+
+function BannerAd({ hidden }: { hidden: boolean }) {
+  const targetRef = useRef<HTMLDivElement>(null);
+  const qa = import.meta.env.DEV && new URLSearchParams(location.search).has("bannerQa");
+  const [supported, setSupported] = useState(qa);
+  const [initialized, setInitialized] = useState(false);
+
+  useEffect(() => {
+    if (qa) return;
+    let available = false;
+    try {
+      available = TossAds.initialize.isSupported();
+    } catch {
+      // A normal browser has no Toss ad host.
+    }
+    setSupported(available);
+    if (!available) return;
+    TossAds.initialize({
+      callbacks: {
+        onInitialized: () => setInitialized(true),
+        onInitializationFailed: () => setSupported(false),
+      },
+    });
+  }, [qa]);
+
+  useEffect(() => {
+    if (qa || !supported || !initialized || hidden || !targetRef.current) return;
+    const attached = TossAds.attachBanner(BANNER_AD_GROUP_ID, targetRef.current, {
+      theme: "light",
+      tone: "grey",
+      variant: "expanded",
+      callbacks: {
+        onNoFill: () => setSupported(false),
+        onAdFailedToRender: () => setSupported(false),
+      },
+    });
+    return () => attached.destroy();
+  }, [hidden, initialized, qa, supported]);
+
+  if (!supported) return null;
+  return (
+    <div className={"ad-slot" + (hidden ? " hidden" : "")} aria-hidden="true">
+      <div ref={targetRef} className="ad-slot-target" />
+      {qa && <div className="ad-slot-qa">배너 미리보기</div>}
+    </div>
+  );
+}
 
 /**
  * The whole UI: a count, one treasure-box button, a tiny settings button, the
@@ -233,12 +283,24 @@ export function App() {
               <button
                 className={"pill box" + (boxPulse.n ? (boxPulse.strong ? " pulse" : " blink") : "")}
                 key={boxPulse.n}
-                onClick={() => openSheet("collection")}
+                onClick={() => {
+                  haptics.press();
+                  openSheet("collection");
+                }}
               >
                 {collLabel}
               </button>
-              <button className="pill tiny" onClick={() => openSheet("settings")} aria-label="설정">
-                ⚙
+              <button
+                className="pill tiny"
+                onClick={() => {
+                  haptics.press();
+                  openSheet("settings");
+                }}
+                aria-label="설정"
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M19.4 13a7.7 7.7 0 0 0 .05-1 7.7 7.7 0 0 0-.05-1l2.05-1.6-2-3.46-2.5 1a7.5 7.5 0 0 0-1.73-1L14.84 3h-4l-.38 2.94a7.5 7.5 0 0 0-1.73 1l-2.5-1-2 3.46L6.28 11a7.7 7.7 0 0 0-.05 1 7.7 7.7 0 0 0 .05 1l-2.05 1.6 2 3.46 2.5-1a7.5 7.5 0 0 0 1.73 1l.38 2.94h4l.38-2.94a7.5 7.5 0 0 0 1.73-1l2.5 1 2-3.46L19.4 13Zm-6.56 2.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7Z" />
+                </svg>
               </button>
             </div>
           </div>
@@ -281,6 +343,7 @@ export function App() {
         {sheet === "collection" && gameRef.current && <CollectionSheet game={gameRef.current} onClose={closeSheet} />}
         {sheet === "settings" && <SettingsSheet onClose={closeSheet} />}
       </div>
+      <BannerAd hidden={sheet !== ""} />
     </div>
   );
 }
