@@ -345,6 +345,17 @@ class Sfx {
     this.tone("sine", 160 * this.j(0.1), 95, 0.06, 0.06, { attack: 0.004 });
   }
 
+  /** a tap on the jar: the pile answers with a little 또르르 */
+  rattle() {
+    if (!this.ready) return;
+    if (this.sample("land_glass", 1.5, 0.35)) return;
+    const jv = this.j(0.14);
+    [0, 0.055, 0.115].forEach((d, i) =>
+      this.burst(0.018, (0.09 - i * 0.02) * jv, { freq: (3100 - i * 550) * this.j(0.07), q: 2.6, delay: d }),
+    );
+    this.tone("sine", 2600 * this.j(0.05), 2550, 0.07, 0.04 * jv, { attack: 0.001 });
+  }
+
   /** finger sliding over bare gel: a faint rubbery "쓱" grain, brighter when faster */
   rub(speed: number) {
     if (!this.ready) return;
