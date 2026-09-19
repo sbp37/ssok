@@ -76,6 +76,10 @@ interface FingerState {
   moved: number;
   lastRub: number;
   bareGel: boolean;
+  /** finger stayed down through a pop: the next bead it crosses gets snagged too */
+  chainArmed?: boolean;
+  /** the press landed on the jar, not the gel */
+  jar?: boolean;
 }
 
 /**
@@ -298,6 +302,7 @@ export class Game extends Emitter<GameEvents> {
           ultraChance: ULTRA_SURFACE_CHANCE,
         });
     this.padTotal = this.beads.length;
+    this.freePulled = 0;
     this.collector.preparePad(this.beads.filter(b => !treasureKind(b.type)));
     this.peekUntil = -1;
     this.gel.sockets = [];
@@ -491,10 +496,10 @@ export class Game extends Emitter<GameEvents> {
     );
   }
 
-  private topBeadAt(lx: number, ly: number): Bead | null {
+  private topBeadAt(lx: number, ly: number, reach = 1): Bead | null {
     let best: Bead | null = null;
     let bestD = Infinity;
-    const tol = 9 * this.s;
+    const tol = 9 * this.s * reach;
     for (const b of this.beads) {
       if (!this.canGrab(b)) continue;
       const p = beadPos(b);
@@ -515,6 +520,10 @@ export class Game extends Emitter<GameEvents> {
 
   private onDown = (p: PointerSample) => {
     sfx.unlock();
+    if (this.collector.hit(p.x, p.y)) {
+      this.fingers.set(p.id, { sample: p, lastMove: performance.now(), downAt: performance.now(), x0: p.x, y0: p.y, moved: 0, lastRub: 0, bareGel: false, jar: true });
+      return;
+    }
     const l = this.toLocal(p.x, p.y);
     const b = this.topBeadAt(l.x, l.y);
     if (!this.gel.inside(l.x, l.y) && !b) return;
@@ -523,14 +532,16 @@ export class Game extends Emitter<GameEvents> {
     sfx.press();
     haptics.press();
     if (!this.grabEnabled) return;
-    if (b) {
-      b.state = "held";
-      const R = this.gel.R;
-      const resist = this.pad.grip * (this.pad.resistance?.(b.rx / R, b.ry / R) ?? 1);
-      this.pulls.set(p.id, new Pull(b, l.x, l.y, R, () => rng.next(), resist));
-      this.gel.markDirty(); // the bead leaves the base texture while held
-    }
+    if (b) this.grabBead(p.id, l.x, l.y, b);
   };
+
+  private grabBead(id: number, lx: number, ly: number, b: Bead) {
+    b.state = "held";
+    const R = this.gel.R;
+    const resist = this.pad.grip * (this.pad.resistance?.(b.rx / R, b.ry / R) ?? 1);
+    this.pulls.set(id, new Pull(b, lx, ly, R, () => rng.next(), resist));
+    this.gel.markDirty(); // the bead leaves the base texture while held
+  }
 
   private onMove = (p: PointerSample) => {
     const f = this.fingers.get(p.id);
@@ -539,8 +550,18 @@ export class Game extends Emitter<GameEvents> {
     const now = performance.now();
     f.lastMove = now;
     f.moved = Math.max(f.moved, Math.hypot(p.x - f.x0, p.y - f.y0));
+    if (f.jar) return; // the jar only listens for the release
     const l = this.toLocal(p.x, p.y);
     this.gel.fingerMove(p.id, l.x, l.y);
+    // still down after a pop → keep sweeping and the chain of pops just keeps going
+    if (f.chainArmed && this.grabEnabled && !this.pulls.has(p.id)) {
+      const b = this.topBeadAt(l.x, l.y, 1.7);
+      if (b) {
+        this.grabBead(p.id, l.x, l.y, b);
+        sfx.press();
+        haptics.press();
+      }
+    }
     // rubbing bare gel: a soft grain every ~90ms while the finger really moves
     if (!this.pulls.has(p.id) && this.gel.inside(l.x, l.y) && p.speed > 220 && now - f.lastRub > 90) {
       f.lastRub = now;
@@ -557,6 +578,13 @@ export class Game extends Emitter<GameEvents> {
     if (pull) {
       this.pulls.delete(p.id);
       this.releaseBead(pull.bead, pull);
+    } else if (f?.jar) {
+      if (!cancelled && performance.now() - f.downAt < 240 && f.moved < 8) {
+        // a tap on the jar: the pile shudders once, then settles again
+        this.collector.shake();
+        sfx.rattle();
+        haptics.press();
+      }
     } else if (!cancelled && f?.bareGel && performance.now() - f.downAt < 220 && f.moved < 8) {
       // a quick tap on bare gel
       sfx.tap();
@@ -639,6 +667,8 @@ export class Game extends Emitter<GameEvents> {
     const rare = b.type.rarity === "rare";
     const pos = beadPos(b);
     this.pulls.delete(fingerId);
+    const chainFinger = this.fingers.get(fingerId);
+    if (chainFinger) chainFinger.chainArmed = true;
     this.gel.reanchor(fingerId);
     b.state = "flying";
     b.lift = 1;
