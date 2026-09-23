@@ -24,6 +24,8 @@ export interface FlyPath {
   px: number;
   py: number;
   spin: number;
+  /** Exact visible size at release, blended into the flight without a jump. */
+  releaseScale?: number;
 }
 
 export interface Bead {

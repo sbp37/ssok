@@ -4,6 +4,7 @@ import { PADS, type PadType } from "../pads/PadTypes";
 import { originalMaterial, siliconeColor } from "./Material";
 import { shapePath } from "../beads/BeadSprites";
 import type { BeadType } from "../beads/BeadTypes";
+import { BoundedCache } from "../util/BoundedCache";
 
 /**
  * The gel pad.
@@ -68,7 +69,7 @@ const dragP = springParams(0.2, 0.3);
 const wobbleP = springParams(0.19, 0.28);
 const shockP = springParams(0.16, 0.26);
 
-const socketCache = new Map<string, HTMLCanvasElement>();
+const socketCache = new BoundedCache<string, HTMLCanvasElement>(256);
 
 /** A socket is relaxed silicone, not a cookie-cutter copy of a hard charm.
  * Keep the overall silhouette while rounding star points and the heart tip. */
@@ -248,6 +249,9 @@ export class Gel {
   // base texture
   private tex: HTMLCanvasElement | null = null;
   private texCtx: CanvasRenderingContext2D | null = null;
+  /** Canvas-only coverage surface: assemble the translucent mesh here, then
+   * place it over the shadow once (never source-over shared edges twice). */
+  private fallbackSurface: HTMLCanvasElement | null = null;
   private texDpr = 1;
   private texE = 0;
   private dirty = true;
@@ -591,34 +595,62 @@ export class Gel {
     const c = document.createElement('canvas');
     c.width = c.height = 320;
     const g = c.getContext('2d')!, data = g.createImageData(320, 320);
-    const sampleRadius = (a: number, arr: number[]) => {
-      const k = ((a / (Math.PI * 2) + 1) % 1) * arr.length;
-      const i = Math.floor(k), t = k - i;
-      const n = arr.length, a0 = arr[(i + n - 1) % n], a1 = arr[i], a2 = arr[(i + 1) % n], a3 = arr[(i + 2) % n];
-      return .5 * ((2 * a1) + (-a0 + a2) * t + (2 * a0 - 5 * a1 + 4 * a2 - a3) * t * t + (-a0 + 3 * a1 - 3 * a2 + a3) * t * t * t) * R;
-    };
-    const height = (x: number, y: number) => {
-      const a = Math.atan2(y, x), r = Math.hypot(x, y);
-      const outer = sampleRadius(a, this.restR);
-      let d = outer - r;
-      if (this.holeR.length) d = Math.min(d, r - sampleRadius(a, this.holeR));
-      if (d <= 0) return 0;
-      // A rounded shoulder at each petal, with a gently domed centre.
-      return this.thick * (0.85 * (1 - Math.exp(-d / (R * 0.095))) + 0.36 * Math.exp(-r * r / (R * R * .7)));
-    };
+    // Distance to the *drawn* silhouette, including its hole. Radial distance
+    // introduced spoke-shaped creases across the bow/heart. A two-pass chamfer
+    // field is linear-time, follows the smoothed path, and needs no 3D engine.
+    g.save();
+    g.translate(160, 160); g.scale(320 / (E * 2), 320 / (E * 2));
+    this.restPath(g); g.fillStyle = '#fff'; g.fill('evenodd');
+    g.restore();
+    const mask = g.getImageData(0, 0, 320, 320).data;
+    const distance = new Float32Array(322 * 322);
     for (let j = 0; j < 320; j++) for (let i = 0; i < 320; i++) {
-      const x = ((i + .5) / 320 * 2 - 1) * E, y = ((j + .5) / 320 * 2 - 1) * E;
-      if (height(x, y) <= 0) continue;
-      const dx = (height(x + 1, y) - height(x - 1, y)) * .5;
-      const dy = (height(x, y + 1) - height(x, y - 1)) * .5;
+      distance[(j + 1) * 322 + i + 1] = mask[(j * 320 + i) * 4 + 3] > 127 ? 1000 : 0;
+    }
+    for (let j = 1; j <= 320; j++) for (let i = 1; i <= 320; i++) {
+      const k = j * 322 + i;
+      distance[k] = Math.min(distance[k], distance[k - 1] + 1, distance[k - 322] + 1,
+        distance[k - 323] + Math.SQRT2, distance[k - 321] + Math.SQRT2);
+    }
+    for (let j = 320; j > 0; j--) for (let i = 320; i > 0; i--) {
+      const k = j * 322 + i;
+      distance[k] = Math.min(distance[k], distance[k + 1] + 1, distance[k + 322] + 1,
+        distance[k + 323] + Math.SQRT2, distance[k + 321] + Math.SQRT2);
+    }
+    const heights = new Float32Array(322 * 322), step = E * 2 / 320;
+    for (let j = 1; j <= 320; j++) for (let i = 1; i <= 320; i++) {
+      const k = j * 322 + i, d = Math.max(0, distance[k] - 0.5) * step;
+      if (d <= 0) continue;
+      const x = (i - 0.5) * step - E, y = (j - 0.5) * step - E;
+      const shoulder = 0.82 * (1 - Math.exp(-d / (R * 0.07)));
+      const rim = 0.30 * Math.exp(-Math.pow((d / R - 0.052) / 0.034, 2));
+      const dome = 0.20 * Math.exp(-(x * x + y * y) / (R * R * 0.65));
+      heights[k] = this.thick * (shoulder + rim + dome);
+    }
+    // Smooth the visual height (not the rendered colour / beads). Pixel steps
+    // in a distance field must not become little sparkling ridges in normals.
+    const smooth = new Float32Array(heights.length);
+    for (let j = 2; j < 320; j++) for (let i = 2; i < 320; i++) {
+      const k = j * 322 + i;
+      smooth[k] = (heights[k - 2] + 4 * heights[k - 1] + 6 * heights[k] + 4 * heights[k + 1] + heights[k + 2]) / 16;
+    }
+    for (let j = 2; j < 320; j++) for (let i = 2; i < 320; i++) {
+      const k = j * 322 + i;
+      heights[k] = (smooth[k - 644] + 4 * smooth[k - 322] + 6 * smooth[k] + 4 * smooth[k + 322] + smooth[k + 644]) / 16;
+    }
+    for (let j = 0; j < 320; j++) for (let i = 0; i < 320; i++) {
+      const h = (j + 1) * 322 + i + 1;
+      if (distance[h] <= 0) continue;
+      const dx = (heights[h + 1] - heights[h - 1]) / (2 * step);
+      const dy = (heights[h + 322] - heights[h - 322]) / (2 * step);
       const inv = 1 / Math.hypot(dx, dy, 1);
       const response = (.46 * dx + .56 * dy + .69) * inv - .69;
       const k = (j * 320 + i) * 4;
       const light = response > 0;
-      data.data[k] = light ? 255 : Math.round(this.color.r * .67);
-      data.data[k + 1] = light ? 250 : Math.round(this.color.g * .63);
-      data.data[k + 2] = light ? 254 : Math.round(this.color.b * .71);
-      data.data[k + 3] = Math.round(Math.min(light ? .3 : .2, Math.abs(response) * .85) * 255);
+      data.data[k] = light ? 255 : Math.round(this.color.r * .79);
+      data.data[k + 1] = light ? 253 : Math.round(this.color.g * .69);
+      data.data[k + 2] = light ? 250 : Math.round(this.color.b * .76);
+      data.data[k + 3] = Math.round(Math.min(light ? .42 : .23, Math.abs(response) * 1.05) * 255);
     }
     g.putImageData(data, 0, 0);
     this.formLights.set(key, c);
@@ -714,7 +746,9 @@ export class Gel {
     this.restPath(ctx);
     ctx.clip("evenodd");
     this.restPath(ctx, t * 0.35);
-    ctx.fillStyle = this.col(originalMaterial ? 0.25 : 0.17, 0.25);
+    // A full dark silhouette under a translucent face turns every pastel grey.
+    // The current material gets its thickness from the actual shoulder normals.
+    ctx.fillStyle = this.col(originalMaterial ? 0.25 : 0, 0.25);
     ctx.fill("evenodd");
     ctx.restore();
 
@@ -724,23 +758,23 @@ export class Gel {
     const body = ctx.createRadialGradient(-R * 0.1, -R * 0.15, R * 0.05, 0, 0, R * 1.08);
     if (this.centerThick) {
       // this pad is thickest in the middle: denser colour at the centre, thinning toward the tips
-      body.addColorStop(0, this.col((originalMaterial ? 0.42 : 0.36) * tr, 0.06));
-      body.addColorStop(0.4, this.col((originalMaterial ? 0.3 : 0.25) * tr, -0.02));
-      body.addColorStop(0.8, this.col(0.22 * tr, -0.08));
-      body.addColorStop(1, this.col(0.5 * tr, 0.1));
+      body.addColorStop(0, this.col((originalMaterial ? 0.42 : 0.62) * tr, -0.08));
+      body.addColorStop(0.4, this.col((originalMaterial ? 0.3 : 0.54) * tr, -0.06));
+      body.addColorStop(0.8, this.col((originalMaterial ? 0.22 : 0.40) * tr, -0.08));
+      body.addColorStop(1, this.col((originalMaterial ? 0.5 : 0.72) * tr, 0.04));
     } else {
       // centre is thin → pale and see-through; rim is thick → deeper colour
-      body.addColorStop(0, this.col((originalMaterial ? 0.12 : 0.10) * tr, -0.25));
-      body.addColorStop(0.45, this.col((originalMaterial ? 0.2 : 0.17) * tr, -0.08));
-      body.addColorStop(0.8, this.col((originalMaterial ? 0.38 : 0.33) * tr, 0.03));
-      body.addColorStop(1, this.col(0.62 * tr, 0.12));
+      body.addColorStop(0, this.col((originalMaterial ? 0.12 : 0.38) * tr, -0.25));
+      body.addColorStop(0.45, this.col((originalMaterial ? 0.2 : 0.46) * tr, -0.12));
+      body.addColorStop(0.8, this.col((originalMaterial ? 0.38 : 0.62) * tr, -0.04));
+      body.addColorStop(1, this.col((originalMaterial ? 0.62 : 0.76) * tr, 0.04));
     }
     ctx.fillStyle = body;
     ctx.fill("evenodd");
     ctx.save();
     ctx.clip("evenodd");
     // thickness band hugging the actual (lobed) outline: several inset strokes
-    for (let i = 0; i < 4; i++) {
+    for (let i = 0; i < (originalMaterial ? 4 : 0); i++) {
       this.restPath(ctx, 0, 1 - i * 0.028);
       ctx.lineWidth = R * 0.075;
       ctx.strokeStyle = this.col((0.1 - i * 0.02) * (originalMaterial ? 1 : 0.75), 0.3);
@@ -758,11 +792,11 @@ export class Gel {
     }
     this.restPath(ctx);
     ctx.lineWidth = R * 0.014;
-    ctx.strokeStyle = this.col(0.3, 0.35);
+    ctx.strokeStyle = this.col(originalMaterial ? 0.3 : 0.12, 0.25);
     ctx.stroke();
     // micro texture
     const grain = this.ensureGrain();
-    ctx.globalAlpha=originalMaterial ? 1 : 0.55;
+    ctx.globalAlpha=originalMaterial ? 1 : 0.22;
     ctx.drawImage(grain, -grain.width / 2, -grain.height / 2, grain.width, grain.height);
     ctx.globalAlpha=1;
 
@@ -781,32 +815,15 @@ export class Gel {
     // ── sockets + embedded beads (caller)
     inner(ctx);
     if (!originalMaterial) {
-      // Low, rounded perimeter bead on the top face. It follows only the outer
-      // silhouette: centre holes keep their own wall treatment and no gameplay
-      // geometry changes. Broad colour carries the form; hairline shine only
-      // marks the crest so the rim stays silicone rather than hard plastic.
-      const ridge = ctx.createLinearGradient(-R, -R, R, R);
-      ridge.addColorStop(0, "rgba(255,255,255,0.38)");
-      ridge.addColorStop(0.42, this.col(0.24, -0.38));
-      ridge.addColorStop(0.72, this.col(0.15, 0.04));
-      ridge.addColorStop(1, this.col(0.27, 0.18));
-      this.restPath(ctx, 0, 0.945, false);
-      ctx.lineWidth = R * 0.06;
-      ctx.strokeStyle = ridge;
-      ctx.stroke();
-
+      // The height field now carries the rounded rim. Only a restrained crest
+      // reflection remains; no stack of inset dark/white contour lines.
       const crest = ctx.createLinearGradient(-R, -R, R * 0.6, R * 0.6);
-      crest.addColorStop(0, "rgba(255,255,255,0.68)");
-      crest.addColorStop(0.5, "rgba(255,255,255,0.18)");
-      crest.addColorStop(1, "rgba(255,255,255,0.02)");
-      this.restPath(ctx, 0, 0.966, false);
-      ctx.lineWidth = Math.max(1, R * 0.009);
+      crest.addColorStop(0, "rgba(255,255,255,0.38)");
+      crest.addColorStop(0.5, "rgba(255,255,255,0.10)");
+      crest.addColorStop(1, "rgba(255,255,255,0)");
+      this.restPath(ctx, 0, 0.965, false);
+      ctx.lineWidth = Math.max(1, R * 0.012);
       ctx.strokeStyle = crest;
-      ctx.stroke();
-
-      this.restPath(ctx, 0, 0.908, false);
-      ctx.lineWidth = Math.max(1, R * 0.011);
-      ctx.strokeStyle = this.col(0.16, 0.22);
       ctx.stroke();
     }
     // inner Fresnel glow: a translucent slab's edges pick up ambient light
@@ -847,7 +864,7 @@ export class Gel {
       // Contact follows the real pad silhouette instead of a floating oval.
       ctx.filter = `blur(${R * .035}px)`;
       this.restPath(ctx, 0, .985);
-      ctx.fillStyle = 'rgba(85,63,81,0.13)'; ctx.fill('evenodd');
+      ctx.fillStyle = 'rgba(85,63,81,0.085)'; ctx.fill('evenodd');
       ctx.filter = 'none';
       this.shadowTex = c;
       return c;
@@ -919,17 +936,24 @@ export class Gel {
   drawMesh2D(ctx: CanvasRenderingContext2D) {
     const tex = this.tex;
     if (!tex) return;
+    const surface = this.fallbackSurface ??= document.createElement('canvas');
+    if (surface.width !== ctx.canvas.width || surface.height !== ctx.canvas.height) {
+      surface.width = ctx.canvas.width;
+      surface.height = ctx.canvas.height;
+    }
+    const raster = surface.getContext('2d')!;
+    raster.setTransform(1, 0, 0, 1, 0, 0);
+    raster.clearRect(0, 0, surface.width, surface.height);
     const n = this.gridN;
     const E = this.texE;
     const cell = (E * 2) / n;
     const vx = this.vx;
     const vy = this.vy;
-    // draw each cell with its own affine transform (3 corners → parallelogram)
+    // Two triangles share exactly the same vertices, including the fourth
+    // corner of a deformed cell. Accumulate their antialiased coverage on a
+    // transparent surface: source-over doubles alpha; copy erases edge alpha.
     const ts = tex.width / (E * 2); // texture px per local unit
-    const ov = 0.35; // local px of overlap to hide hairline seams (fallback path only)
     const maxR = this.R * Math.max(...this.restR) * 1.02 + this.thick;
-    ctx.save();
-    ctx.globalAlpha = this.fade;
     for (let j = 0; j < n; j++) {
       for (let i = 0; i < n; i++) {
         const cx = -E + (i + 0.5) * cell;
@@ -938,19 +962,35 @@ export class Gel {
         const k00 = j * (n + 1) + i;
         const k10 = k00 + 1;
         const k01 = k00 + n + 1;
-        const x00 = vx[k00],
-          y00 = vy[k00];
-        const a = (vx[k10] - x00) / cell;
-        const b = (vy[k10] - y00) / cell;
-        const c = (vx[k01] - x00) / cell;
-        const d = (vy[k01] - y00) / cell;
-        ctx.setTransform(a, b, c, d, x00, y00);
-        const sx = (i * cell - ov) * ts;
-        const sy = (j * cell - ov) * ts;
-        const sw = (cell + ov * 2) * ts;
-        ctx.drawImage(tex, sx, sy, sw, sw, -ov, -ov, cell + ov * 2, cell + ov * 2);
+        const k11 = k01 + 1;
+        for (let half = 0; half < 2; half++) {
+          const x00 = half ? vx[k10] + vx[k01] - vx[k11] : vx[k00];
+          const y00 = half ? vy[k10] + vy[k01] - vy[k11] : vy[k00];
+          const a = (half ? vx[k11] - vx[k01] : vx[k10] - x00) / cell;
+          const b = (half ? vy[k11] - vy[k01] : vy[k10] - y00) / cell;
+          const c = (half ? vx[k11] - vx[k10] : vx[k01] - x00) / cell;
+          const d = (half ? vy[k11] - vy[k10] : vy[k01] - y00) / cell;
+          raster.save();
+          raster.setTransform(a, b, c, d, x00, y00);
+          raster.beginPath();
+          raster.moveTo(half ? cell : 0, half ? cell : 0);
+          raster.lineTo(cell, 0);
+          raster.lineTo(0, cell);
+          raster.closePath();
+          raster.clip();
+          raster.globalCompositeOperation = 'lighter';
+          // The source rectangle extends beyond the clip. Only triangle coverage
+          // is antialiased, not a second cropped image edge at the same location.
+          raster.drawImage(tex, 0, 0, tex.width, tex.height,
+            -i * cell, -j * cell, tex.width / ts, tex.height / ts);
+          raster.restore();
+        }
       }
     }
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalAlpha = this.fade;
+    ctx.drawImage(surface, 0, 0);
     ctx.restore();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
   }

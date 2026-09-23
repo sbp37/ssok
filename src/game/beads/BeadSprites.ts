@@ -1,5 +1,6 @@
 import type { BeadType } from "./BeadTypes";
 import { beadAsset, beadAssetTinted } from "./BeadAssets";
+import { BoundedCache } from "../util/BoundedCache";
 
 /**
  * Beads are pre-rendered once per (type, color, radius) into small offscreen
@@ -13,8 +14,8 @@ export interface Sprite {
   h: number;
 }
 
-const cache = new Map<string, Sprite>();
-const shadowCache = new Map<string, Sprite>();
+const cache = new BoundedCache<string, Sprite>(384);
+const shadowCache = new BoundedCache<string, Sprite>(128);
 export function invalidateBeadSprites(){cache.clear();contourCache.clear();}
 
 function hexToRgb(hex: string): [number, number, number] {
@@ -169,10 +170,13 @@ function paintBody(ctx: CanvasRenderingContext2D, type: BeadType, color: string,
     g.addColorStop(0.55, rgba(color, 0.82));
     g.addColorStop(1, darken(color, 0.25, 0.95));
   } else if (m === "shell") {
-    g = ctx.createRadialGradient(-r * 0.3, -r * 0.3, r * 0.1, 0, 0, r);
-    g.addColorStop(0, "#ffffff");
-    g.addColorStop(0.7, color);
-    g.addColorStop(1, darken(color, 0.15));
+    // Nacre is a shallow convex solid, not a uniformly white sticker.
+    g = ctx.createRadialGradient(-r * 0.24, -r * 0.3, r * 0.04, r * 0.08, r * 0.1, r * 1.08);
+    g.addColorStop(0, "#fffdfb");
+    g.addColorStop(0.42, color);
+    g.addColorStop(0.76, rgba(color, 1, 0.30, [166, 163, 187]));
+    g.addColorStop(0.9, rgba(color, 1, 0.38, [144, 146, 174]));
+    g.addColorStop(1, "#f4e6ef");
   } else {
     g = ctx.createRadialGradient(-r * 0.3, -r * 0.35, r * 0.08, 0, 0, r * 1.05);
     g.addColorStop(0, lighten(color, 0.55));
@@ -203,7 +207,7 @@ function paintBody(ctx: CanvasRenderingContext2D, type: BeadType, color: string,
       const x = -r * 0.55 + (i % 2) * r * 0.95;
       const y = -r * 0.4 + Math.floor(i / 2) * r * 0.85;
       const sheen = ctx.createRadialGradient(x, y, 0, x, y, r * 1.05);
-      sheen.addColorStop(0, b + "88");
+      sheen.addColorStop(0, b + "55");
       sheen.addColorStop(1, b + "00");
       ctx.fillStyle = sheen;
       ctx.fillRect(-r, -r, r * 2, r * 2);
@@ -297,6 +301,21 @@ function paintCherryStem(ctx: CanvasRenderingContext2D, r: number) {
 
 function paintSpecular(ctx: CanvasRenderingContext2D, type: BeadType, r: number) {
   const m = type.material;
+  if (m === "shell") {
+    // One broad window reflection and a small edge return. No planet rings.
+    const sheen = ctx.createRadialGradient(-r * 0.34, -r * 0.37, 0, -r * 0.34, -r * 0.37, r * 0.62);
+    sheen.addColorStop(0, "rgba(255,255,255,0.82)");
+    sheen.addColorStop(0.42, "rgba(255,255,255,0.38)");
+    sheen.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.fillStyle = sheen;
+    ctx.fillRect(-r, -r, r * 2, r * 2);
+    ctx.beginPath();
+    ctx.ellipse(0, 0, r * 0.86, r * 0.72, 0, 0.15, 1.15);
+    ctx.strokeStyle = "rgba(255,248,242,0.65)";
+    ctx.lineWidth = Math.max(0.8, r * 0.055);
+    ctx.stroke();
+    return;
+  }
   const strong = m === "glass" || m === "metal" || m === "pearl";
   // main highlight
   const hx = -r * 0.36;
@@ -438,8 +457,8 @@ export function getShadowSprite(radius: number, dpr: number): Sprite {
   return sp;
 }
 
-const meniscusCache = new Map<string, Sprite>();
-const contourCache = new Map<string, Sprite>();
+const meniscusCache = new BoundedCache<string, Sprite>(128);
+const contourCache = new BoundedCache<string, Sprite>(256);
 
 /** Silicone follows the actual charm silhouette, including spaces between
  * petals/cherries. Cached masks retain the original depth/lift animation. */

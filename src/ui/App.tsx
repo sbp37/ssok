@@ -306,7 +306,12 @@ export function App() {
           </div>
 
           {phase === "intro" && <div className={"hint" + (hintHidden ? " hide" : "")}>하나 뽑아봐.</div>}
-          {phase === "free" && padEmpty && flow !== "" && <div className="done">다 비웠다.</div>}
+          {phase === "free" && padEmpty && flow !== "" && (
+            <div className="done" role="status">
+              <strong>쏙, 다 비웠다!</strong>
+              <small>{gameRef.current?.pad.name} 패드 완성</small>
+            </div>
+          )}
           {phase === "free" && glimmer && !padEmpty && <div className="glimmer">안쪽에서 뭔가 반짝인다…</div>}
 
           {toasts.length > 0 && (

@@ -108,6 +108,7 @@ export class Game extends Emitter<GameEvents> {
   private gl: MeshGL | null = null;
   private glBaseVersion = -1;
   private glShadowR = -1;
+  private neckSurface: HTMLCanvasElement | null = null;
   private padCx = 0;
   private padCy = 0;
   private grabEnabled = true;
@@ -637,7 +638,10 @@ export class Game extends Emitter<GameEvents> {
     const sizeStrength = pullSizeStrength(b, this.gel.R);
     const king = b.type.id === "king";
     const rare = b.type.rarity === "rare";
-    const pos = beadPos(b);
+    // Start at the last rendered (warped) centre, not the unwarped rest point.
+    // Otherwise a strongly stretched king jumps backwards on its POP frame.
+    const pos = this.embeddedPosition(b);
+    const releaseScale = this.embeddedScale(b);
     this.pulls.delete(fingerId);
     this.gel.reanchor(fingerId);
     b.state = "flying";
@@ -678,6 +682,7 @@ export class Game extends Emitter<GameEvents> {
       px: pos.x,
       py: pos.y,
       spin: (Math.random() - 0.5) * 9,
+      releaseScale,
     };
 
     // t = 0: sound + haptic land exactly with the release
@@ -1001,6 +1006,7 @@ export class Game extends Emitter<GameEvents> {
 
     for (const b of this.beads) if (b.state === "flying" && b.fly) this.drawFlying(ctx, b);
     this.collector.draw(ctx, dpr);
+    this.drawCollectorFinale(ctx);
   }
 
   private drawFinishStar(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, alpha: number) {
@@ -1031,6 +1037,20 @@ export class Game extends Emitter<GameEvents> {
     }
   }
 
+  /** The closing beat belongs to what was collected, not only the empty pad.
+   * Four one-shot glints on the real jar; no extra particles or reward state. */
+  private drawCollectorFinale(ctx: CanvasRenderingContext2D) {
+    if (this.finaleT < 0) return;
+    const jar = this.collector;
+    for (let i = 0; i < 4; i++) {
+      const p = (this.finaleT - 0.08 - i * 0.1) / 0.62;
+      if (p <= 0 || p >= 1) continue;
+      const x = jar.x + jar.w * [0.12, 0.83, 0.38, 0.7][i];
+      const y = jar.y + jar.h * [0.22, 0.12, -0.03, 0.52][i] - (this.reducedMotion ? 0 : p * 5);
+      this.drawFinishStar(ctx, x, y, i % 2 ? 4 : 5.5, Math.sin(p * Math.PI));
+    }
+  }
+
   /** everything embedded in the gel, at rest positions (the mesh does the moving) */
   private drawBaseBeads(ctx: CanvasRenderingContext2D) {
     const gel = this.gel;
@@ -1048,7 +1068,8 @@ export class Game extends Emitter<GameEvents> {
       for (const b of this.beads) {
         if (b.layer !== layer) continue;
         if (b.state === "held") {
-          gel.drawSocket(ctx, b.rx, b.ry, b.radius * 0.95, b.type, b.rot);
+          // The moving opening is drawn once by drawNeck, in the same warped
+          // space as the bead. A second baked socket darkened / doubled it.
           continue;
         }
         if (b.state !== "embedded") continue;
@@ -1087,12 +1108,16 @@ export class Game extends Emitter<GameEvents> {
     return (1 - clamp(b.depth.x, 0, 1) * 0.34) * (fit + (1 - fit) * b.lift) * (1 + b.lift * 0.2);
   }
 
-  private drawEmbedded(ctx: CanvasRenderingContext2D, b: Bead, above = false, base = false, peek = false) {
+  /** One centre for the rigid bead, its gel neck, and the first flight frame. */
+  private embeddedPosition(b: Bead, base = false) {
     const p = beadPos(b);
-    if (base) {
-      this.tmp.x = p.x;
-      this.tmp.y = p.y;
-    } else this.gel.warp(p.x, p.y, this.tmp);
+    if (!base) this.gel.warp(p.x, p.y, p);
+    p.y += clamp(b.depth.x, 0, 1) * b.radius * 0.22 - b.lift * 3 * this.s;
+    return p;
+  }
+
+  private drawEmbedded(ctx: CanvasRenderingContext2D, b: Bead, above = false, base = false, peek = false) {
+    const p = this.embeddedPosition(b, base);
     // clamp: the depth spring overshoots a hair below 0 and settles there; an alpha above 1
     // is *ignored* by canvas, which left the shadow's 55% in place – every surfaced bead
     // stayed hazy for good
@@ -1101,17 +1126,17 @@ export class Game extends Emitter<GameEvents> {
     // down in the hole it reads smaller and sits lower; rising brings it to full size. A big object
     // under a small hole shows hole-sized until it is pulled: the hole stretches and out comes a big one
     const scale = this.embeddedScale(b, peek);
-    const x = this.tmp.x;
-    const y = this.tmp.y + depth * b.radius * 0.22 - lift * 3 * this.s;
+    const x = p.x;
+    const y = p.y;
     const alpha = Math.min(1, (above ? 1 : 1 - depth * 0.5) * ctx.globalAlpha);
     const dpr = this.dpr;
 
     // shadow: tighter when embedded, lifts & offsets as the bead comes out
-    const sh = getShadowSprite(b.radius * scale, dpr);
+    const sh = getShadowSprite(b.radius, dpr);
     // At rest the socket wall supplies contact shade; a cast shadow underneath
     // the entire bead made it look perched on top. Keep that shadow for lift.
     ctx.globalAlpha = alpha * ((b.type.material === "glass" ? 0.06 : 0.1) + lift * 0.65);
-    ctx.drawImage(sh.canvas, x - sh.w / 2 + lift * 4 * this.s, y - sh.h / 2 + b.radius * (0.18 + lift * 0.5), sh.w, sh.h);
+    ctx.drawImage(sh.canvas, x - sh.w * scale / 2 + lift * 4 * this.s, y - sh.h * scale / 2 + b.radius * (0.18 + lift * 0.5), sh.w * scale, sh.h * scale);
 
     // seen through gel → a softened sprite variant (blur baked in, cached); crisp once it lifts out
     const sp = getBeadSprite(b.type, b.color, b.radius, dpr, base ? depth * 0.7 * this.s : 0);
@@ -1132,10 +1157,12 @@ export class Game extends Emitter<GameEvents> {
     // top-left, gel-coloured bottom-right) and a contact shadow – the look the rainbow bead had
     const men = (1 - lift) * (1 - depth) * alpha;
     if (men > 0.02) {
-      const ms = getContourMeniscus(b.type, b.color, b.radius * scale, dpr, this.gel.col(1), b.rot);
+      // A lifted bead changes size every frame. Scale the cached contour with
+      // it instead of creating dozens of dilated masks during one pull.
+      const ms = getContourMeniscus(b.type, b.color, b.radius, dpr, this.gel.col(1), b.rot);
       ctx.globalAlpha = men;
-      ctx.save();ctx.translate(x,y);ctx.rotate(b.rot);ctx.translate(-x,-y);
-      ctx.drawImage(ms.canvas, x - ms.w / 2, y - ms.h / 2, ms.w, ms.h);
+      ctx.save();ctx.translate(x,y);ctx.rotate(b.rot);ctx.scale(scale,scale);
+      ctx.drawImage(ms.canvas, -ms.w / 2, -ms.h / 2, ms.w, ms.h);
       ctx.restore();
     }
 
@@ -1184,9 +1211,11 @@ export class Game extends Emitter<GameEvents> {
     const uy = L > 0.5 ? sty / L : pull.dirY;
     const nx = -uy;
     const ny = ux;
-    const bx = hx + b.off.x;
-    const by = hy + b.off.y;
-    const offL = Math.hypot(b.off.x, b.off.y);
+    const beadCentre = this.embeddedPosition(b);
+    const bx = beadCentre.x;
+    const by = beadCentre.y;
+    const offX = bx - hx, offY = by - hy;
+    const offL = Math.hypot(offX, offY);
     // big beads drag more gel with them: wider tent, thicker neck; while wedged the strain shows
     const J = pull.jam;
     const O = pull.over;
@@ -1195,6 +1224,9 @@ export class Game extends Emitter<GameEvents> {
 
     // ── tent: surface around the socket lifted toward the finger.
     // dark on the far side (steep, in shadow), bright bulge on the near side.
+    ctx.save();
+    gel.outlinePath(ctx);
+    ctx.clip("evenodd");
     const tentR = r * (1.7 + 0.8 * T + 0.4 * P) * bigK;
     const far = ctx.createRadialGradient(hx - ux * r * 0.6, hy - uy * r * 0.6, r * 0.4, hx - ux * r * 0.3, hy - uy * r * 0.3, tentR);
     far.addColorStop(0, gel.col(0.19 * T * (1 + 0.6 * J * O), 0.35));
@@ -1214,21 +1246,30 @@ export class Game extends Emitter<GameEvents> {
     ctx.beginPath();
     ctx.arc(nearX, nearY, tentR * 0.75, 0, Math.PI * 2);
     ctx.fill();
+    ctx.restore();
 
     // ── oval meniscus: the gel lip gripping the bead is dragged a little toward the finger.
     // Soft gradient rings (no hard strokes) drawn in a scaled space so they are elliptical.
-    const cx = hx + ux * L * 0.3 + b.off.x * 0.35;
-    const cy = hy + uy * L * 0.3 + b.off.y * 0.35;
+    const cx = hx + ux * L * 0.06;
+    const cy = hy + uy * L * 0.06;
     // Larger beads visibly open the mouth as they emerge, then the existing
     // socket/recoil takes over at POP. No permanent enlargement of the hole.
     const opening = sizeStrength * Math.sin(P * Math.PI * 0.8);
     const across = r * (1.12 - 0.1 * P + opening * 0.18);
-    const along = across + L * (0.26 + sizeStrength * 0.1) + offL * 0.18;
+    // Keep the mouth at its socket. Stretch belongs to the neck, not a giant
+    // white oval that follows the bead and floats above the pad like a halo.
+    const along = across + Math.min(r * 0.20, L * 0.12);
     const rot = Math.atan2(uy, ux);
     ctx.save();
     ctx.translate(cx, cy);
     ctx.rotate(rot);
     ctx.scale(along / across, 1);
+    // Gradients with an inner radius still fill the centre with stop zero.
+    // Explicitly exclude it: the silicone lip is an annulus, not a pale disc.
+    ctx.beginPath();
+    ctx.arc(0, 0, across * 1.5, 0, Math.PI * 2);
+    ctx.arc(0, 0, across * 0.94, 0, Math.PI * 2, true);
+    ctx.clip("evenodd");
     // glossy stretched surface just outside the bead
     const gloss = ctx.createRadialGradient(0, 0, across * 0.8, 0, 0, across * 1.5);
     gloss.addColorStop(0, `rgba(255,255,255,${0.1 + 0.12 * T})`);
@@ -1268,69 +1309,103 @@ export class Game extends Emitter<GameEvents> {
     ctx.fill();
     ctx.restore();
 
-    // ── socket: dark, deepens with pull
+    // One shaped opening, never an extra circular stain behind a heart/star.
     const holeR = r * (0.9 + 0.12 * P + opening * 0.16);
-    const hole = ctx.createRadialGradient(hx, hy, holeR * 0.15, hx, hy, holeR * 1.1);
-    hole.addColorStop(0, `rgba(55,45,58,${0.12 + 0.12 * T + 0.1 * P})`);
-    hole.addColorStop(0.7, `rgba(55,45,58,${0.05 + 0.04 * P})`);
-    hole.addColorStop(1, "rgba(55,45,58,0)");
-    ctx.fillStyle = hole;
-    ctx.beginPath();
-    ctx.arc(hx, hy, holeR * 1.1, 0, Math.PI * 2);
-    ctx.fill();
+    gel.drawSocket(ctx, hx, hy, holeR, b.type, b.rot, 0.7 + T * 0.2 + P * 0.15);
 
     // ── neck (slip stage): a concave bridge from the lip to the bead that thins as it goes.
     // A big bead shows its neck sooner and keeps it thicker; a wedged one bulges mid-neck.
     // The strand is narrower than the bead at both ends (it was a triangle when its base
     // spanned the whole lip) and has a waist that thins as the bead comes out.
     if (offL > r * (0.45 - 0.12 * J)) {
+      // Fade the whole bridge into its root, including its side reflections.
+      // Fading only the body left a hard, pale cut edge over the socket.
+      const target = ctx;
+      const surface = this.neckSurface ??= document.createElement('canvas');
+      const pixelRatio = Math.min(2, this.dpr);
+      const left = Math.min(hx, bx) - r * 1.5 - 12;
+      const top = Math.min(hy, by) - r * 1.5 - 12;
+      const width = Math.abs(offX) + r * 3 + 24;
+      const height = Math.abs(offY) + r * 3 + 24;
+      // Reuse a power-of-two scratch surface; no per-frame resize/upload.
+      const side = 2 ** Math.ceil(Math.log2(Math.max(width, height) * pixelRatio));
+      if (surface.width < side || surface.height < side) surface.width = surface.height = side;
+      ctx = surface.getContext('2d')!;
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.clearRect(0, 0, surface.width, surface.height);
+      ctx.setTransform(pixelRatio, 0, 0, pixelRatio, -left * pixelRatio, -top * pixelRatio);
       const kingWidth = b.type.id === "king" ? 1 : 0;
-      const w0 = r * (0.6 + 0.1 * J - 0.15 * P + opening * 0.13 + kingWidth * 0.13);
-      const w1 = r * (0.5 - 0.2 * P + kingWidth * 0.1) * (1 + 0.1 * J);
-      const wm = Math.max(r * 0.12, r * (0.4 - 0.24 * P + kingWidth * 0.14) * (1 + 0.25 * J + 0.3 * J * O));
-      const mx = hx + b.off.x * 0.5;
-      const my = hy + b.off.y * 0.5;
+      const w0 = r * (0.72 + 0.1 * J - 0.1 * P + opening * 0.13 + kingWidth * 0.12);
+      const w1 = r * (0.48 - 0.12 * P + kingWidth * 0.1) * (1 + 0.1 * J);
+      const wm = Math.max(r * 0.12, r * (0.30 - 0.16 * P + kingWidth * 0.10) * (1 + 0.25 * J + 0.3 * J * O));
+      const mx = hx + offX * 0.56;
+      const my = hy + offY * 0.56;
+      // A smooth waist between two flared attachments, not straight cone sides.
+      const sideUp = (sign: number, inset = 1) => {
+        const q = sign * inset;
+        ctx.bezierCurveTo(hx + offX * 0.18 + nx * w0 * q * 0.44, hy + offY * 0.18 + ny * w0 * q * 0.44,
+          mx - offX * 0.17 + nx * wm * q, my - offY * 0.17 + ny * wm * q, mx + nx * wm * q, my + ny * wm * q);
+        ctx.bezierCurveTo(mx + offX * 0.18 + nx * wm * q, my + offY * 0.18 + ny * wm * q,
+          bx - offX * 0.1 + nx * w1 * q, by - offY * 0.1 + ny * w1 * q, bx + nx * w1 * q, by + ny * w1 * q);
+      };
       const neck = () => {
         ctx.beginPath();
         ctx.moveTo(hx + nx * w0, hy + ny * w0);
-        ctx.bezierCurveTo(hx + b.off.x * 0.25 + nx * wm, hy + b.off.y * 0.25 + ny * wm,
-          hx + b.off.x * 0.8 + nx * wm, hy + b.off.y * 0.8 + ny * wm, bx + nx * w1, by + ny * w1);
+        sideUp(1);
         ctx.arc(bx, by, w1, Math.atan2(ny, nx), Math.atan2(-ny, -nx), true);
-        ctx.bezierCurveTo(hx + b.off.x * 0.8 - nx * wm, hy + b.off.y * 0.8 - ny * wm,
-          hx + b.off.x * 0.25 - nx * wm, hy + b.off.y * 0.25 - ny * wm, hx - nx * w0, hy - ny * w0);
+        ctx.bezierCurveTo(bx - offX * 0.1 - nx * w1, by - offY * 0.1 - ny * w1,
+          mx + offX * 0.18 - nx * wm, my + offY * 0.18 - ny * wm, mx - nx * wm, my - ny * wm);
+        ctx.bezierCurveTo(mx - offX * 0.17 - nx * wm, my - offY * 0.17 - ny * wm,
+          hx + offX * 0.18 - nx * w0 * 0.44, hy + offY * 0.18 - ny * w0 * 0.44, hx - nx * w0, hy - ny * w0);
         ctx.quadraticCurveTo(hx - ux * r * 0.22, hy - uy * r * 0.22, hx + nx * w0, hy + ny * w0);
         ctx.closePath();
       };
       ctx.save();
       ctx.translate(1.5 * s + P * 2.5, 2 * s + P * 4);
       neck();
-      ctx.fillStyle = gel.col(0.1 + P * 0.05, 0.35);
+      ctx.fillStyle = gel.col(0.055 + P * 0.025, 0.25);
       ctx.fill();
       ctx.restore();
       neck();
-      ctx.fillStyle = gel.col(0.5 - P * 0.14, -0.03);
+      const body = ctx.createLinearGradient(hx - ux * r * 0.2, hy - uy * r * 0.2, bx, by);
+      body.addColorStop(0, gel.col(0.38, -0.12));
+      body.addColorStop(0.2, gel.col(0.86, -0.12));
+      body.addColorStop(0.55, gel.col(0.9 - P * 0.06, -0.12));
+      body.addColorStop(1, gel.col(0.82, -0.08));
+      ctx.fillStyle = body;
       ctx.fill();
-      const lg = ctx.createLinearGradient(mx + nx * w0, my + ny * w0, mx - nx * w0, my - ny * w0);
-      lg.addColorStop(0, "rgba(255,255,255,0.4)");
-      lg.addColorStop(0.3, "rgba(255,255,255,0.12)");
-      lg.addColorStop(0.65, "rgba(55,45,58,0.08)");
-      lg.addColorStop(1, gel.col(0.25, 0.35));
+      // Screen-fixed key light, including when pulling left/down. The gel
+      // turns with the gesture; the studio light does not.
+      const lit = -nx * 0.6 - ny * 0.8 >= 0 ? 1 : -1;
+      const lg = ctx.createLinearGradient(mx + nx * w0 * lit, my + ny * w0 * lit, mx - nx * w0 * lit, my - ny * w0 * lit);
+      lg.addColorStop(0, "rgba(255,255,255,0.28)");
+      lg.addColorStop(0.38, "rgba(255,255,255,0.18)");
+      lg.addColorStop(0.68, gel.col(0.06, 0.15));
+      lg.addColorStop(1, gel.col(0.18, 0.24));
       ctx.fillStyle = lg;
       ctx.fill();
       ctx.beginPath();
       ctx.moveTo(hx + nx * w0 * 0.85, hy + ny * w0 * 0.85);
-      ctx.bezierCurveTo(hx + b.off.x * 0.25 + nx * wm * 0.9, hy + b.off.y * 0.25 + ny * wm * 0.9,
-        hx + b.off.x * 0.8 + nx * wm * 0.9, hy + b.off.y * 0.8 + ny * wm * 0.9, bx + nx * w1 * 0.9, by + ny * w1 * 0.9);
-      ctx.strokeStyle = `rgba(255,255,255,${0.6 + 0.2 * P})`;
+      sideUp(1, 0.9);
+      ctx.strokeStyle = `rgba(255,255,255,${lit > 0 ? 0.28 + 0.1 * P : 0.06})`;
       ctx.lineWidth = 1.4;
       ctx.stroke();
       ctx.beginPath();
       ctx.moveTo(hx - nx * w0, hy - ny * w0);
-      ctx.bezierCurveTo(hx + b.off.x * 0.25 - nx * wm, hy + b.off.y * 0.25 - ny * wm,
-        hx + b.off.x * 0.8 - nx * wm, hy + b.off.y * 0.8 - ny * wm, bx - nx * w1, by - ny * w1);
-      ctx.strokeStyle = gel.col(0.18 + 0.1 * P, 0.3);
+      sideUp(-1);
+      ctx.strokeStyle = lit < 0 ? `rgba(255,255,255,${0.28 + 0.1 * P})` : gel.col(0.12 + 0.06 * P, 0.3);
       ctx.lineWidth = 0.8;
       ctx.stroke();
+      const rootBlend = ctx.createLinearGradient(hx, hy, hx + offX * 0.3, hy + offY * 0.3);
+      rootBlend.addColorStop(0, 'rgba(255,255,255,0)');
+      rootBlend.addColorStop(0.45, 'rgba(255,255,255,0.5)');
+      rootBlend.addColorStop(1, '#fff');
+      ctx.globalCompositeOperation = 'destination-in';
+      ctx.fillStyle = rootBlend;
+      ctx.fillRect(left, top, surface.width / pixelRatio, surface.height / pixelRatio);
+      ctx.globalCompositeOperation = 'source-over';
+      ctx = target;
+      ctx.drawImage(surface, left, top, surface.width / pixelRatio, surface.height / pixelRatio);
     }
     // gel still clinging to the back of the bead
     ctx.save();
@@ -1439,7 +1514,8 @@ export class Game extends Emitter<GameEvents> {
     ctx.translate(x, y);
     ctx.rotate(b.rot + f.spin * Math.max(0, f.t - f.hang));
     const toBox = !!treasureKind(b.type);
-    const sc = 1.12 - flyT * (toBox ? 0.55 : 0.3); // lifted while it hangs, shrinks as it "falls" into the cup / box
+    const releaseScale = f.releaseScale ?? 1.12;
+    const sc = releaseScale + (1.12 - releaseScale) * easeOutCubic(clamp(f.t / 0.09, 0, 1)) - flyT * (toBox ? 0.55 : 0.3);
     ctx.scale(sc, sc);
     ctx.drawImage(sp.canvas, -sp.w / 2, -sp.h / 2, sp.w, sp.h);
     ctx.restore();

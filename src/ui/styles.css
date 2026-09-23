@@ -337,16 +337,37 @@ body,
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
-  top: 45.5%;
-  padding: 5px 13px;
-  border-radius: 999px;
-  background: rgba(255, 250, 252, 0.72);
-  backdrop-filter: blur(3px);
+  top: 67%;
+  padding: 8px 18px;
+  width: max-content;
+  max-width: 90%;
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(255, 253, 250, 0.95), rgba(255, 247, 249, 0.75));
+  box-shadow: 0 3px 14px rgba(117, 74, 93, 0.06), inset 0 1px 0 #fff;
   text-align: center;
   font-size: 15px;
   font-weight: 500;
   color: rgba(80, 40, 70, 0.78);
-  animation: btnIn 0.7s ease-out;
+  animation: doneIn 0.45s ease-out;
+}
+.done strong {
+  display: block;
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+}
+.done small {
+  display: block;
+  margin-top: 3px;
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+@keyframes doneIn {
+  from { opacity: 0; transform: translate(-50%, 6px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .done { animation: none; }
 }
 .gate {
   display: flex;
