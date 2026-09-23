@@ -13,6 +13,7 @@ import { haptics } from "./haptics";
 import { clamp, easeOutCubic, rng } from "./util/math";
 import { PADS, padById, resolvePad, type PadType } from "./pads/PadTypes";
 import { DiscoveryProvider, PadProgress, isRareVariant, type NextPadProvider } from "./pads/progress";
+import { roundBeadBudget } from "./pads/pacing";
 import { DAY_NONE_FACTOR, FIRST_TREASURE_GUARANTEE, HIDDEN_POOLS, NONE, ULTRA_SURFACE_CHANCE } from "./rewards/rates";
 import { ULTRA_TYPES } from "./beads/BeadTypes";
 import { TreasureStore, treasureKind, type TreasureKind } from "./rewards/treasure";
@@ -286,8 +287,7 @@ export class Game extends Emitter<GameEvents> {
           hole,
           edgeInset: preset.edgeInset,
           smallFillZones: preset.smallFillZones,
-          // Shorter pads requested: keep type/deeper/treasure rolls unchanged.
-          surface: Math.max(1, Math.round(preset.surface * 0.7)),
+          ...roundBeadBudget(preset, this.progressStore.totalCompleted),
           // how layered this pad is – some pads are mostly one layer, some hide a second one
           // under half their beads; always denser toward the middle than at the rim
           deeperChance: 0.26 + rng.next() * 0.3,

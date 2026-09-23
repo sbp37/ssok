@@ -124,6 +124,8 @@ function beadRotation(type: BeadType, rng: Rng, ordinal = 0) {
  */
 export interface PadOptions {
   surface?: number;
+  /** Total round budget, with room reserved for the hidden treasure and king. */
+  maxTotal?: number;
   /** safe inset from the outer silhouette, as a fraction of pad radius */
   edgeInset?: number;
   /** reserved pad-local pockets (x/R, y/R) filled with small surface beads */
@@ -285,6 +287,21 @@ export function generatePad(padR: number, rng: Rng, opts: PadOptions = {}): Bead
       placed.push({ x, y, r: footprint, material: type.material });
       beads.push(makeBead(type, rng.pick(type.colors), radius, beadRotation(type, rng, index), 0, slot++, x, y));
       added = true;
+    }
+  }
+
+  // Limit the ordinary second layer BEFORE rolling/placing special treasures.
+  // Random removal avoids favouring the biggest surface beads (placed first).
+  // Reserve two extra slots: one hidden treasure and one king. Ultra replaces
+  // an existing deep bead below, so it needs no extra slot.
+  if (opts.maxTotal !== undefined) {
+    const surface = beads.filter((b) => b.layer === 0).length;
+    const deep = beads.filter((b) => b.layer === 1);
+    const limit = Math.max(0, Math.floor(opts.maxTotal) - surface - 2);
+    while (deep.length > limit) {
+      const index = Math.floor(rng.next() * deep.length);
+      const [bead] = deep.splice(index, 1);
+      beads.splice(beads.indexOf(bead), 1);
     }
   }
 
