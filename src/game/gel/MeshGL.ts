@@ -18,6 +18,8 @@ export class MeshGL {
   private uvBuf: WebGLBuffer;
   private idxBuf: WebGLBuffer;
   private quadPos: WebGLBuffer;
+  /** 4 corners × xy, refilled per draw instead of a new Float32Array every frame */
+  private quadCorners = new Float32Array(8);
   private quadUv: WebGLBuffer;
   private textures = new Map<string, { tex: WebGLTexture; w: number; h: number }>();
   private idxCount = 0;
@@ -196,7 +198,7 @@ export class MeshGL {
   }
 
   /** draw a textured quad given its 4 corners (device px): tl, tr, bl, br */
-  drawQuad(texKey: string, corners: number[], alpha: number) {
+  drawQuad(texKey: string, corners: ArrayLike<number>, alpha: number) {
     const gl = this.gl;
     const t = this.textures.get(texKey);
     if (!t) return;
@@ -204,7 +206,8 @@ export class MeshGL {
     gl.uniform1f(this.uAlpha, alpha);
     gl.uniform1f(this.uSurface,0);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.quadPos);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(corners), gl.DYNAMIC_DRAW);
+    this.quadCorners.set(corners);
+    gl.bufferData(gl.ARRAY_BUFFER, this.quadCorners, gl.DYNAMIC_DRAW);
     gl.enableVertexAttribArray(this.aPos);
     gl.vertexAttribPointer(this.aPos, 2, gl.FLOAT, false, 0, 0);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.quadUv);

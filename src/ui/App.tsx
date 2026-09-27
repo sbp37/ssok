@@ -8,6 +8,7 @@ import { NextPanel, type NextView } from "./NextPanel";
 import { CollectionSheet, SettingsSheet } from "./Sheets";
 import { AdPolicy, createAdProvider, type AdKind } from "../game/ads/AdPolicy";
 import { PromotionRewards } from "../game/rewards/PromotionRewards";
+import { useShare } from "./share";
 
 interface Toast {
   id: number;
@@ -98,6 +99,7 @@ export function App() {
   const [sheet, setSheet] = useState<SheetName>("");
   const [collLabel, setCollLabel] = useState("컬렉션");
   const toastId = useRef(0);
+  const { busy: shareBusy, share } = useShare((text) => pushToast({ tone: "soft", text }));
 
   const later = (fn: () => void, ms: number) => {
     const t = window.setTimeout(fn, ms);
@@ -307,9 +309,23 @@ export function App() {
 
           {phase === "intro" && <div className={"hint" + (hintHidden ? " hide" : "")}>하나 뽑아봐.</div>}
           {phase === "free" && padEmpty && flow !== "" && (
-            <div className="done" role="status">
-              <strong>쏙, 다 비웠다!</strong>
-              <small>{gameRef.current?.pad.name} 패드 완성</small>
+            <div className="done">
+              <div role="status">
+                <strong>쏙, 다 비웠다!</strong>
+                <small>{gameRef.current?.pad.name} 패드 완성</small>
+              </div>
+              {flow === "ready" && (
+                <button
+                  className="done-share"
+                  disabled={shareBusy}
+                  onClick={() => {
+                    haptics.press();
+                    void share(gameRef.current?.pad.name);
+                  }}
+                >
+                  {shareBusy ? "잠깐…" : "자랑하기 ↗"}
+                </button>
+              )}
             </div>
           )}
           {phase === "free" && glimmer && !padEmpty && <div className="glimmer">안쪽에서 뭔가 반짝인다…</div>}
