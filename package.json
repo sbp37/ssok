@@ -13,7 +13,10 @@
     "ait:build": "ait build",
     "preview": "vite preview --host",
     "typecheck": "tsc --noEmit",
+    "test": "node tests/ad-policy.mjs && node tests/promotion.mjs && node tests/round-pacing.mjs && node tests/sprite-cache.mjs && node tests/fibers.mjs && node tests/audio-unlock.mjs && node tests/share.mjs",
+    "check": "pnpm typecheck && pnpm test",
     "toss:build": "pnpm build && ait build",
+    "toss:build:live": "VITE_PROMOTION_MODE=live pnpm build && ait build",
     "toss:deploy": "ait deploy"
   },
   "dependencies": {

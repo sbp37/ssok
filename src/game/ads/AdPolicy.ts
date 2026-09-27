@@ -1,6 +1,6 @@
 import { loadFullScreenAd, showFullScreenAd } from "@apps-in-toss/web-framework";
 
-export const AD_INTERVAL_MS = 120_000;
+export const AD_INTERVAL_PADS = 2;
 const KEY = "ssok.ads.v1";
 const AD_GROUP_IDS: Record<AdKind, string> = {
   interstitial: "ait.v2.live.fd15b48eec824769",
@@ -134,31 +134,33 @@ export function createAdProvider(): AdProvider {
 }
 
 export class AdPolicy {
-  private lastAdAt = 0;
+  private lastAdCompleted = 0;
   private skipNext = false;
   private busy = false;
   private active: AbortController | null = null;
-  private startedAt: number;
   constructor(
     public provider: AdProvider = new MockAdProvider(),
-    private now = () => Date.now(),
+    _now = () => Date.now(),
     private storage: Pick<Storage, "getItem" | "setItem"> | undefined = undefined,
     private timeoutMs = 60_000,
   ) {
-    this.startedAt = now();
     try {
       this.storage ??= localStorage;
       const saved = JSON.parse(this.storage.getItem(KEY) || "null");
-      if (Number.isFinite(saved?.lastAdAt) && saved.lastAdAt >= 0) this.lastAdAt = Math.min(saved.lastAdAt, now());
+      if (Number.isFinite(saved?.lastAdCompleted) && saved.lastAdCompleted >= 0) {
+        this.lastAdCompleted = Math.floor(saved.lastAdCompleted);
+      }
       this.skipNext = saved?.skipNext === true;
     } catch { /* private mode / invalid storage must not block play */ }
   }
   private save() {
-    try { this.storage?.setItem(KEY, JSON.stringify({lastAdAt: this.lastAdAt, skipNext: this.skipNext})); } catch { /* optional persistence */ }
+    try { this.storage?.setItem(KEY, JSON.stringify({lastAdCompleted: this.lastAdCompleted, skipNext: this.skipNext})); } catch { /* optional persistence */ }
   }
-  /** Lifetime first completion is free. Each new visit also gets a 2-minute grace period. */
+  /** Two completed pads between full-screen ads. Failed/no-fill ads never consume the interval. */
   eligible(totalCompleted: number) {
-    return totalCompleted > 1 && !this.skipNext && this.now() - Math.max(this.startedAt, this.lastAdAt) >= AD_INTERVAL_MS;
+    return totalCompleted >= AD_INTERVAL_PADS
+      && !this.skipNext
+      && totalCompleted - this.lastAdCompleted >= AD_INTERVAL_PADS;
   }
   cancel() {
     this.active?.abort();
@@ -183,7 +185,7 @@ export class AdPolicy {
       });
       const result = await Promise.race([this.provider.show(kind, abort.signal), interrupted]);
       if (result === "closed" || result === "rewarded") {
-        this.lastAdAt = this.now();
+        this.lastAdCompleted = Math.max(this.lastAdCompleted, totalCompleted);
         // Even a dismissed rewarded video must not be followed by an interstitial.
         this.skipNext = kind === "rewarded";
         this.save();

@@ -8,6 +8,7 @@ import { NextPanel, type NextView } from "./NextPanel";
 import { CollectionSheet, SettingsSheet } from "./Sheets";
 import { AdPolicy, createAdProvider, type AdKind } from "../game/ads/AdPolicy";
 import { PromotionRewards } from "../game/rewards/PromotionRewards";
+import { useShare } from "./share";
 
 interface Toast {
   id: number;
@@ -78,6 +79,7 @@ export function App() {
   const gameRef = useRef<Game | null>(null);
   const timers = useRef<number[]>([]);
   const completionTimer = useRef<number | undefined>(undefined);
+  const padTitleTimer = useRef<number | undefined>(undefined);
   const ads = useRef<AdPolicy | null>(null);
   const promotions = useRef<PromotionRewards | null>(null);
   const transitioning = useRef(false);
@@ -97,7 +99,12 @@ export function App() {
   const [glimmer, setGlimmer] = useState(false);
   const [sheet, setSheet] = useState<SheetName>("");
   const [collLabel, setCollLabel] = useState("컬렉션");
+  const [loading, setLoading] = useState(true);
+  const [loadingProgress, setLoadingProgress] = useState(8);
+  const [padTitle, setPadTitle] = useState("");
+  const [tactileHint, setTactileHint] = useState<string | null>(null);
   const toastId = useRef(0);
+  const { busy: shareBusy, share } = useShare((text) => pushToast({ tone: "soft", text }));
 
   const later = (fn: () => void, ms: number) => {
     const t = window.setTimeout(fn, ms);
@@ -108,9 +115,18 @@ export function App() {
     setToasts((ts) => [...ts.slice(-1), { ...t, id }]);
     later(() => setToasts((ts) => ts.filter((x) => x.id !== id)), t.tone === "ultra" ? 2600 : t.tone === "soft" ? 1500 : 1700);
   };
+  const showPadTitle = (name: string) => {
+    window.clearTimeout(padTitleTimer.current);
+    setPadTitle(`${name} 패드`);
+    padTitleTimer.current = window.setTimeout(() => setPadTitle(""), 1900);
+    timers.current.push(padTitleTimer.current);
+  };
 
   useEffect(() => {
     const canvas = canvasRef.current!;
+    const started = performance.now();
+    later(() => setLoadingProgress(46), 90);
+    later(() => setLoadingProgress(78), 220);
     // give the photo beads up to 350ms to arrive so the first pad is drawn once, in its final look
     let game: Game | null = null;
     let cancelled = false;
@@ -122,6 +138,13 @@ export function App() {
       promotions.current = new PromotionRewards();
       gameRef.current = game;
       offs.push(...bind(game));
+      // just long enough that the card never flashes; the game is already live underneath
+      const wait = Math.max(0, 380 - (performance.now() - started));
+      later(() => setLoadingProgress(100), wait);
+      later(() => {
+        setLoading(false);
+        if (game) showPadTitle(game.pad.name);
+      }, wait + 160);
     });
     return () => {
       cancelled = true;
@@ -191,6 +214,7 @@ export function App() {
         setPulled(pulled);
         setPadEmpty(false);
       }),
+      game.on("tactileHint", ({ text }) => setTactileHint(text)),
       game.on("firstPop", () => {
         setHintHidden(true);
         setPhase("free");
@@ -229,6 +253,7 @@ export function App() {
         setFlow("");
         setNext(null);
         setGlimmer(false);
+        showPadTitle(pad.name);
         // first time on this pad (or this variant): a small line after it appears. Seen before: nothing.
         if (newPad || newVariant) later(() => pushToast({ tone: "soft", text: "NEW ✦", sub: pad.name }), 450);
       }),
@@ -305,14 +330,36 @@ export function App() {
             </div>
           </div>
 
-          {phase === "intro" && <div className={"hint" + (hintHidden ? " hide" : "")}>하나 뽑아봐.</div>}
+          {padTitle && <div className="pad-title" role="status">{padTitle}</div>}
+
+          {phase === "intro" && (
+            <div className={"hint" + (hintHidden ? " hide" : "")} role="status">
+              <strong>하나 뽑아봐.</strong>
+              <small>소리를 켜고 들어보세요</small>
+            </div>
+          )}
           {phase === "free" && padEmpty && flow !== "" && (
-            <div className="done" role="status">
-              <strong>쏙, 다 비웠다!</strong>
-              <small>{gameRef.current?.pad.name} 패드 완성</small>
+            <div className="done">
+              <div role="status">
+                <strong>쏙, 다 비웠다!</strong>
+                <small>{gameRef.current?.pad.name} 패드 완성</small>
+              </div>
+              {flow === "ready" && (
+                <button
+                  className="done-share"
+                  disabled={shareBusy}
+                  onClick={() => {
+                    haptics.press();
+                    void share(gameRef.current?.pad.name);
+                  }}
+                >
+                  {shareBusy ? "잠깐…" : "자랑하기 ↗"}
+                </button>
+              )}
             </div>
           )}
           {phase === "free" && glimmer && !padEmpty && <div className="glimmer">안쪽에서 뭔가 반짝인다…</div>}
+          {tactileHint && !padEmpty && !glimmer && <div className="tactile-hint" role="status">{tactileHint}</div>}
 
           {toasts.length > 0 && (
             <div className="toasts">
@@ -349,6 +396,23 @@ export function App() {
         {sheet === "settings" && <SettingsSheet onClose={closeSheet} />}
       </div>
       <BannerAd hidden={sheet !== ""} />
+      {loading && (
+        <div className="loading-screen" role="status" aria-live="polite" aria-busy="true">
+          <div className="loading-card">
+            <div className="loading-icon">
+              <img src={`${import.meta.env.BASE_URL}branding/app-icon-180.png`} alt="" width={86} height={86} />
+              <i className="loading-spark one" />
+              <i className="loading-spark two" />
+            </div>
+            <div className="loading-kicker">힐링 미니앱</div>
+            <h1>쏙: 피키패드</h1>
+            <p>말랑한 젤 속 보석을 만나는 중</p>
+            <div className="loading-bar" aria-label={`로딩 ${loadingProgress}%`}>
+              <span style={{ width: `${loadingProgress}%` }} />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

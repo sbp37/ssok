@@ -25,7 +25,7 @@ export class PointerInput {
     el.addEventListener("pointerup", this.up, { passive: false });
     el.addEventListener("pointercancel", this.up, { passive: false });
     el.addEventListener("lostpointercapture", this.up);
-    el.addEventListener("contextmenu", (e) => e.preventDefault());
+    el.addEventListener("contextmenu", this.noMenu);
   }
 
   destroy() {
@@ -35,7 +35,11 @@ export class PointerInput {
     el.removeEventListener("pointerup", this.up);
     el.removeEventListener("pointercancel", this.up);
     el.removeEventListener("lostpointercapture", this.up);
+    el.removeEventListener("contextmenu", this.noMenu);
+    this.hist.clear();
   }
+
+  private noMenu = (e: Event) => e.preventDefault();
 
   private local(e: PointerEvent) {
     const r = this.el.getBoundingClientRect();
@@ -76,8 +80,8 @@ export class PointerInput {
     if (!this.hist.has(e.pointerId)) return;
     e.preventDefault();
     // coalesced events give finer velocity on Android
-    const evs = (e.getCoalescedEvents?.() ?? []) as PointerEvent[];
-    if (evs.length > 1) for (const ce of evs.slice(0, -1)) this.sample(ce);
+    const evs = e.getCoalescedEvents?.();
+    if (evs && evs.length > 1) for (let i = 0; i < evs.length - 1; i++) this.sample(evs[i]);
     this.onMove(this.sample(e));
   };
   private up = (e: PointerEvent) => {

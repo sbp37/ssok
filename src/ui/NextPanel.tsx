@@ -110,6 +110,8 @@ export interface NextView {
   /** something is buried in the next pad (which thing stays secret) */
   hidden: boolean;
   collection: boolean;
+  /** the next pad's featured material, e.g. "뽁뽁이 막" */
+  tactile?: string;
 }
 
 /**
@@ -118,7 +120,7 @@ export interface NextView {
  * glimpse. Never the pad itself.
  */
 export function NextPanel({ info, emphasis, reveal = 0 }: { info: NextView; emphasis: number; reveal?: number }) {
-  const { pad, rare, rareNew, ultra, hidden } = info;
+  const { pad, rare, rareNew, ultra, hidden, tactile } = info;
   let line = "???";
   if (rare) line = rareNew ? "처음 보는 질감이다 ✦" : "희귀 패드가 지나가고 있어 ✦";
   else if (ultra) line = "뭔가 이상하다…";
@@ -128,6 +130,7 @@ export function NextPanel({ info, emphasis, reveal = 0 }: { info: NextView; emph
       <div className="next-label">NEXT</div>
       <PadSilhouette pad={pad} size={64} mode={ultra ? "partial" : "dark"} shimmer={rare} glint={!ultra} reveal={ultra ? 0 : reveal} />
       <div className={"next-q" + (rare ? " rare" : "")}>{line}</div>
+      {tactile && <div className="next-t">다음엔 {tactile}</div>}
     </div>
   );
 }

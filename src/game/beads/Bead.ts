@@ -1,6 +1,7 @@
 import { Spring, Spring2, springParams } from "../physics/spring";
 import { Rng } from "../util/math";
 import { BEAD_TYPES, HIDDEN_TYPES, RARITY_WEIGHT, ULTRA_TYPES, type BeadType, type Rarity } from "./BeadTypes";
+import type { Fiber } from "../fibers/Fiber";
 
 export type BeadState = "embedded" | "held" | "flying" | "collected" | "gone";
 
@@ -29,6 +30,8 @@ export interface FlyPath {
 }
 
 export interface Bead {
+  /** Optional yarn replacing an ordinary surface pick; counts as that one pick. */
+  fiber?: Fiber;
   id: number;
   type: BeadType;
   color: string;

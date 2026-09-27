@@ -1,5 +1,6 @@
 import type { BeadMaterial, PopSound } from "../beads/BeadTypes";
 import { SampleBank, type SampleName } from "./samples";
+import type { TactileKind } from "../fibers/Tactile";
 
 /**
  * All sound is procedural (Web Audio) – no files to load, and every hit is
@@ -13,7 +14,8 @@ class Sfx {
   private master: GainNode | null = null;
   private noise: AudioBuffer | null = null;
   private bank = new SampleBank();
-  private pendingPop: { kind: PopSound; mass: number; rare: boolean; gain: number; at: number } | null = null;
+  private pendingSound: { play: () => void; completion: boolean; at: number } | null = null;
+  private gestures = new Set<number>();
   private startAt = 0;
   enabled = true;
 
@@ -28,7 +30,7 @@ class Sfx {
 
   setEnabled(v: boolean) {
     this.enabled = v;
-    if (!v) this.pendingPop = null;
+    if (!v) this.pendingSound = null;
     try {
       localStorage.setItem(KEY, v ? "1" : "0");
     } catch {
@@ -48,7 +50,7 @@ class Sfx {
         ctx.onstatechange = () => {
           if (ctx.state === "running") {
             this.startAt = ctx.currentTime + 0.025;
-            this.flushPendingPop();
+            this.flushPendingSound();
           }
         };
         this.master = this.ctx.createGain();
@@ -72,7 +74,7 @@ class Sfx {
     // A touch pointerdown need not activate audio. Retry from pointerup/touchend
     // as well; a rejected/pending resume must never become an unhandled rejection.
     if (this.ctx && this.ctx.state !== "running") {
-      void this.ctx.resume().then(() => this.flushPendingPop()).catch(() => { /* next gesture retries */ });
+      void this.ctx.resume().then(() => this.flushPendingSound()).catch(() => { /* next gesture retries */ });
     }
     if (this.ctx && !this.warmed) {
       // Keep the output path open for a short block, not a single sample.
@@ -89,16 +91,44 @@ class Sfx {
       }
     }
     if (this.ctx) this.bank.load(this.ctx);
-    this.flushPendingPop();
+    this.flushPendingSound();
   }
   private warmed = false;
 
-  private flushPendingPop() {
-    if (!this.ready || !this.pendingPop) return;
-    const p = this.pendingPop;
-    this.pendingPop = null;
-    // Only the recent POP survives an audio unlock, never a backlog of creaks.
-    if (performance.now() - p.at <= 1500) this.pop(p.kind, p.mass, p.rare, p.gain);
+  beginGesture(id: number) {
+    if (!this.gestures.size && this.pendingSound && performance.now() - this.pendingSound.at > 1500) {
+      this.pendingSound = null;
+    }
+    this.gestures.add(id);
+    this.unlock();
+  }
+
+  endGesture(id: number, cancelled = false) {
+    if (!this.gestures.delete(id)) return;
+    if (cancelled && !this.gestures.size) this.pendingSound = null;
+    else if (this.pendingSound?.completion) this.pendingSound.at = performance.now();
+    if (!cancelled) this.unlock();
+  }
+
+  cancelPending() {
+    this.gestures.clear();
+    this.pendingSound = null;
+  }
+
+  private defer(play: () => void, completion: boolean) {
+    if (!this.enabled || (!completion && this.pendingSound?.completion)) return;
+    // A single latest cue, never a backlog. Completion takes priority over steps.
+    this.pendingSound = { play, completion, at: performance.now() };
+  }
+
+  private flushPendingSound() {
+    if (!this.ready || !this.pendingSound) return;
+    const p = this.pendingSound;
+    this.pendingSound = null;
+    const age = performance.now() - p.at;
+    // Mobile may only activate at touchend. Keep that gesture's POP even if
+    // the player holds the extracted bead for >1.5s; discard stale drag cues.
+    if (p.completion ? this.gestures.size > 0 || age <= 1500 : age <= 180) p.play();
   }
 
   private get soundTime() {
@@ -251,12 +281,53 @@ class Sfx {
     if (mass > 1.05) this.burst(0.05, 0.018 * Math.min(1, mass - 1), { type: "bandpass", freq: 620 / Math.pow(mass, 0.3), freq1: 760 / Math.pow(mass, 0.3), q: 6, attack: 0.012 });
   }
 
+  /** Tiny, deliberately different cues for the new tactile pieces. One per
+   * crossed stage, never a looping drag sound over the ordinary bead mix. */
+  tactileStep(kind: TactileKind, step: number) {
+    if (!this.ready) { this.defer(() => this.tactileStep(kind, step), false); return; }
+    switch (kind) {
+      case "fiber": // close, soft thread sliding free
+        this.burst(.07, .035, {type:"bandpass", freq:780+step*110, freq1:1050+step*120, q:4, attack:.018});
+        break;
+      case "chain": // little glass beads clicking off one by one
+      case "charm":
+        this.burst(.023, .055, {type:"bandpass", freq:1850+step*140, q:2.2});
+        this.tone("sine", 950+step*80, 620+step*45, .055, .075);
+        break;
+      case "rainbow": // brighter, lighter, faster string
+        this.tone("sine", 1300+step*110, 1100+step*90, .09, .065);
+        this.burst(.016, .026, {type:"highpass", freq:2500});
+        break;
+      case "swirl": // brief elastic friction, not the ordinary bead POP
+        this.burst(.075, .033, {type:"bandpass", freq:440+step*55, freq1:660+step*60, q:4, attack:.023});
+        break;
+      case "peel":
+        this.burst(.05, .025, {type:"bandpass", freq:1200+step*90, q:3, attack:.01});
+        break;
+      case "bubble": // crisp little air pop: snap, a short falling "뽁", a soft thump
+        this.burst(.018, .085, {type:"bandpass", freq:(2500+step*140)*this.j(.06), q:2.6});
+        this.tone("sine", (640+step*45)*this.j(.05), 290, .055, .07);
+        this.burst(.045, .03, {type:"lowpass", freq:520, q:.7, delay:.004});
+    }
+  }
+
+  /** Keep the material identity audible even when a recorded POP sample
+   * replaces the synthesized one. The accent is quieter than the POP itself. */
+  tactileRelease(kind: TactileKind, mass: number) {
+    if (!this.ready) { this.defer(() => this.tactileRelease(kind, mass), true); return; }
+    const sound = kind === "charm" ? "pong" : kind === "fiber" ? "ssok" : "pok";
+    this.pop(sound, kind === "charm" ? Math.max(1.2, mass) : .85, false, kind === "charm" ? 1.1 : .78);
+    if (!this.ready) return;
+    if (kind === "fiber") this.burst(.075, .04, {type:"bandpass", freq:800, freq1:1600, q:3, attack:.018});
+    else if (kind === "charm") this.tone("sine", 300, 150, .15, .11, {attack:.008});
+    else if (kind === "rainbow") this.tone("sine", 1580, 1410, .13, .055);
+    else this.tone("sine", 1080, 800, .085, .055);
+  }
+
   pop(kind: PopSound, mass: number, rare = false, gain = 1) {
     if (!this.enabled) return;
     if (!this.ready) {
-      if (this.ctx && (!this.pendingPop || performance.now() - this.pendingPop.at > 1500)) {
-        this.pendingPop = { kind, mass, rare, gain, at: performance.now() };
-      }
+      this.defer(() => this.pop(kind, mass, rare, gain), true);
       return;
     }
     const m = Math.pow(mass, 0.45);

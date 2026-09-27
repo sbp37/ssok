@@ -5,10 +5,10 @@ import type { BeadPreset } from './PadTypes';
 export function roundBeadBudget(preset: BeadPreset, completed: number) {
   const first = completed < 1;
   const second = completed === 1;
-  const visible = first ? 14 : second ? 18 : Math.round(preset.surface * 0.42);
+  const visible = first ? 17 : second ? 21 : Math.round(preset.surface * 0.42) + 3;
   return {
     // Authored ribbon accents are part of the visible budget, not extras.
     surface: Math.max(1, visible - (preset.smallFillZones?.length ?? 0)),
-    maxTotal: first ? 20 : second ? 24 : 28,
+    maxTotal: first ? 23 : second ? 27 : 31,
   };
 }
