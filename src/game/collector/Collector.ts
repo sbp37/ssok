@@ -1,6 +1,9 @@
 import type { Bead } from "../beads/Bead";
 import { getBeadSprite, getShadowSprite } from "../beads/BeadSprites";
 import { jarLayers, preloadJar } from './JarAsset';
+import { drawFiberCoil } from "../fibers/FiberRenderer";
+import { drawChainCoil } from "../fibers/TactileRenderer";
+import { isChain, revealsBead } from "../fibers/Fiber";
 
 interface Item {
   bead: Bead;
@@ -366,11 +369,15 @@ export class Collector {
       ctx.globalAlpha = 0.5 * fade;
       ctx.drawImage(sh.canvas, it.x - sh.w / 2, it.y - sh.h / 2 + it.r * 0.35 + sink, sh.w, sh.h);
       ctx.globalAlpha = fade;
-      const sp = getBeadSprite(it.bead.type, it.bead.color, it.r, dpr);
       ctx.save();
       ctx.translate(it.x, it.y + sink);
       ctx.rotate(it.rot);
-      ctx.drawImage(sp.canvas, -sp.w / 2, -sp.h / 2, sp.w, sp.h);
+      if (isChain(it.bead.fiber)) drawChainCoil(ctx,it.bead,it.r,dpr);
+      else if (it.bead.fiber && !revealsBead(it.bead.fiber)) drawFiberCoil(ctx, it.bead.fiber, it.r);
+      else {
+        const sp = getBeadSprite(it.bead.type, it.bead.color, it.r, dpr);
+        ctx.drawImage(sp.canvas, -sp.w / 2, -sp.h / 2, sp.w, sp.h);
+      }
       ctx.restore();
     }
     ctx.globalAlpha = 1;

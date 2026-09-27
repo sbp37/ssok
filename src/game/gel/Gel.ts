@@ -217,6 +217,11 @@ function getSocketSprite(r: number, dpr: number, gel: string, type?: BeadType, r
   return c;
 }
 
+/** Resolution of the static lighting height field (px, square). Rebuilt only on shape/size change. */
+const FORM_LIGHT_SIZE = 320;
+/** Distinct pad shapes/sizes whose lighting is kept around (LRU). */
+const FORM_LIGHT_CACHE = 6;
+
 export class Gel {
   R = 150;
   /** vertical squash for the "looking down at ~12°" feel */
@@ -592,34 +597,36 @@ export class Gel {
       this.formLight = cached; this.formLightR = R;
       return cached;
     }
+    // N×N lighting grid; the distance/height fields carry a 1-cell border (stride W)
+    const N = FORM_LIGHT_SIZE, W = N + 2;
     const c = document.createElement('canvas');
-    c.width = c.height = 320;
-    const g = c.getContext('2d')!, data = g.createImageData(320, 320);
+    c.width = c.height = N;
+    const g = c.getContext('2d')!, data = g.createImageData(N, N);
     // Distance to the *drawn* silhouette, including its hole. Radial distance
     // introduced spoke-shaped creases across the bow/heart. A two-pass chamfer
     // field is linear-time, follows the smoothed path, and needs no 3D engine.
     g.save();
-    g.translate(160, 160); g.scale(320 / (E * 2), 320 / (E * 2));
+    g.translate(N / 2, N / 2); g.scale(N / (E * 2), N / (E * 2));
     this.restPath(g); g.fillStyle = '#fff'; g.fill('evenodd');
     g.restore();
-    const mask = g.getImageData(0, 0, 320, 320).data;
-    const distance = new Float32Array(322 * 322);
-    for (let j = 0; j < 320; j++) for (let i = 0; i < 320; i++) {
-      distance[(j + 1) * 322 + i + 1] = mask[(j * 320 + i) * 4 + 3] > 127 ? 1000 : 0;
+    const mask = g.getImageData(0, 0, N, N).data;
+    const distance = new Float32Array(W * W);
+    for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
+      distance[(j + 1) * W + i + 1] = mask[(j * N + i) * 4 + 3] > 127 ? 1000 : 0;
     }
-    for (let j = 1; j <= 320; j++) for (let i = 1; i <= 320; i++) {
-      const k = j * 322 + i;
-      distance[k] = Math.min(distance[k], distance[k - 1] + 1, distance[k - 322] + 1,
-        distance[k - 323] + Math.SQRT2, distance[k - 321] + Math.SQRT2);
+    for (let j = 1; j <= N; j++) for (let i = 1; i <= N; i++) {
+      const k = j * W + i;
+      distance[k] = Math.min(distance[k], distance[k - 1] + 1, distance[k - W] + 1,
+        distance[k - (W + 1)] + Math.SQRT2, distance[k - (W - 1)] + Math.SQRT2);
     }
-    for (let j = 320; j > 0; j--) for (let i = 320; i > 0; i--) {
-      const k = j * 322 + i;
-      distance[k] = Math.min(distance[k], distance[k + 1] + 1, distance[k + 322] + 1,
-        distance[k + 323] + Math.SQRT2, distance[k + 321] + Math.SQRT2);
+    for (let j = N; j > 0; j--) for (let i = N; i > 0; i--) {
+      const k = j * W + i;
+      distance[k] = Math.min(distance[k], distance[k + 1] + 1, distance[k + W] + 1,
+        distance[k + (W + 1)] + Math.SQRT2, distance[k + (W - 1)] + Math.SQRT2);
     }
-    const heights = new Float32Array(322 * 322), step = E * 2 / 320;
-    for (let j = 1; j <= 320; j++) for (let i = 1; i <= 320; i++) {
-      const k = j * 322 + i, d = Math.max(0, distance[k] - 0.5) * step;
+    const heights = new Float32Array(W * W), step = E * 2 / N;
+    for (let j = 1; j <= N; j++) for (let i = 1; i <= N; i++) {
+      const k = j * W + i, d = Math.max(0, distance[k] - 0.5) * step;
       if (d <= 0) continue;
       const x = (i - 0.5) * step - E, y = (j - 0.5) * step - E;
       const shoulder = 0.82 * (1 - Math.exp(-d / (R * 0.07)));
@@ -630,22 +637,22 @@ export class Gel {
     // Smooth the visual height (not the rendered colour / beads). Pixel steps
     // in a distance field must not become little sparkling ridges in normals.
     const smooth = new Float32Array(heights.length);
-    for (let j = 2; j < 320; j++) for (let i = 2; i < 320; i++) {
-      const k = j * 322 + i;
+    for (let j = 2; j < N; j++) for (let i = 2; i < N; i++) {
+      const k = j * W + i;
       smooth[k] = (heights[k - 2] + 4 * heights[k - 1] + 6 * heights[k] + 4 * heights[k + 1] + heights[k + 2]) / 16;
     }
-    for (let j = 2; j < 320; j++) for (let i = 2; i < 320; i++) {
-      const k = j * 322 + i;
-      heights[k] = (smooth[k - 644] + 4 * smooth[k - 322] + 6 * smooth[k] + 4 * smooth[k + 322] + smooth[k + 644]) / 16;
+    for (let j = 2; j < N; j++) for (let i = 2; i < N; i++) {
+      const k = j * W + i;
+      heights[k] = (smooth[k - 2 * W] + 4 * smooth[k - W] + 6 * smooth[k] + 4 * smooth[k + W] + smooth[k + 2 * W]) / 16;
     }
-    for (let j = 0; j < 320; j++) for (let i = 0; i < 320; i++) {
-      const h = (j + 1) * 322 + i + 1;
+    for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
+      const h = (j + 1) * W + i + 1;
       if (distance[h] <= 0) continue;
       const dx = (heights[h + 1] - heights[h - 1]) / (2 * step);
-      const dy = (heights[h + 322] - heights[h - 322]) / (2 * step);
+      const dy = (heights[h + W] - heights[h - W]) / (2 * step);
       const inv = 1 / Math.hypot(dx, dy, 1);
       const response = (.46 * dx + .56 * dy + .69) * inv - .69;
-      const k = (j * 320 + i) * 4;
+      const k = (j * N + i) * 4;
       const light = response > 0;
       data.data[k] = light ? 255 : Math.round(this.color.r * .79);
       data.data[k + 1] = light ? 253 : Math.round(this.color.g * .69);
@@ -654,7 +661,7 @@ export class Gel {
     }
     g.putImageData(data, 0, 0);
     this.formLights.set(key, c);
-    if (this.formLights.size > 6) this.formLights.delete(this.formLights.keys().next().value!);
+    if (this.formLights.size > FORM_LIGHT_CACHE) this.formLights.delete(this.formLights.keys().next().value!);
     this.formLight = c; this.formLightR = R;
     return c;
   }

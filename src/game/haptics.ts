@@ -1,11 +1,13 @@
-import { Device, type HapticFeedbackType } from "@apps-in-toss/web-framework";
+import { Device, Environment, type HapticFeedbackType } from "@apps-in-toss/web-framework";
 
 const KEY = "ssok.haptics";
 
 class Haptics {
   enabled = true;
   private supported = typeof navigator !== "undefined" && "vibrate" in navigator;
+  private inToss = false;
   constructor() {
+    try { this.inToss = Environment.environment === "toss" || Environment.environment === "sandbox"; } catch { /* browser */ }
     try {
       const v = localStorage.getItem(KEY);
       if (v !== null) this.enabled = v === "1";
@@ -21,28 +23,33 @@ class Haptics {
       /* ignore */
     }
   }
-  private buzz(p: number | number[]) {
+  private buzz(p: number | number[], type?: HapticFeedbackType) {
     if (!this.enabled) return;
+    const nativeType: HapticFeedbackType = type ?? (Array.isArray(p)
+      ? "success"
+      : p <= 5 ? "tickWeak" : p <= 9 ? "tap" : p <= 13 ? "softMedium" : "basicMedium");
+    // In Toss use its native bridge first: navigator.vibrate may exist in a
+    // WebView yet silently do nothing. Never play both paths simultaneously.
+    if (this.inToss) {
+      void Device.triggerHaptic({ type: nativeType }).catch(() => {
+        if (this.supported) try { navigator.vibrate(p); } catch { /* unsupported */ }
+      });
+      return;
+    }
     if (this.supported) {
       try {
-        navigator.vibrate(p);
-        return;
+        if (navigator.vibrate(p)) return;
       } catch {
-        /* Fall through to the Toss bridge. */
+        /* Unsupported browser. */
       }
     }
-    const type: HapticFeedbackType = Array.isArray(p)
-      ? "success"
-      : p <= 5
-        ? "tickWeak"
-        : p <= 9
-          ? "tap"
-          : p <= 13
-            ? "softMedium"
-            : "basicMedium";
-    void Device.triggerHaptic({ type }).catch(() => {
-      /* Normal browsers and older Toss versions may not expose the bridge. */
-    });
+  }
+  tactileStep(kind: "fiber" | "chain" | "rainbow" | "charm" | "peel" | "swirl") {
+    const type: HapticFeedbackType = kind === "charm" ? "tap" : kind === "swirl" || kind === "fiber" ? "softMedium" : "tickMedium";
+    this.buzz(kind === "charm" ? 8 : 6, type);
+  }
+  tactilePop(kind: "fiber" | "chain" | "rainbow" | "charm" | "peel" | "swirl") {
+    this.buzz(kind === "charm" ? [15, 24, 22] : 16, kind === "charm" ? "success" : "basicMedium");
   }
   press() {
     this.buzz(5);
