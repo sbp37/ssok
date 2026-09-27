@@ -39,8 +39,8 @@ export function drawChain(ctx: CanvasRenderingContext2D, b: Bead, map: MapPoint,
     const pendant = f.kind === "charm" && i === count-1;
     const size = f.kind === "rainbow" ? [.8,1,.85,1.12,.82,1.05,.92][i] : 1;
     const reveal = Math.max(0, Math.min(1, (u - .82) / .12));
-    const radius = pendant ? f.radius * (.4 + reveal * .68) * scale : Math.min(7.8,f.radius*.31)*scale*size;
-    ctx.globalAlpha = baseAlpha * (emerged ? 1 : .42);
+    const radius = pendant ? f.radius * (.4 + reveal * .68) * scale : Math.min(8.6,f.radius*.34)*scale*size;
+    ctx.globalAlpha = baseAlpha * (emerged ? 1 : .55);
     pearl(ctx,p,radius,i,dpr,pendant?b:undefined);
     if (!emerged) {
       ctx.strokeStyle = "rgba(255,255,255,.65)";ctx.lineWidth = .9 * scale;
@@ -123,7 +123,8 @@ export function drawPeel(ctx: CanvasRenderingContext2D, b: Bead, map: MapPoint, 
   film.addColorStop(0,"rgba(249,255,250,.96)");film.addColorStop(.5,"rgba(190,232,218,.88)");film.addColorStop(1,"rgba(161,205,202,.92)");
   ctx.fillStyle=film;ctx.fill();ctx.restore();
   // The original soft flap lifts from the lower edge; no directional arrow.
-  disc();ctx.strokeStyle="rgba(255,255,255,.72)";ctx.lineWidth=1.1*scale;ctx.stroke();
+  disc();ctx.strokeStyle="rgba(81,143,131,.42)";ctx.lineWidth=2*scale;ctx.stroke();
+  disc();ctx.strokeStyle="rgba(255,255,255,.8)";ctx.lineWidth=1.1*scale;ctx.stroke();
   const tip=map(f.tip);
   const bend=u>0 ? Math.min(12,u*25)*scale : 3*scale;
   const flap=ctx.createLinearGradient(left.x,left.y,tip.x,tip.y);

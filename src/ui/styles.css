@@ -798,6 +798,26 @@ body,
 .next-q.rare {
   color: #b1699a;
 }
+.next-t {
+  font-size: 11px;
+  font-weight: 600;
+  color: #a0739a;
+  letter-spacing: 0.01em;
+}
+/* the round's one-line how-to: same place and voice as the opening hint */
+.tactile-hint {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 78%;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 500;
+  color: rgba(80, 40, 70, 0.62);
+  letter-spacing: 0.01em;
+  pointer-events: none;
+  animation: fade 0.4s ease-out;
+}
 .sil.shimmer::after {
   content: "";
   position: absolute;

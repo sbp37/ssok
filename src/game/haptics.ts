@@ -1,4 +1,5 @@
 import { Device, Environment, type HapticFeedbackType } from "@apps-in-toss/web-framework";
+import type { TactileKind } from "./fibers/Tactile";
 
 const KEY = "ssok.haptics";
 
@@ -44,11 +45,11 @@ class Haptics {
       }
     }
   }
-  tactileStep(kind: "fiber" | "chain" | "rainbow" | "charm" | "peel" | "swirl") {
-    const type: HapticFeedbackType = kind === "charm" ? "tap" : kind === "swirl" || kind === "fiber" ? "softMedium" : "tickMedium";
-    this.buzz(kind === "charm" ? 8 : 6, type);
+  tactileStep(kind: TactileKind) {
+    const type: HapticFeedbackType = kind === "charm" || kind === "bubble" ? "tap" : kind === "swirl" || kind === "fiber" ? "softMedium" : "tickMedium";
+    this.buzz(kind === "charm" || kind === "bubble" ? 8 : 6, type);
   }
-  tactilePop(kind: "fiber" | "chain" | "rainbow" | "charm" | "peel" | "swirl") {
+  tactilePop(kind: TactileKind) {
     this.buzz(kind === "charm" ? [15, 24, 22] : 16, kind === "charm" ? "success" : "basicMedium");
   }
   press() {

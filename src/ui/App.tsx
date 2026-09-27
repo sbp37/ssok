@@ -102,6 +102,7 @@ export function App() {
   const [loading, setLoading] = useState(true);
   const [loadingProgress, setLoadingProgress] = useState(8);
   const [padTitle, setPadTitle] = useState("");
+  const [tactileHint, setTactileHint] = useState<string | null>(null);
   const toastId = useRef(0);
   const { busy: shareBusy, share } = useShare((text) => pushToast({ tone: "soft", text }));
 
@@ -124,9 +125,8 @@ export function App() {
   useEffect(() => {
     const canvas = canvasRef.current!;
     const started = performance.now();
-    later(() => setLoadingProgress(34), 120);
-    later(() => setLoadingProgress(61), 320);
-    later(() => setLoadingProgress(84), 620);
+    later(() => setLoadingProgress(46), 90);
+    later(() => setLoadingProgress(78), 220);
     // give the photo beads up to 350ms to arrive so the first pad is drawn once, in its final look
     let game: Game | null = null;
     let cancelled = false;
@@ -138,12 +138,13 @@ export function App() {
       promotions.current = new PromotionRewards();
       gameRef.current = game;
       offs.push(...bind(game));
-      const wait = Math.max(0, 880 - (performance.now() - started));
+      // just long enough that the card never flashes; the game is already live underneath
+      const wait = Math.max(0, 380 - (performance.now() - started));
       later(() => setLoadingProgress(100), wait);
       later(() => {
         setLoading(false);
         if (game) showPadTitle(game.pad.name);
-      }, wait + 220);
+      }, wait + 160);
     });
     return () => {
       cancelled = true;
@@ -213,6 +214,7 @@ export function App() {
         setPulled(pulled);
         setPadEmpty(false);
       }),
+      game.on("tactileHint", ({ text }) => setTactileHint(text)),
       game.on("firstPop", () => {
         setHintHidden(true);
         setPhase("free");
@@ -357,6 +359,7 @@ export function App() {
             </div>
           )}
           {phase === "free" && glimmer && !padEmpty && <div className="glimmer">안쪽에서 뭔가 반짝인다…</div>}
+          {tactileHint && !padEmpty && !glimmer && <div className="tactile-hint" role="status">{tactileHint}</div>}
 
           {toasts.length > 0 && (
             <div className="toasts">
@@ -397,7 +400,7 @@ export function App() {
         <div className="loading-screen" role="status" aria-live="polite" aria-busy="true">
           <div className="loading-card">
             <div className="loading-icon">
-              <img src={`${import.meta.env.BASE_URL}branding/app-icon-600.png`} alt="" />
+              <img src={`${import.meta.env.BASE_URL}branding/app-icon-180.png`} alt="" width={86} height={86} />
               <i className="loading-spark one" />
               <i className="loading-spark two" />
             </div>

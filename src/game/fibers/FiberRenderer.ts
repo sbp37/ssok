@@ -45,8 +45,8 @@ export function drawFiber(ctx: CanvasRenderingContext2D, f: Fiber, map: MapPoint
   // Reserve the crisp contour and thread twists for the exposed part only.
   ctx.save();
   path(ctx, buried);ctx.strokeStyle = f.color;
-  ctx.globalAlpha *= .2;ctx.lineWidth = 5.2 * scale;ctx.stroke();
-  ctx.globalAlpha *= 2.3;ctx.lineWidth = 2.5 * scale;ctx.stroke();
+  ctx.globalAlpha *= .28;ctx.lineWidth = 5.6 * scale;ctx.stroke();
+  ctx.globalAlpha *= 2.2;ctx.lineWidth = 2.8 * scale;ctx.stroke();
   ctx.restore();
   const root = map(fiberPoint(f));
   const tip = map(f.tip);

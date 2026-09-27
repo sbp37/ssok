@@ -72,21 +72,41 @@ for(const pad of PADS) for(let seed=1;seed<=30;seed++) {
 }
 console.log('PASS: opening charm + 2 yarns on all pad shapes / same count / protected treasures');
 assert.equal(roundTactile(0),'charm','the opening pad has one short connected-bead surprise');
-assert.deepEqual([1,2,3,4,5,6,7,8,9].map(roundTactile),['chain','swirl','rainbow','swirl','charm','swirl','peel','swirl','chain']);
-for(const pad of PADS) for(const completed of [1,2,3,4,5,6,7,8]) for(let seed=1;seed<=15;seed++) {
+assert.deepEqual([1,2,3,4,5,6,7,8,9,10].map(roundTactile),['bubble','chain','swirl','rainbow','peel','swirl','bubble','charm','swirl','bubble']);
+{
+  const later=Array.from({length:90},(_,i)=>roundTactile(i+1));
+  assert.equal(later.filter(k=>k==='swirl').length,30,'swirl on exactly one pad in three');
+  for(let i=0;i+2<later.length;i++) assert.equal(later.slice(i,i+3).filter(k=>k==='swirl').length,1,'never two swirls within three pads');
+  for(let i=0;i+9<=later.length;i++) for(const k of ['bubble','chain','rainbow','charm','peel'])
+    assert(later.slice(i,i+9).includes(k),`${k} returns within any nine pads`);
+}
+for(const pad of PADS) for(const completed of [1,2,3,4,5,6,7,8,9]) for(let seed=1;seed<=15;seed++) {
   const rng=new Rng(seed),beads=generatePad(170,rng,{...pad.beads,...roundBeadBudget(pad.beads,completed),
     boundary:pad.outline,hole:pad.hole,hiddenObject:'bigpearl',kingChance:1,ultraChance:1,deeperChance:.5});
   const count=beads.length,featured=roundTactile(completed);
   const protectedBeads=beads.filter(b=>b.layer===1||b.hidden||!['common','big','odd'].includes(b.type.rarity)
     ||beads.some(x=>x.layer===1&&x.slot===b.slot));
   const before=protectedBeads.map(fingerprint);
-  installRoundTactiles(beads,170,rng,featured);
+  installRoundTactiles(beads,170,rng,featured,completed);
   assert.equal(beads.filter(b=>b.fiber&&!b.fiber.kind).length,1,'every later pad includes one yarn');
   assert.equal(beads.filter(b=>b.fiber?.kind===featured).length,1,'every later pad includes its featured texture');
   assert.equal(beads.length,count,'mixed textures never add pulls');
   assert.deepEqual(protectedBeads.map(fingerprint),before,'mixed textures preserve treasures and hidden hosts');
 }
-console.log('PASS: every later pad has 1 yarn + 1 featured texture / swirl every other pad / same count / protected treasures');
+console.log('PASS: every later pad has 1 yarn + 1 featured texture / swirl every third pad / same count / protected treasures');
+{
+  // the one yarn of later pads varies with the completed count instead of always being the same pink strand
+  const looks=new Set();
+  for(let completed=1;completed<=12;completed++){
+    const rng=new Rng(5),beads=generatePad(170,rng,{...PADS[0].beads,...roundBeadBudget(PADS[0].beads,completed),boundary:PADS[0].outline});
+    const [y]=installFibers(beads,170,rng,1,completed);
+    looks.add(y.fiber.color+'|'+y.fiber.length);
+    assert(y.fiber.length>=118&&y.fiber.length<=165);
+  }
+  assert(new Set([...looks].map(l=>l.split('|')[0])).size===3,'all three yarn colours appear');
+  assert(looks.size>=6,'colour and length combine into several different yarns');
+}
+console.log('PASS: later-pad yarn rotates colour, twist and length');
 let treatments=0;
 for(const kind of ['chain','rainbow','charm','peel']) for(const pad of PADS) for(let seed=1;seed<=30;seed++) {
   const rng=new Rng(seed),beads=generatePad(170,rng,{...pad.beads,...roundBeadBudget(pad.beads,2),
@@ -145,3 +165,47 @@ for(const direction of [-1,1]) for(const pad of PADS) {
  assert.equal(f.pulled,f.length,'either direction can resume and finish');
 }
 console.log('PASS: swirl clockwise/counterclockwise, radial no-op, reversal, idle, resume and catalogue preservation');
+
+{
+  const { BubblePress, BUBBLE_DOMES, BUBBLE_SQUEEZE } = await load('fibers/Bubble');
+  let layouts=0;
+  for(const pad of PADS) for(let seed=1;seed<=20;seed++) {
+    const rng=new Rng(seed),beads=generatePad(170,rng,{...pad.beads,...roundBeadBudget(pad.beads,1),
+      boundary:pad.outline,hole:pad.hole,hiddenObject:'bigpearl',kingChance:1,ultraChance:1,deeperChance:.5});
+    const before=beads.map(fingerprint),count=beads.length;
+    const [b]=installTactile(beads,170,rng,'bubble');
+    assert.equal(beads.length,count,'the film adds no pulls');
+    assert.deepEqual(beads.map(fingerprint),before,'bead, colour, slot, rewards and treasure hosts unchanged');
+    if(!b) continue;
+    layouts++;
+    const f=b.fiber;
+    assert.equal(f.domes.length,BUBBLE_DOMES);
+    assert.equal(f.length,BUBBLE_DOMES);
+    assert(f.domes.every(d=>Math.hypot(d.x,d.y)+d.r<=f.radius*1.001),'domes stay on the film');
+    assert(!beads.some(x=>x.slot===b.slot&&x.layer===1),'never over a buried treasure');
+    // a quick tap pops the nearest dome, even between domes
+    let press=new BubblePress(b,0,0);
+    assert.equal(press.lift()>=0,true);assert.equal(f.pulled,1,'a tap pops one dome');
+    // holding still squeezes, pops one, then nothing more
+    const d1=f.domes.find(d=>!d.popped);
+    press=new BubblePress(b,d1.x,d1.y);
+    press.tick(BUBBLE_SQUEEZE*.5);assert(d1.squash>0&&d1.squash<1&&!d1.popped,'the dome squashes before it goes');
+    press.tick(BUBBLE_SQUEEZE*.6);assert(d1.popped,'a held press pops');
+    for(let i=0;i<300;i++)press.tick(1/60);
+    assert.equal(f.pulled,2,'holding still never pops a second dome');
+    assert.equal(press.lift(),-1,'lifting after the pop does nothing extra');
+    // a cancelled press pops nothing and springs back
+    const d2=f.domes.find(d=>!d.popped);
+    press=new BubblePress(b,d2.x,d2.y);press.tick(BUBBLE_SQUEEZE*.5);press.cancel();
+    assert.equal(f.pulled,2);assert.equal(d2.squash,0);
+    // rubbing across the film pops the rest, one per stretch of travel, then completes
+    press=new BubblePress(b,-f.radius,0);
+    let x=-f.radius,guard=0;
+    while(!press.complete&&guard++<2000){x+=.5;if(x>f.radius)x=-f.radius;press.move(x,Math.sin(x)*2);press.tick(1/60);}
+    assert(press.complete,'rubbing finishes the film');
+    assert.equal(f.pulled,f.length);
+    assert(f.domes.every(d=>d.popped));
+  }
+  assert(layouts>150,'the film finds a slot on nearly every pad');
+  console.log(`PASS: bubble film on ${layouts} layouts / no added picks / tap, squeeze, idle, cancel, rub / completes once all domes pop`);
+}

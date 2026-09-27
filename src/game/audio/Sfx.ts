@@ -1,5 +1,6 @@
 import type { BeadMaterial, PopSound } from "../beads/BeadTypes";
 import { SampleBank, type SampleName } from "./samples";
+import type { TactileKind } from "../fibers/Tactile";
 
 /**
  * All sound is procedural (Web Audio) – no files to load, and every hit is
@@ -282,7 +283,7 @@ class Sfx {
 
   /** Tiny, deliberately different cues for the new tactile pieces. One per
    * crossed stage, never a looping drag sound over the ordinary bead mix. */
-  tactileStep(kind: "fiber" | "chain" | "rainbow" | "charm" | "peel" | "swirl", step: number) {
+  tactileStep(kind: TactileKind, step: number) {
     if (!this.ready) { this.defer(() => this.tactileStep(kind, step), false); return; }
     switch (kind) {
       case "fiber": // close, soft thread sliding free
@@ -302,12 +303,17 @@ class Sfx {
         break;
       case "peel":
         this.burst(.05, .025, {type:"bandpass", freq:1200+step*90, q:3, attack:.01});
+        break;
+      case "bubble": // crisp little air pop: snap, a short falling "뽁", a soft thump
+        this.burst(.018, .085, {type:"bandpass", freq:(2500+step*140)*this.j(.06), q:2.6});
+        this.tone("sine", (640+step*45)*this.j(.05), 290, .055, .07);
+        this.burst(.045, .03, {type:"lowpass", freq:520, q:.7, delay:.004});
     }
   }
 
   /** Keep the material identity audible even when a recorded POP sample
    * replaces the synthesized one. The accent is quieter than the POP itself. */
-  tactileRelease(kind: "fiber" | "chain" | "rainbow" | "charm" | "peel" | "swirl", mass: number) {
+  tactileRelease(kind: TactileKind, mass: number) {
     if (!this.ready) { this.defer(() => this.tactileRelease(kind, mass), true); return; }
     const sound = kind === "charm" ? "pong" : kind === "fiber" ? "ssok" : "pok";
     this.pop(sound, kind === "charm" ? Math.max(1.2, mass) : .85, false, kind === "charm" ? 1.1 : .78);

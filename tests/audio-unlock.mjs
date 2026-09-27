@@ -29,7 +29,7 @@ class AudioContext {
 globalThis.window = { AudioContext };
 async function fresh() { now=0; starts=[]; return (await loadFresh('audio/Sfx')).sfx; }
 
-for (const kind of ['ordinary','fiber','chain','rainbow','charm','peel','swirl']) {
+for (const kind of ['ordinary','fiber','chain','rainbow','charm','peel','swirl','bubble']) {
   const sfx = await fresh();
   sfx.beginGesture(1);
   if (kind === 'ordinary') sfx.pop('pok',1);
@@ -43,7 +43,7 @@ for (const kind of ['ordinary','fiber','chain','rainbow','charm','peel','swirl']
   assert.equal(starts.length,count,'completion plays once, including repeated resume callbacks');
 }
 {
-  const sfx=await fresh(); sfx.beginGesture(1); sfx.tactileStep('swirl',1);
+  const sfx=await fresh(); sfx.beginGesture(1); sfx.tactileStep('bubble',1);
   starts=[]; now=50; context.activate();
   assert(starts.length>0,'a fresh first tactile stage is not lost');
 }
@@ -64,4 +64,4 @@ for (const clear of ['mute','cancel','destroy','stale-step','stale-pop','next-ge
   sfx.tactileStep('fiber',1); starts=[]; context.activate();
   assert(starts.filter(x=>x==='tone').length>=2,'completion cannot be replaced by a drag cue');
 }
-console.log('PASS: first ordinary + all 6 tactile completions, delayed native unlock, one-shot replay, fresh/stale stages, mute/cancel/dispose');
+console.log('PASS: first ordinary + all 7 tactile completions, delayed native unlock, one-shot replay, fresh/stale stages, mute/cancel/dispose');

@@ -1,11 +1,12 @@
 import type { Bead } from "../beads/Bead";
 import { REF_PAD_R } from "../beads/Bead";
 import type { Rng } from "../util/math";
+import type { Dome } from "./Bubble";
 
 export interface FiberPoint { x: number; y: number }
 /** Reference-pad units, relative to the original slot. Resize never resets extraction. */
 export interface Fiber {
-  kind?: "chain" | "rainbow" | "charm" | "peel" | "swirl";
+  kind?: "chain" | "rainbow" | "charm" | "peel" | "swirl" | "bubble";
   /** Last ratchet already felt; releasing/regrabbing must not replay rewards. */
   felt?: number;
   color: string;
@@ -17,6 +18,8 @@ export interface Fiber {
   pulled: number;
   tip: FiberPoint;
   released?: FiberPoint[];
+  /** 뽁뽁이 막 only: its air domes */
+  domes?: Dome[];
 }
 
 const COLORS = [
@@ -28,7 +31,8 @@ export const FIBER_SEGMENTS = 64;
 export function isChain(f?: Fiber): boolean {
   return f?.kind === "chain" || f?.kind === "rainbow" || f?.kind === "charm";
 }
-export function revealsBead(f?: Fiber) { return f?.kind === "peel" || f?.kind === "swirl"; }
+/** the material covers an ordinary bead, which then pops out of its own slot */
+export function revealsBead(f?: Fiber) { return f?.kind === "peel" || f?.kind === "swirl" || f?.kind === "bubble"; }
 export function chainCount(f: Fiber) { return f.kind === "rainbow" ? 7 : f.kind === "charm" ? 4 : 5; }
 /** The pendant stays buried longer; the last pull frees one visibly larger bead. */
 export function chainFraction(f: Fiber, i: number) {
@@ -58,8 +62,10 @@ export function fiberPoint(f: Fiber, fraction = f.pulled / f.length): FiberPoint
 }
 
 /** Replace only ordinary, unstacked surface beads. No extra picks, displaced
- * hidden hosts, new rarity rolls, catalogue entries or persistent save fields. */
-export function installFibers(beads: Bead[], padR: number, rng: Rng, count = 3) {
+ * hidden hosts, new rarity rolls, catalogue entries or persistent save fields.
+ * `variant` shifts colour, twist and length so the one yarn of a later pad is
+ * not the same pink 118-unit strand every time (pass the completed-pad count). */
+export function installFibers(beads: Bead[], padR: number, rng: Rng, count = 3, variant = 0) {
   const scale = padR / REF_PAD_R;
   const candidates = beads.filter(b => !b.fiber && b.layer === 0 && !b.hidden
     && ["common", "big", "odd"].includes(b.type.rarity)
@@ -74,21 +80,22 @@ export function installFibers(beads: Bead[], padR: number, rng: Rng, count = 3) 
       }, 0);
     const b = candidates.splice(index, 1)[0];
     const ordinal = chosen.length;
+    const look = variant + ordinal;
     const radius = Math.min(16, b.radius / scale);
     const angle = rng.range(-Math.PI, Math.PI);
     // A loose, elongated S reads as buried thread rather than a tiny spring.
     // Its pull distance is longer than the folded footprint, so the strand can
     // feel satisfyingly long without taking over neighbouring bead slots.
-    const turns = 1.05 + ordinal * 0.16;
+    const turns = 1.05 + (look % 3) * 0.16;
     const points = Array.from({ length: 161 }, (_, i) => {
       const t = i / 160;
-      const x = Math.sin(t * Math.PI * 2 * turns) * radius * 0.46 * (.88 + .12 * Math.cos(t * Math.PI * 2 + ordinal));
+      const x = Math.sin(t * Math.PI * 2 * turns) * radius * 0.46 * (.88 + .12 * Math.cos(t * Math.PI * 2 + look));
       const y = (t - 0.5 + .025 * Math.sin(t * Math.PI * 2)) * radius * 1.55;
       return { x: x * Math.cos(angle) - y * Math.sin(angle), y: x * Math.sin(angle) + y * Math.cos(angle) };
     });
     const { path, length: foldedLength } = resample(points);
-    const length = Math.min(165, Math.max(118 + ordinal * 12, foldedLength * 3));
-    const [color, dark, light] = COLORS[ordinal % COLORS.length];
+    const length = Math.min(165, Math.max(118 + (look % 4) * 12, foldedLength * 3));
+    const [color, dark, light] = COLORS[look % COLORS.length];
     const head = path[0], second = path[1];
     const d = Math.hypot(head.x - second.x, head.y - second.y) || 1;
     b.radius = radius * scale;

@@ -23,6 +23,7 @@ import { ULTRA_TYPES } from "./beads/BeadTypes";
 import { TreasureStore, treasureKind, type TreasureKind } from "./rewards/treasure";
 import type { BeadType } from "./beads/BeadTypes";
 import { TactileController, type TactileHost } from "./fibers/TactileController";
+import { roundTactile, tactileName } from "./fibers/Tactile";
 
 export interface GameEvents {
   pop: { bead: Bead; rare: boolean; pulled: number };
@@ -354,7 +355,16 @@ export class Game extends Emitter<GameEvents> implements PadView, TactileHost {
       ultra: !!this.pendingHidden && ULTRA_TYPES.some((t) => t.id === this.pendingHidden),
       hidden: !!this.pendingHidden && this.pendingHidden !== NONE && !this.treasure.has(this.pendingHidden),
       collection: this.progressStore.mode === "COLLECTION",
+      tactile: this.nextTactileName,
     };
+  }
+
+  /** the next pad's featured material. Completion is counted at the last POP, so a
+   * pad that is not yet done still has one completion to go. */
+  private get nextTactileName() {
+    const prog = this.progressStore;
+    const kind = roundTactile(prog.totalCompleted + (prog.currentDone ? 0 : 1));
+    return kind ? tactileName[kind] : undefined;
   }
 
   /** is the next pad a rare variant passing by? */

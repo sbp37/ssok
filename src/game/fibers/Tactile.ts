@@ -2,13 +2,18 @@ import type { Bead } from "../beads/Bead";
 import { REF_PAD_R } from "../beads/Bead";
 import type { Rng } from "../util/math";
 import { FIBER_SEGMENTS, installFibers } from "./Fiber";
+import { bubbleDomes } from "./Bubble";
 
-export type TactileKind = "fiber" | "chain" | "rainbow" | "charm" | "peel" | "swirl";
-/** Yarn is always present separately; this picks the round's second texture.
- * Every other later pad has a swirl, while the gaps rotate the other materials. */
+export type TactileKind = "fiber" | "chain" | "rainbow" | "charm" | "peel" | "swirl" | "bubble";
+
+/** After the opening pad: every third pad is a swirl, the others rotate the
+ * remaining materials. The new bubble film comes first and twice per cycle. */
+export const ROUND_ROTATION = ["bubble", "chain", "swirl", "rainbow", "peel", "swirl", "bubble", "charm", "swirl"] as const;
+
+/** Yarn is always present separately; this picks the round's second texture. */
 export function roundTactile(completed: number): TactileKind | undefined {
   if (completed < 1) return "charm";
-  return (["chain", "swirl", "rainbow", "swirl", "charm", "swirl", "peel", "swirl"] as const)[(completed - 1) % 8];
+  return ROUND_ROTATION[(completed - 1) % ROUND_ROTATION.length];
 }
 
 /** Reuse safe slots, keeping the opening short while exposing two textures. */
@@ -19,9 +24,9 @@ export function installOpeningTactiles(beads: Bead[], padR: number, rng: Rng) {
 
 /** Every regular pad keeps one familiar yarn, plus its rotating discovery.
  * Both replace safe existing slots, so the number of required pulls is unchanged. */
-export function installRoundTactiles(beads: Bead[], padR: number, rng: Rng, featured: TactileKind) {
+export function installRoundTactiles(beads: Bead[], padR: number, rng: Rng, featured: TactileKind, completed = 0) {
   const special = installTactile(beads, padR, rng, featured);
-  return [...special, ...installFibers(beads, padR, rng, 1)];
+  return [...special, ...installFibers(beads, padR, rng, 1, completed)];
 }
 
 export function installTactile(beads: Bead[], padR: number, rng: Rng, kind: TactileKind) {
@@ -41,6 +46,17 @@ export function installTactile(beads: Bead[], padR: number, rng: Rng, kind: Tact
   if (!b) return [];
   const radius = b.radius / scale;
   const angle = rng.range(-.45, .45);
+  if (kind === "bubble") {
+    // the film sits over the bead's own slot; its domes are what gets pressed
+    const domes = bubbleDomes(radius, angle - Math.PI / 2);
+    const path = Array.from({ length: FIBER_SEGMENTS + 1 }, (_, i) => {
+      const a = (i / FIBER_SEGMENTS) * Math.PI * 2;
+      return { x: Math.cos(a) * radius * .96, y: Math.sin(a) * radius * .96 };
+    });
+    b.fiber = { kind, radius, path, length: domes.length, domes,
+      color: "#d9f2fb", dark: "#7fb1c4", light: "#ffffff", pulled: 0, felt: 0, tip: { x: 0, y: 0 } };
+    return [b];
+  }
   const path = Array.from({length: FIBER_SEGMENTS + 1}, (_, i) => {
     const t = i / FIBER_SEGMENTS;
     if(kind === "swirl") { const a=t*Math.PI*4,r=radius*(.86-.68*t);return{x:Math.cos(a)*r,y:Math.sin(a)*r}; }
@@ -62,4 +78,16 @@ export const tactileHint: Record<TactileKind, string> = {
   charm: "작은 알 뒤에 큰 알이 숨어 있어 · 쭈욱!",
   swirl: "젤 끝을 잡고 빙글 · 어느 방향이든 돌려봐",
   peel: "반짝이는 막 끝을 잡고 벗겨봐",
+  bubble: "막 위 공기방울을 꾹꾹 · 뽁, 뽁!",
+};
+
+/** how the NEXT tease names a pad's featured material */
+export const tactileName: Record<TactileKind, string> = {
+  fiber: "컬러 실",
+  chain: "구슬 줄",
+  rainbow: "무지개 줄",
+  charm: "큰 알 줄",
+  swirl: "소용돌이",
+  peel: "젤 막",
+  bubble: "뽁뽁이 막",
 };
