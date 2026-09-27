@@ -27,12 +27,18 @@ async function shareGame(padName?: string): Promise<"shared" | "copied"> {
   }
 
   if (navigator.share) {
-    await navigator.share({
-      title: "쏙: 피키패드",
-      text: lead ? `${lead} ${TAGLINE}` : TAGLINE,
-      url: SHARE_PAGE_URL,
-    });
-    return "shared";
+    try {
+      await navigator.share({
+        title: "쏙: 피키패드",
+        text: lead ? `${lead} ${TAGLINE}` : TAGLINE,
+        url: SHARE_PAGE_URL,
+      });
+      return "shared";
+    } catch (error) {
+      // The user closing the sheet is an answer; anything else (desktop
+      // browsers that expose share() but refuse it) falls back to copying.
+      if (error instanceof Error && error.name === "AbortError") throw error;
+    }
   }
   await navigator.clipboard.writeText(SHARE_PAGE_URL);
   return "copied";
