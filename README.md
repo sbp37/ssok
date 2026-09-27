@@ -10,21 +10,24 @@
 pnpm install
 pnpm dev          # http://localhost:5173  (--host 로 같은 Wi-Fi의 폰에서 접속 가능)
 pnpm build        # 타입체크 + dist/ 빌드
+pnpm test         # 광고 정책 · 프로모션 · 판 길이 · 캐시 테스트 (tests/*.mjs, 브라우저 불필요)
+pnpm check        # typecheck + test
 pnpm preview      # 빌드 결과 미리보기 (4173)
 ```
 
-`main`에 push하면 GitHub Actions가 빌드 결과를 `gh-pages` 브랜치로 밀어 GitHub Pages에 배포한다 (`.github/workflows/deploy.yml`).
+PR마다 GitHub Actions가 typecheck → test → build를 돌리고 빌드 결과(`dist`)를 아티팩트로 올린다 (`.github/workflows/ci.yml`). `main`에 push하면 test를 통과한 빌드만 `gh-pages` 브랜치로 밀어 GitHub Pages에 배포한다 (`.github/workflows/deploy.yml`).
 
 배포 주소: **https://sbp37.github.io/ssok/**
 
 ## 테스트 / 튜닝
 
-- **`?pad=donut`** — 특정 패드로 시작 (`cloud flower donut paw ribbon shell cherry star`). 진행 저장은 `localStorage["ssok.pads.v1"]`.
+- **`?pad=donut`** — 특정 패드로 시작 (`cloud flower donut paw ribbon shell cherry star`). 진행 저장은 `localStorage["ssok.progress.v2"]`.
 - **`?test=5`** — 감촉이 다른 다섯 종류(작은 비즈 · 큰 진주 · 별 · 투명 구슬 · 길쭉이)가 넓게 박힌 테스트 패드. 젤 누르기 → 잡기 → 늘리기 → POP → 복원 손맛을 비교할 때 쓴다. (`?test=12` 처럼 개수 지정 가능, 종류는 순환)
 - 브라우저 콘솔에서 `window.__ssok` 으로 Game 인스턴스에 접근할 수 있다.
   - `__ssok.debugBeads()` — 잡을 수 있는 비즈의 화면 좌표와 임계 거리(`t1`, `t2`)
   - `__ssok.gel` — 젤 상태 (fingers, wobble, shocks, R)
-- 소리는 첫 터치 이후에 켜진다(브라우저 정책). 진동은 Android Chrome에서만 동작한다.
+- **`?perf=1`** — 화면 왼쪽 아래에 프레임 간격(체감)과 update+render 작업 시간(코드 비용)의 중앙값/P95, 33ms 넘는 긴 프레임 수를 1초마다 표시한다. 실기기 측정용이며 배포 빌드에서도 동작한다. 콘솔에서는 `__ssok.perf.last`.
+- 소리는 첫 터치 이후에 켜진다(브라우저 정책). 진동은 `navigator.vibrate`가 있는 브라우저(주로 Android)에서, 없으면 토스 앱의 햅틱 브리지(`Device.triggerHaptic`)로 동작한다. 일반 iOS Safari에서는 진동이 없다.
 - **짧은 한 판**: 기존 완료 횟수를 기준으로 첫 판은 표면 14개/숨은 층 포함 최대 20개, 두 번째는 표면 18개/최대 24개, 이후는 패드별 표면 18~22개/최대 28개. 리본의 작은 포인트 비즈도 표면 수에 포함한다. 배치 공간이 부족하면 더 적게 생성될 수 있다. 일반 2층 비즈를 제한한 뒤 보물·왕비즈를 배치해 발견 기회를 유지한다. 재방문마다 첫 판으로 초기화하지 않는다. 저장 형식, 뽑기 물리, 광고 간격, 프로모션 완료 기준은 동일하다.
 - **마지막 알**: 당길수록 작은 빛과 최대 세 번의 짧은 공명음이 차오른다. 게이지/타이밍 실패는 없다. 완료 저장은 POP 즉시. 모든 비즈가 도착하고 병이 정착한 뒤 완료음·`쏙, 다 비웠다!`·패드 이름과 작은 별이 약 1초간 나온다. 패드 별 6개와 병 반사 4개는 한 번만 재생되며, 기존 1200ms 뒤 NEXT가 열린다. 마지막 보물이 보물함으로 날아가는 경우도 동일하다.
 - **확실한 뽑기**: grip→늘어남→stick-slip/잠깐 끼임→POP 손맛은 유지하되, 필요한 거리까지 당기면 느리든 빠르든 성공한다. 무작위 놓침/강제 되들어감/속도 부족 슬립백은 사용하지 않는다. 임계 거리 전에 스스로 놓으면 원래대로 돌아간다.
@@ -38,7 +41,11 @@ pnpm preview      # 빌드 결과 미리보기 (4173)
 
 ```
 src/game/
-  Game.ts             프레임 루프, 입력→젤/비즈 연결, POP 시퀀스(30ms/40ms 지연), 렌더 순서
+  Game.ts             프레임 루프, 입력→젤/비즈 연결, POP 시퀀스(30ms/40ms 지연), 패드 전환, 렌더 순서
+  render/PullNeck.ts  당기는 비즈 주변 젤: 텐트, 타원 립, 움직이는 구멍, 목(스크래치 캔버스 1장 재사용)
+  render/EmbeddedBead.ts 젤에 박힌 비즈: 위치·크기(피킹과 공유), 그림자, 스프라이트, 메니스커스, 반짝임
+  render/Flight.ts    뽑힌 비즈의 비행 경로·그리기, POP 직후 끊어지는 젤 실
+  render/Finale.ts    패드를 다 비운 뒤의 별(패드 6개 + 병 4개)
   gel/Gel.ts          젤 모델: 변위장 warp(), 스프링(딤플/드래그/출렁임/충격), 베이스 텍스처, 오버레이
   gel/MeshGL.ts       젤 메시를 WebGL 삼각형으로 그리는 아주 작은 렌더러 (이음선 없는 텍스처 변형)
   beads/BeadTypes.ts  비즈 카탈로그 — 촉감을 바꾸는 값은 전부 여기 (grip/pull/friction/minSpeed/mass/bounce)
@@ -48,16 +55,18 @@ src/game/
   audio/samples.ts    녹음 샘플 뱅크 (manifest 기반, 없으면 프로시저럴 폴백)
   physics/spring.ts   감쇠 스프링
   audio/Sfx.ts        Web Audio 프로시저럴 효과음 (매번 ±5~10% 변형)
-  haptics.ts          navigator.vibrate 패턴 + ON/OFF
+  haptics.ts          navigator.vibrate 패턴, 없으면 토스 햅틱 브리지 + ON/OFF
   collector/Collector.ts  유리병(한 패드 분량, 최대 90개) + 구슬 물리 (가라앉으면 실제로 sleep, 새 비즈가 닿은 2~4개만 잠깐 깨움)
-  modes/Challenge.ts  30초 챌린지 상태 (점수/콤보)
-  storage/records.ts  로컬 최고기록. RankingProvider 인터페이스만 정의 (가짜 랭킹 없음)
   pads/PadTypes.ts    패드 = 데이터. 실루엣 r(θ)(+구멍), 젤 색/투명도/두께/말랑함/늘어남, 비즈 프리셋, 숨은 오브젝트, 국소 저항 필드
   pads/progress.ts    PadProgress(저장 v2, 이어가기), DiscoveryProvider(발견 순서 → 가중 랜덤 + 변종 롤)
-  ads/AdPolicy.ts     NEXT 광고 빈도·중복 방지·실패 복구, 모의 제공자 (실제 SDK 없음)
+  ads/AdPolicy.ts     NEXT 광고 빈도·중복 방지·실패 복구, 토스 전면/보상 광고 제공자, 토스 밖에서 쓰는 모의 제공자
   rewards/rates.ts    숨은 보물 풀, 초희귀 확률, 변종 확률 — 튜닝은 여기
   rewards/treasure.ts 보물함 저장
-src/ui/               React 오버레이 (HUD, 힌트, 결과, 토글) — 최소한만
+  rewards/PromotionRewards.ts 토스 프로모션 지급 (TEST_/live 코드, 중복 방지)
+  util/PerfProbe.ts   `?perf=1` 프레임 측정
+  util/Emitter.ts     Game 이벤트용 작은 타입 이벤트 에미터
+src/ui/               React 오버레이 (HUD, 힌트, 완료 카드, NEXT, 시트, 공유) — 최소한만
+tests/                Node만으로 도는 회귀 테스트. load.mjs가 src/의 TS를 그대로 불러오고 토스 SDK는 모듈 이름으로 대체한다
 ```
 
 ### 진행 · NEXT · 숨은 보물
@@ -80,10 +89,10 @@ src/ui/               React 오버레이 (HUD, 힌트, 결과, 토글) — 최�
 - **초희귀**(왕관 비즈·홀로그램 별·대왕 투명 오리): 풀에 1%씩 + 아무 패드 깊은 층 0.6%. `뭐야 이거?`.
 - **보물함**: 상단의 유일한 주요 버튼. 14칸, 못 찾은 건 검은 실루엣 `???`. 새로 얻을 때만 잠깐 반짝.
 - **광고 전환 정책**: 일반 NEXT는 첫 완료 면제 + 최소 2분 간격의 토스 전면광고, 희귀 변종은 선택형 보상광고. 보상형 종료 후 다음 일반 전환은 면제한다. 앱 시작 때 두 광고를 미리 로드하고, 노출 후 다음 광고를 다시 로드한다. 광고 미지원·준비 실패·표시 실패 시 진행을 막지 않으며, 희귀 패드는 SDK의 `userEarnedReward` 이벤트를 받은 경우에만 연다. 일반 브라우저에서는 기존 모의 제공자로 플레이 흐름만 확인한다. [정책·어댑터 계약·운영 실험](docs/ad-policy.md).
-- **토스 프로모션**: 첫 패드 완료 1원, 누적 3패드 완료 3원, 완료 이력이 있는 사용자의 다른 날 재방문 2원을 `Promotion.grantReward`로 지급한다. 기본 QA 빌드는 `TEST_` 코드만 사용하며, AIT 콘솔의 일반 테스트 푸시로 열면 세 코드를 한 번씩 자동 검증한다. 실제 지급 번들은 반드시 `VITE_PROMOTION_MODE=live pnpm build` 후 `pnpm ait:build`로 생성한다. 로컬 저장소에 코드별 성공을 기록해 같은 설치에서 중복 호출하지 않고, SDK 미지원·지급 실패는 플레이를 막지 않는다.
-- **공유**: 컬렉션 하단의 `친구에게 공유하기`가 `Share.createLink`로 토스 딥링크를 만들고 `public/branding/share-stretch.jpg`(1200×600)를 OG 이미지로 지정한다. 토스 Android 5.240 / iOS 5.239 미만에서는 SDK 정책상 기본 공유 카드로 폴백한다. 일반 브라우저는 Web Share API 또는 링크 복사를 사용한다.
+- **토스 프로모션**: 첫 패드 완료 1원, 누적 3패드 완료 3원, 완료 이력이 있는 사용자의 다른 날 재방문 2원을 `Promotion.grantReward`로 지급한다. 기본 QA 빌드는 `TEST_` 코드만 사용하며, AIT 콘솔의 일반 테스트 푸시로 열면 세 코드를 한 번씩 자동 검증한다. 실제 지급 번들은 반드시 `pnpm toss:build:live`(= `VITE_PROMOTION_MODE=live pnpm build && ait build`)로 생성한다. 빌드 로그에 `[ssok] promotion mode: LIVE – real payouts`가 찍히는지 확인한다. `live`/`test`/미지정 외의 값(`LIVE`, `true` 등)은 조용히 TEST로 떨어지지 않고 빌드가 실패한다. 로컬 저장소에 코드별 성공을 기록해 같은 설치에서 중복 호출하지 않고, SDK 미지원·지급 실패는 플레이를 막지 않는다.
+- **공유**: 패드를 다 비운 완료 카드의 `자랑하기 ↗`와 컬렉션 하단의 `친구에게 공유하기`가 같은 흐름(`ui/share.ts`)을 쓴다. 완료 카드에서는 패드 이름이 메시지 앞에 붙는다. 둘 다 `Share.createLink`로 토스 딥링크를 만들고 `public/branding/share-stretch.jpg`(1200×600)를 OG 이미지로 지정한다. 토스 Android 5.240 / iOS 5.239 미만에서는 SDK 정책상 기본 공유 카드로 폴백한다. 일반 브라우저는 Web Share API 또는 링크 복사를 사용한다.
 - **배너 광고**: 게임 화면 하단의 96px 전용 영역에서 `ait.v2.live.fa7e951585b7468c`를 `TossAds.attachBanner`로 표시한다. 설정·컬렉션 시트를 여는 동안에는 슬롯을 제거하고 숨긴다. SDK 미지원·초기화 실패·no-fill이면 빈 영역도 접혀 게임을 막지 않는다. 로컬에서는 `?bannerQa=1`로 자리만 확인한다.
-- 소리/진동은 ⚙ 설정 시트. 30초 챌린지는 UI에서 완전히 제거(코드는 `modes/Challenge.ts`에 dormant).
+- 소리/진동은 ⚙ 설정 시트. 예전 30초 챌린지 모드는 코드까지 제거했다.
 - 다이아·포인트·미션은 이 버전에 없다. 실제 포인트는 나중에 별도 프로모션으로.
 
 ### 에셋

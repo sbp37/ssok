@@ -585,6 +585,24 @@ body,
 }
 .collection-share:active { transform: scale(0.99); }
 .collection-share:disabled { opacity: 0.55; cursor: default; }
+/* small, secondary: the completion card's only action besides NEXT */
+.done-share {
+  display: block;
+  margin: 6px auto 0;
+  min-height: 32px;
+  padding: 4px 14px;
+  border: 1px solid rgba(145, 80, 108, 0.14);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.9);
+  color: #8b526b;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 650;
+  cursor: pointer;
+  animation: btnIn 0.4s ease-out;
+}
+.done-share:active { transform: scale(0.96); }
+.done-share:disabled { opacity: 0.55; cursor: default; }
 .share-notice {
   margin-top: 8px;
   color: var(--ink-soft);
