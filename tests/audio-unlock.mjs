@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import ts from 'typescript';
+import { loadFresh } from './load.mjs';
 
 // Run the actual synth against a controllably suspended audio output. This
 // reproduces a long first drag before mobile touchend permits audio playback.
@@ -28,14 +27,7 @@ class AudioContext {
   activate() { this.state = 'running'; this.onstatechange?.(); }
 }
 globalThis.window = { AudioContext };
-const compile = path => ts.transpileModule(readFileSync(new URL(path, import.meta.url), 'utf8'), {
-  compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.ES2020 },
-}).outputText;
-const url = code => 'data:text/javascript;base64,' + Buffer.from(code).toString('base64');
-const samples = url(compile('../src/game/audio/samples.ts').replaceAll('import.meta.env.BASE_URL', '"/"'));
-const source = url(compile('../src/game/audio/Sfx.ts').replace('"./samples"', JSON.stringify(samples)));
-let serial=0;
-async function fresh() { now=0; starts=[]; return (await import(source+'#'+serial++)).sfx; }
+async function fresh() { now=0; starts=[]; return (await loadFresh('audio/Sfx')).sfx; }
 
 for (const kind of ['ordinary','fiber','chain','rainbow','charm','peel','swirl']) {
   const sfx = await fresh();

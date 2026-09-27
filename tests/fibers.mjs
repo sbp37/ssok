@@ -1,21 +1,6 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { resolve, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import ts from 'typescript';
+import { load } from './load.mjs';
 
-const modules = new Map();
-function moduleUrl(path) {
-  if (modules.has(path)) return modules.get(path);
-  const { outputText } = ts.transpileModule(readFileSync(path, 'utf8'), {
-    compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.ES2020 },
-  });
-  const code = outputText.replace(/from\s+(['"])(\.[^'"]+)\1/g, (_, quote, name) =>
-    `from ${quote}${moduleUrl(resolve(dirname(path), name + '.ts'))}${quote}`);
-  const url = 'data:text/javascript;base64,' + Buffer.from(code).toString('base64');
-  modules.set(path, url);return url;
-}
-const load = name => import(moduleUrl(fileURLToPath(new URL('../src/game/' + name + '.ts', import.meta.url))));
 const { generatePad } = await load('beads/Bead');
 const { PADS } = await load('pads/PadTypes');
 const { roundBeadBudget } = await load('pads/pacing');

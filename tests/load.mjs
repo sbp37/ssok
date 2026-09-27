@@ -65,8 +65,15 @@ function moduleUrl(path, env) {
   return url;
 }
 
+const fileOf = (name) => fileURLToPath(new URL('../src/game/' + name + '.ts', import.meta.url));
+
 /** load('ads/AdPolicy') → module namespace of src/game/ads/AdPolicy.ts */
 export function load(name, env = {}) {
-  const file = fileURLToPath(new URL('../src/game/' + name + '.ts', import.meta.url));
-  return import(moduleUrl(file, env));
+  return import(moduleUrl(fileOf(name), env));
+}
+
+let freshSerial = 0;
+/** A new instance of the module (and its singletons) on every call, e.g. a fresh `sfx`. */
+export function loadFresh(name, env = {}) {
+  return import(moduleUrl(fileOf(name), env) + '#fresh' + freshSerial++);
 }

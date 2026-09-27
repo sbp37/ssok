@@ -22,10 +22,7 @@ import { DAY_NONE_FACTOR, FIRST_TREASURE_GUARANTEE, HIDDEN_POOLS, NONE, ULTRA_SU
 import { ULTRA_TYPES } from "./beads/BeadTypes";
 import { TreasureStore, treasureKind, type TreasureKind } from "./rewards/treasure";
 import type { BeadType } from "./beads/BeadTypes";
-import { chainCount, chainFraction, isChain, revealsBead, exposedFiber, fiberPoint, FiberPull, relaxFiber, type FiberPoint } from "./fibers/Fiber";
-import { drawFiber } from "./fibers/FiberRenderer";
-import { installTactile, installOpeningTactiles, installRoundTactiles, roundTactile, tactileHint, type TactileKind } from "./fibers/Tactile";
-import { drawChain, drawPeel, drawSwirl } from "./fibers/TactileRenderer";
+import { TactileController, type TactileHost } from "./fibers/TactileController";
 
 export interface GameEvents {
   pop: { bead: Bead; rare: boolean; pulled: number };
@@ -35,6 +32,8 @@ export interface GameEvents {
   /** how much of the current pad has been emptied */
   progress: { emptied: number; remaining: number; total: number };
   padChange: { pad: PadType; newPad: boolean; newVariant: boolean };
+  /** the round's one-line how-to for its featured material (null = hide) */
+  tactileHint: { text: string | null };
   /** a rare bead / hidden object / ultra landed in the treasure box */
   treasure: { type: BeadType; kind: TreasureKind; isNew: boolean; count: number; padName: string };
 }
@@ -61,7 +60,7 @@ interface FingerState {
  * Everything that *feels* like something is deliberately staggered by a few
  * tens of ms (see doPop) – simultaneous animation reads as weightless.
  */
-export class Game extends Emitter<GameEvents> implements PadView {
+export class Game extends Emitter<GameEvents> implements PadView, TactileHost {
   private ctx: CanvasRenderingContext2D;
   dpr = 1;
   private w = 0;
@@ -74,10 +73,9 @@ export class Game extends Emitter<GameEvents> implements PadView {
   beads: Bead[] = [];
   collector = new Collector();
   private pulls = new Map<number, Pull>();
-  private fiberPulls = new Map<number, FiberPull>();
-  private fiberHintUntil = 0;
-  private triedTactile = new Set<TactileKind>();
-  private tactileKind?: TactileKind;
+  /** yarn, strands, swirl, film: everything that is not an ordinary bead pull */
+  private tactile = new TactileController(this, (b, id, dx, dy, speed) => this.doPop(b, id, dx, dy, speed));
+  private hint: string | null = null;
   private fingers = new Map<number, FingerState>();
   private scheduled: { at: number; fn: () => void }[] = [];
   private threads: Thread[] = [];
@@ -194,11 +192,7 @@ export class Game extends Emitter<GameEvents> implements PadView {
     if (r.width === 0 || r.height === 0) return;
     sfx.cancelPending();
     // A rotation cancels the gesture, not the already extracted length.
-    for (const [id, pull] of this.fiberPulls) {
-      if (pull.bead.state === "held") pull.bead.state = "embedded";
-      this.fingers.delete(id);
-    }
-    this.fiberPulls.clear();
+    for (const id of this.tactile.cancelAll()) this.fingers.delete(id);
     this.dpr = Math.min(2, window.devicePixelRatio || 1);
     this.w = r.width;
     this.h = r.height;
@@ -261,7 +255,7 @@ export class Game extends Emitter<GameEvents> implements PadView {
     this.scheduled = [];
     for (const p of this.pulls.values()) this.releaseBead(p.bead);
     this.pulls.clear();
-    this.fiberPulls.clear();
+    this.tactile.clear();
     const boundary = (th: number) => this.gel.boundary(th);
     const hole = this.gel.hasHole ? (th: number) => this.gel.holeAt(th) : undefined;
     const preset = this.pad.beads;
@@ -291,21 +285,7 @@ export class Game extends Emitter<GameEvents> implements PadView {
           hiddenObject: this.hiddenForThisPad(),
           ultraChance: ULTRA_SURFACE_CHANCE,
         });
-    // Dedicated static QA builds expose direct demos; normal Pages/AIT builds
-    // cannot bypass the first-round progression with a URL parameter.
-    const query = import.meta.env.DEV || import.meta.env.MODE === "tactile-preview" ? new URLSearchParams(location.search) : undefined;
-    const preview = query?.get("tactile");
-    this.tactileKind = query?.has("fibers") ? "fiber"
-      : preview === "chain" || preview === "rainbow" || preview === "charm" || preview === "peel" || preview === "swirl" || preview === "fiber" ? preview
-      : roundTactile(this.progressStore.totalCompleted);
-    if (!this.testBeads && this.tactileKind) {
-      if (this.progressStore.totalCompleted === 0 && !preview && !query?.has("fibers")) {
-        installOpeningTactiles(this.beads, this.gel.R, rng);
-      } else if (!preview && !query?.has("fibers")) {
-        installRoundTactiles(this.beads, this.gel.R, rng, this.tactileKind);
-      } else installTactile(this.beads, this.gel.R, rng, this.tactileKind);
-      this.fiberHintUntil = this.time + 10;
-    }
+    this.tactile.install(this.progressStore.totalCompleted, rng, !!this.testBeads);
     this.padTotal = this.beads.length;
     this.collector.preparePad(this.beads.filter(b => !treasureKind(b.type)));
     this.peekUntil = -1;
@@ -429,7 +409,7 @@ export class Game extends Emitter<GameEvents> implements PadView {
         if (treasureKind(b.type)) this.treasure.add(b.type.id);
       }
     this.pulls.clear();
-    this.fiberPulls.clear();
+    this.tactile.clear();
     this.gel.markDirty();
     this.progressStore.complete();
     this.emitProgress();
@@ -459,18 +439,9 @@ export class Game extends Emitter<GameEvents> implements PadView {
     return out;
   }
 
-  /** The actual touch target, including a partially extracted yarn end. */
+  /** The actual touch targets, including a partially extracted yarn end. */
   debugFibers() {
-    return this.beads.filter(b => b.fiber && (b.state === "embedded" || b.state === "held")).map(b => {
-      const f = b.fiber!, p = this.fiberLocal(b, f.tip), screen = this.toCanvas(p.x, p.y);
-      return { id: b.id, kind: f.kind ?? "fiber", x: screen.x, y: screen.y, pulled: f.pulled, length: f.length, state: b.state, scale: this.s };
-    });
-  }
-
-  private fiberLocal(b: Bead, p: FiberPoint) {
-    const point = { x: b.rx + p.x * this.s, y: b.ry + p.y * this.s };
-    this.gel.warp(point.x, point.y, point);
-    return point;
+    return this.tactile.debug((x, y) => this.toCanvas(x, y));
   }
 
   /** count of beads still grabbable (surface + surfaced deeper) */
@@ -498,14 +469,8 @@ export class Game extends Emitter<GameEvents> implements PadView {
     for (const b of this.beads) {
       if (!this.canGrab(b)) continue;
       if (b.fiber) {
-        const end = this.fiberLocal(b, b.fiber.tip);
-        let d = Math.hypot(end.x - lx, (end.y - ly) * this.gel.tilt);
-        if (b.fiber.kind === "peel") {
-          const centre = this.fiberLocal(b,{x:0,y:0});
-          const dc = Math.hypot(centre.x-lx,(centre.y-ly)*this.gel.tilt);
-          if (dc < b.radius) d = Math.min(d,dc);
-        }
-        if (d < 22 && d < bestD) { bestD = d; best = b; }
+        const d = this.tactile.hitDistance(b, lx, ly);
+        if (d < bestD) { bestD = d; best = b; }
         continue;
       }
       const p = beadPos(b);
@@ -530,17 +495,15 @@ export class Game extends Emitter<GameEvents> implements PadView {
     const b = this.topBeadAt(l.x, l.y);
     if (!this.gel.inside(l.x, l.y) && !b) return;
     this.fingers.set(p.id, { sample: p, lastMove: performance.now(), downAt: performance.now(), x0: p.x, y0: p.y, moved: 0, lastRub: 0, bareGel: !b });
-    if (!b?.fiber) this.gel.fingerDown(p.id, l.x, l.y);
+    if (!b?.fiber || this.tactile.dimples(b)) this.gel.fingerDown(p.id, l.x, l.y);
     sfx.press();
     haptics.press();
     if (b) {
-      b.state = "held";
       if (b.fiber) {
-        if(!revealsBead(b.fiber)) this.triedTactile.add(b.fiber.kind ?? "fiber");
-        else this.fiberHintUntil = this.time + 6;
-        this.fiberPulls.set(p.id, new FiberPull(b, (l.x - b.rx) / this.s, (l.y - b.ry) / this.s));
+        this.tactile.grab(p.id, b, l.x, l.y);
         return;
       }
+      b.state = "held";
       const R = this.gel.R;
       const resist = this.pad.grip * (this.pad.resistance?.(b.rx / R, b.ry / R) ?? 1);
       this.pulls.set(p.id, new Pull(b, l.x, l.y, R, () => rng.next(), resist));
@@ -556,7 +519,11 @@ export class Game extends Emitter<GameEvents> implements PadView {
     f.lastMove = now;
     f.moved = Math.max(f.moved, Math.hypot(p.x - f.x0, p.y - f.y0));
     const l = this.toLocal(p.x, p.y);
-    if (this.fiberPulls.has(p.id)) { this.advanceFiber(p); return; }
+    if (this.tactile.holding(p.id)) {
+      if (this.tactile.dimplesFinger(p.id)) this.gel.fingerMove(p.id, l.x, l.y);
+      this.tactile.move(p, l.x, l.y);
+      return;
+    }
     this.gel.fingerMove(p.id, l.x, l.y);
     // rubbing bare gel: a soft grain every ~90ms while the finger really moves
     if (!this.pulls.has(p.id) && this.gel.inside(l.x, l.y) && p.speed > 220 && now - f.lastRub > 90) {
@@ -566,17 +533,16 @@ export class Game extends Emitter<GameEvents> implements PadView {
   };
 
   private onUp = (p: PointerSample, cancelled = false) => {
-    if (!cancelled && this.fiberPulls.has(p.id)) this.advanceFiber(p);
+    if (!cancelled && this.tactile.holding(p.id)) {
+      const l = this.toLocal(p.x, p.y);
+      this.tactile.move(p, l.x, l.y);
+      this.tactile.lift(p);
+    }
     sfx.endGesture(p.id, cancelled);
     const f = this.fingers.get(p.id);
     this.fingers.delete(p.id);
     this.gel.fingerUp(p.id);
-    const fiberPull = this.fiberPulls.get(p.id);
-    if (fiberPull) {
-      this.fiberPulls.delete(p.id);
-      fiberPull.bead.state = "embedded";
-      return;
-    }
+    if (this.tactile.release(p.id)) return;
     const pull = this.pulls.get(p.id);
     if (pull) {
       this.pulls.delete(p.id);
@@ -586,53 +552,6 @@ export class Game extends Emitter<GameEvents> implements PadView {
       sfx.tap();
     }
   };
-
-  private advanceFiber(sample: PointerSample) {
-    const pull = this.fiberPulls.get(sample.id);
-    if (!pull) return;
-    const b = pull.bead, f = b.fiber!, local = this.toLocal(sample.x, sample.y);
-    const complete = pull.move((local.x - b.rx) / this.s, (local.y - b.ry) / this.s);
-    if(f.kind === "peel" && f.pulled > f.length*.14) this.triedTactile.add("peel");
-    if (f.kind === "peel") {
-      const stage = Math.min(2, Math.floor(f.pulled / f.length * 3));
-      if (stage > (f.felt ?? 0)) {
-        f.felt = stage;
-        if (!complete) { sfx.tactileStep("peel",stage);haptics.tactileStep("peel"); }
-      }
-    }
-    if (!f.kind) {
-      const stage = Math.min(2, Math.floor(f.pulled / f.length * 3));
-      if (stage > (f.felt ?? 0)) {
-        f.felt = stage;
-        if (!complete) { sfx.tactileStep("fiber", stage); haptics.tactileStep("fiber"); }
-      }
-    }
-    if(f.kind === "swirl") {
-      if(f.pulled>f.length*.1)this.triedTactile.add("swirl");
-      const stage=Math.floor(f.pulled/f.length*5);
-      if(stage>(f.felt??0)) { f.felt=stage;if(!complete){sfx.tactileStep("swirl",stage);haptics.tactileStep("swirl");} }
-    }
-    if (isChain(f)) {
-      const step = Array.from({length:chainCount(f)-1},(_,i)=>chainFraction(f,i+1)).filter(v=>f.pulled/f.length>=v).length;
-      if (step > (f.felt ?? 0)) {
-        f.felt = step;
-        // One feedback event per input sample, even on a very fast swipe.
-        // Nothing is queued after releasing or leaving the pad.
-        if (!complete) { sfx.tactileStep(f.kind ?? "chain", step);haptics.tactileStep(f.kind ?? "chain"); }
-        const root=fiberPoint(f);
-        this.gel.shock(b.rx+root.x*this.s,b.ry+root.y*this.s,6*this.s,(f.kind === "charm" ? 2.7 : 2.1)*this.s);
-      }
-    }
-    if (complete) {
-      const tip = this.fiberLocal(b, f.tip);
-      f.released = exposedFiber(f).map(p => {
-        const point = this.fiberLocal(b, p);
-        return { x: (point.x - tip.x) / this.s, y: (point.y - tip.y) * this.gel.tilt / this.s };
-      });
-      const root = fiberPoint(f), dx = f.tip.x - root.x, dy = f.tip.y - root.y, d = Math.hypot(dx, dy) || 1;
-      this.doPop(b, sample.id, dx / d, dy / d, sample.speed);
-    }
-  }
 
   private releaseBead(b: Bead, pull?: Pull) {
     if (b.state !== "held") return;
@@ -710,11 +629,10 @@ export class Game extends Emitter<GameEvents> implements PadView {
     const rare = b.type.rarity === "rare";
     // Start at the last rendered (warped) centre, not the unwarped rest point.
     // Otherwise a strongly stretched king jumps backwards on its POP frame.
-    const peeled = revealsBead(b.fiber);
-    const pos = peeled ? this.fiberLocal(b,{x:0,y:0}) : b.fiber ? this.fiberLocal(b, b.fiber.tip) : embeddedPosition(b, this.gel, this.s);
-    const releaseScale = peeled ? .76 : b.fiber ? 1 : embeddedScale(b);
+    const t = b.fiber ? this.tactile.popStyle(b) : null;
+    const pos = t ? t.pos : embeddedPosition(b, this.gel, this.s);
+    const releaseScale = t ? t.releaseScale : embeddedScale(b);
     this.pulls.delete(fingerId);
-    this.fiberPulls.delete(fingerId);
     this.gel.reanchor(fingerId);
     b.state = "flying";
     b.lift = 1;
@@ -722,7 +640,7 @@ export class Game extends Emitter<GameEvents> implements PadView {
 
     // 0ms: freed – kicks toward the finger, hangs there ~150ms so the moment lands, then arcs into the cup
     // (treasures arc up to the treasure box instead)
-    const kick = b.fiber ? (b.fiber.kind === "charm" ? 17 : 9) * s : b.type.bounce * s * (1 + Math.min(speed, 1400) / 2800) * (king ? 1.65 : 1);
+    const kick = t ? t.kick * s : b.type.bounce * s * (1 + Math.min(speed, 1400) / 2800) * (king ? 1.65 : 1);
     let kx = dx * kick;
     let ky = king ? Math.min(dy * kick, -kick * 0.25) - 12 * s : dy * kick;
     const start = this.toCanvas(pos.x + kx, pos.y + ky);
@@ -738,7 +656,7 @@ export class Game extends Emitter<GameEvents> implements PadView {
     const mx = (start.x + end.x) / 2 + dx * 30 * s;
     const my = Math.max(b.radius * 1.25, Math.min(start.y, end.y) - (70 + 60 * Math.random() + (king ? 40 : 0)) * s);
     const dur = (king ? 0.48 : 0.46 + b.type.mass * 0.11) * (0.92 + Math.random() * 0.16);
-    const hang = b.fiber ? 0.2 : king ? 0.15 : 0.12 + b.type.mass * 0.03;
+    const hang = t ? t.hang : king ? 0.15 : 0.12 + b.type.mass * 0.03;
     b.fly = {
       hang,
       x0: start.x,
@@ -758,9 +676,7 @@ export class Game extends Emitter<GameEvents> implements PadView {
     };
 
     // t = 0: sound + haptic land exactly with the release
-    if (b.fiber && !peeled) {
-      sfx.tactileRelease(b.fiber.kind ?? "fiber", b.type.mass);
-    }
+    if (t?.releaseSound) sfx.tactileRelease(b.fiber!.kind ?? "fiber", b.type.mass);
     else sfx.pop(b.type.sound, b.type.mass, rare || !!kind, king ? 1.3 : 1);
     if (kind) this.schedule(0.05, () => haptics.rare());
     else if (b.fiber) haptics.tactilePop(b.fiber.kind ?? "fiber");
@@ -769,7 +685,7 @@ export class Game extends Emitter<GameEvents> implements PadView {
 
     // the socket is empty from now on
     const deeper = this.beads.find((o) => o.slot === b.slot && o.layer === 1 && o.state === "embedded" && o !== b);
-    if (!deeper && (!b.fiber || peeled)) {
+    if (!deeper && (!t || t.socket)) {
       // the hole is the slot's, not the object's: a buried treasure bigger than the bead
       // that sat on it was squeezed out through that bead's hole, so it never overlaps neighbours
       const host = this.beads.find((o) => o.slot === b.slot && o.layer === 0);
@@ -783,21 +699,21 @@ export class Game extends Emitter<GameEvents> implements PadView {
     this.gel.markDirty();
 
     // Visual only: does not postpone POP, input, or the flight into the jar.
-    if (!b.fiber) this.threads.push({ hx: b.rx, hy: b.ry, bead: b, t: 0, life: 0.19 + sizeStrength * 0.045, side: Math.random() < 0.5 ? -1 : 1 });
+    if (!t) this.threads.push({ hx: b.rx, hy: b.ry, bead: b, t: 0, life: 0.19 + sizeStrength * 0.045, side: Math.random() < 0.5 ? -1 : 1 });
     // +30ms: gel snaps back the other way, dent appears
     this.schedule(0.03, () => {
       const m = Math.pow(b.type.mass, 0.6);
-      const tactileRecoil = b.fiber?.kind === "charm" ? .8 : b.fiber ? .6 : 1;
-      const strength = (lastInPad ? 1.22 : 1) * (1 + sizeStrength * 0.18) * (king ? 1.3 : 1) * tactileRecoil;
+      const strength = (lastInPad ? 1.22 : 1) * (1 + sizeStrength * 0.18) * (king ? 1.3 : 1) * (t?.recoil ?? 1);
       this.gel.recoil(-dx * 95 * s * m * strength, -dy * 95 * s * m * strength);
     });
     // +40ms: the gel around the hole bulges outward and rings down – neighbours ride it
-    this.schedule(0.04, () => this.gel.shock(b.rx, b.ry, b.radius * (1 + sizeStrength * 0.16), 5 * s * Math.pow(b.type.mass, 0.5) * (1 + sizeStrength * 0.3) * (b.fiber?.kind === "charm" ? .8 : b.fiber ? .6 : 1)));
+    this.schedule(0.04, () => this.gel.shock(b.rx, b.ry, b.radius * (1 + sizeStrength * 0.16), 5 * s * Math.pow(b.type.mass, 0.5) * (1 + sizeStrength * 0.3) * (t?.recoil ?? 1)));
     // the bead underneath waits at the bottom of the hole, then rises (slow spring, no overshoot)
     if (deeper) this.schedule(0.42, () => (deeper.depth.target = 0));
 
     if (kind) this.flashes.push({ x: pos.x, y: pos.y, t: 0 });
 
+    this.tactile.onPop();
     this.freePulled++;
     this.emit("pop", { bead: b, rare, pulled: this.freePulled });
     if (!this.firstPopDone) {
@@ -858,12 +774,7 @@ export class Game extends Emitter<GameEvents> implements PadView {
       const b = p.bead;
       this.gel.pulls.push({ hx: b.rx, hy: b.ry, sx: p.stretch.x + b.off.x * 0.5, sy: p.stretch.y + b.off.y * 0.5, r: b.radius });
     }
-    for (const p of this.fiberPulls.values()) {
-      const b = p.bead, f = b.fiber!, root = fiberPoint(f);
-      const dx = f.tip.x - root.x, dy = f.tip.y - root.y, d = Math.hypot(dx, dy) || 1;
-      this.gel.pulls.push({ hx: b.rx + root.x * this.s, hy: b.ry + root.y * this.s,
-        sx: dx / d * Math.min(d, 10) * this.s, sy: dy / d * Math.min(d, 10) * this.s, r: 5 * this.s });
-    }
+    this.tactile.update(dt);
 
     // springs: two substeps for stability at 30fps dips
     const sub = 2;
@@ -913,7 +824,6 @@ export class Game extends Emitter<GameEvents> implements PadView {
 
     // beads
     for (const b of this.beads) {
-      if (b.fiber && b.state === "embedded") relaxFiber(b.fiber, dt);
       if (b.state === "embedded" && b.lift > 0) b.lift = Math.max(0, b.lift - dt * 5);
       if (b.state === "flying" && b.fly) {
         const f = b.fly;
@@ -929,7 +839,7 @@ export class Game extends Emitter<GameEvents> implements PadView {
             const vx = (f.x1 - f.cx) * 2;
             const vy = (f.y1 - f.cy) * 2;
             this.collector.add(b, vx, vy);
-            if (!b.fiber || revealsBead(b.fiber) || isChain(b.fiber)) sfx.land(b.type.id === "king" ? "glass" : b.type.material, b.type.mass);
+            if (!b.fiber || this.tactile.popStyle(b).landSound) sfx.land(b.type.id === "king" ? "glass" : b.type.material, b.type.mass);
           }
           b.fly = undefined;
         }
@@ -1026,19 +936,7 @@ export class Game extends Emitter<GameEvents> implements PadView {
     ctx.scale(1, tilt);
     gel.drawDents(ctx);
     gel.drawSurface(ctx);
-    ctx.save();ctx.globalAlpha = gel.fade;
-    for (const b of this.beads) {
-      if (!b.fiber) continue;
-      const removed = b.state !== "embedded" && b.state !== "held";
-      if (b.fiber.kind === "peel") {
-        if (!removed) drawPeel(ctx,b,p=>this.fiberLocal(b,p),this.s,dpr);
-      } else if (b.fiber.kind === "swirl") {
-        if (!removed) drawSwirl(ctx,b,p=>this.fiberLocal(b,p),this.s,dpr);
-      } else if (isChain(b.fiber)) {
-        drawChain(ctx,b,p=>this.fiberLocal(b,p),this.s,dpr,removed);
-      } else drawFiber(ctx, b.fiber, p => this.fiberLocal(b, p), this.s, b.state === "held", removed, gel.col(.9, .12));
-    }
-    ctx.restore();
+    this.tactile.draw(ctx, dpr);
     // beads being pulled: hole + neck + the bead lifting out
     for (const p of this.pulls.values()) {
       const nb = p.bead;
@@ -1076,9 +974,10 @@ export class Game extends Emitter<GameEvents> implements PadView {
     for (const b of this.beads) if (b.state === "flying" && b.fly) drawFlying(ctx, b, this, this.reducedMotion);
     this.collector.draw(ctx, dpr);
     drawJarFinale(ctx, this.finaleT, this.collector, this.reducedMotion);
-    if (this.tactileKind && !this.triedTactile.has(this.tactileKind) && this.time < this.fiberHintUntil && this.beads.some(b => b.fiber)) {
-      ctx.save();ctx.font = "500 13px sans-serif";ctx.textAlign = "center";ctx.fillStyle = "#8b778e";
-      ctx.fillText(tactileHint[this.tactileKind], this.w / 2, this.padCy + gel.R * gel.tilt * 1.18 + 24);ctx.restore();
+    const hint = this.tactile.hintText();
+    if (hint !== this.hint) {
+      this.hint = hint;
+      this.emit("tactileHint", { text: hint });
     }
   }
 
