@@ -1,16 +1,7 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import ts from 'typescript';
-const source = readFileSync(new URL('../src/game/ads/AdPolicy.ts', import.meta.url), 'utf8');
-// This test exercises policy timing only. Stub the host SDK so the transpiled
-// data URL stays self-contained in Node and cannot attempt a real ad bridge.
-const isolatedSource = source.replace(
-  'import { loadFullScreenAd, showFullScreenAd } from "@apps-in-toss/web-framework";',
-  'const loadFullScreenAd = Object.assign(() => () => {}, {isSupported: () => false});\n' +
-  'const showFullScreenAd = Object.assign(() => () => {}, {isSupported: () => false});',
-);
-const js = ts.transpileModule(isolatedSource, {compilerOptions:{target:ts.ScriptTarget.ES2020,module:ts.ModuleKind.ES2020}}).outputText;
-const {AdPolicy, MockAdProvider} = await import(`data:text/javascript;base64,${Buffer.from(js).toString('base64')}`);
+import { load } from './load.mjs';
+// Policy timing only: the loader stubs the host SDK, so no real ad bridge can be touched.
+const { AdPolicy, MockAdProvider, createAdProvider } = await load('ads/AdPolicy');
 let clock = 1000, calls = 0;
 const data = new Map();
 const storage = {getItem:k=>data.get(k) ?? null,setItem:(k,v)=>data.set(k,v)};
@@ -43,6 +34,7 @@ assert.equal(aborted,true);
 restored.provider = provider;
 assert.equal(await restored.next('interstitial',8),'closed'); // lock released after failure
 assert.equal(new MockAdProvider().ready('interstitial'),false);
+assert.ok(createAdProvider() instanceof MockAdProvider, 'no Toss host → mock provider');
 const broken = {getItem:()=>{throw Error('private');},setItem:()=>{throw Error('private');}};
 const privatePolicy = new AdPolicy(provider,()=>clock,broken);
 assert.equal(await privatePolicy.next('rewarded',2),'rewarded');

@@ -1,10 +1,7 @@
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
-import ts from 'typescript';
+import { load } from './load.mjs';
 
-const source = await readFile(new URL('../src/game/util/BoundedCache.ts', import.meta.url), 'utf8');
-const { outputText } = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.ES2020 } });
-const { BoundedCache } = await import('data:text/javascript;base64,' + Buffer.from(outputText).toString('base64'));
+const { BoundedCache } = await load('util/BoundedCache');
 const cache = new BoundedCache(3);
 cache.set('a', 1).set('b', 2).set('c', 3);
 assert.equal(cache.get('a'), 1);
