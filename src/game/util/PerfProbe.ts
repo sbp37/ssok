@@ -82,7 +82,9 @@ export class PerfProbe {
     if (!this.el) {
       this.el = document.createElement("div");
       this.el.style.cssText =
-        "position:fixed;left:6px;bottom:6px;z-index:99;padding:4px 7px;border-radius:6px;" +
+        // top centre, between the count and the buttons: never over NEXT, the jar or the banner
+        "position:fixed;left:50%;transform:translateX(-50%);top:calc(env(safe-area-inset-top,0px) + 64px);" +
+        "z-index:99;padding:4px 7px;border-radius:6px;" +
         "background:rgba(20,16,24,.72);color:#fff;font:11px/1.35 ui-monospace,monospace;pointer-events:none;white-space:pre";
       document.body.appendChild(this.el);
     }
