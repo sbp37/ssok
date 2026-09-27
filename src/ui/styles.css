@@ -36,6 +36,54 @@ body,
   flex-direction: column;
   background: radial-gradient(120% 90% at 50% 40%, #f7f6f4 0%, var(--bg) 60%, #ecebe9 100%);
 }
+/* the pad's colour leaks a breath into the room behind it */
+.stage::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(58% 44% at 50% 43%, var(--pad-tint, transparent) 0%, transparent 72%),
+    radial-gradient(120% 60% at 50% 108%, var(--pad-tint, transparent) 0%, transparent 46%);
+  transition: opacity 0.6s;
+}
+/* dust drifting up through the light; ambience only, never in the way */
+.motes {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.motes i {
+  position: absolute;
+  bottom: -4%;
+  display: block;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.35) 60%, transparent 100%);
+  opacity: 0;
+  animation: moteRise linear infinite;
+}
+@keyframes moteRise {
+  0% {
+    transform: translate3d(0, 0, 0);
+    opacity: 0;
+  }
+  10% {
+    opacity: 0.5;
+  }
+  80% {
+    opacity: 0.35;
+  }
+  100% {
+    transform: translate3d(2vw, -110vh, 0);
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .motes {
+    display: none;
+  }
+}
 /* the game lives here; nothing of it reaches under the ad slot */
 .playfield {
   position: relative;
@@ -142,6 +190,13 @@ body,
   font-weight: 500;
   color: var(--ink-soft);
   margin-left: 4px;
+}
+/* "남은 거 n" — only in the final stretch, so the last pull has weight */
+.hud .count .left {
+  font-size: 12px;
+  color: var(--accent);
+  margin-left: 10px;
+  animation: comboIn 0.25s ease-out;
 }
 .hud .combo {
   font-size: 14px;

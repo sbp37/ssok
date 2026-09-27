@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { TossAds } from "@apps-in-toss/web-framework";
 import { Game } from "../game/Game";
 import { preloadBeadAssets } from "../game/beads/BeadAssets";
@@ -21,6 +21,22 @@ type SheetName = "" | "collection" | "settings";
 
 const SHEET_HISTORY_KEY = "__ssokSheet";
 const BANNER_AD_GROUP_ID = "ait.v2.live.fa7e951585b7468c";
+
+/** pads tint the room they sit in – barely-there halo, never the pad's own colour */
+const tintOf = (p: { gelColor: { r: number; g: number; b: number } }) =>
+  `rgba(${p.gelColor.r},${p.gelColor.g},${p.gelColor.b},0.10)`;
+
+/** dust motes drifting through the stage light – pure ambience, ignored by touch */
+const MOTES = [
+  { x: "6%", d: "15s", t: "-4s", s: 5 },
+  { x: "17%", d: "19s", t: "-11s", s: 3 },
+  { x: "30%", d: "12s", t: "-7s", s: 4 },
+  { x: "46%", d: "17s", t: "-1s", s: 6 },
+  { x: "58%", d: "14s", t: "-9s", s: 3 },
+  { x: "71%", d: "20s", t: "-14s", s: 5 },
+  { x: "83%", d: "11s", t: "-3s", s: 4 },
+  { x: "93%", d: "16s", t: "-12s", s: 3 },
+];
 
 function BannerAd({ hidden }: { hidden: boolean }) {
   const targetRef = useRef<HTMLDivElement>(null);
@@ -84,7 +100,9 @@ export function App() {
   const [phase, setPhase] = useState<Phase>("intro");
   const [hintHidden, setHintHidden] = useState(false);
   const [pulled, setPulled] = useState(0);
+  const [remaining, setRemaining] = useState(0);
   const [padEmpty, setPadEmpty] = useState(false);
+  const [padTint, setPadTint] = useState(() => tintOf({ gelColor: { r: 217, g: 119, b: 159 } }));
   // pad flow
   const [emptied, setEmptied] = useState(0);
   const [next, setNext] = useState<NextView | null>(null);
@@ -171,6 +189,7 @@ export function App() {
       setCollLabel(n > 0 && n < 8 ? `컬렉션 ${n}/8` : "컬렉션");
     };
     label();
+    setPadTint(tintOf(game.pad));
     // a new day: one quiet line, and the first pad is a touch more generous. No streaks, no stamps.
     if (game.progressStore.newDay) later(() => pushToast({ tone: "soft", text: "오늘은 뭔가 좀 다르다. ✦" }), 900);
     promotions.current?.onVisit(game.progressStore.newDay, game.progressStore.totalCompleted);
@@ -206,8 +225,9 @@ export function App() {
         completionTimer.current = window.setTimeout(() => setFlow("ready"), 1200);
         timers.current.push(completionTimer.current);
       }),
-      game.on("progress", ({ emptied }) => {
+      game.on("progress", ({ emptied, remaining }) => {
         setEmptied(emptied);
+        setRemaining(remaining);
         if (emptied >= 0.68) {
           setNext(game.nextInfo);
           // a passive nudge, once, when something unseen is still buried in there
@@ -225,6 +245,9 @@ export function App() {
       game.on("padChange", ({ pad, newPad, newVariant }) => {
         window.clearTimeout(completionTimer.current);
         setEmptied(0);
+        setPulled(0);
+        setRemaining(0);
+        setPadTint(tintOf(pad));
         setPadEmpty(false);
         setFlow("");
         setNext(null);
@@ -266,7 +289,12 @@ export function App() {
   const skipRare = () => transition("interstitial", true);
 
   return (
-    <div className="stage">
+    <div className="stage" style={{ "--pad-tint": padTint } as CSSProperties}>
+      <div className="motes" aria-hidden="true">
+        {MOTES.map((m, i) => (
+          <i key={i} style={{ left: m.x, width: m.s, height: m.s, animationDuration: m.d, animationDelay: m.t }} />
+        ))}
+      </div>
       <div className="playfield">
         <canvas ref={canvasRef} />
         <div className="ui">
@@ -276,6 +304,7 @@ export function App() {
                 <span className="count">
                   {pulled}
                   <small>개</small>
+                  {!padEmpty && remaining > 0 && remaining <= 5 && <small className="left">남은 거 {remaining}</small>}
                 </span>
               )}
             </div>

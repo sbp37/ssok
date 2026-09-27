@@ -119,6 +119,20 @@ export class Collector {
     this.count = 0;
   }
 
+  /** canvas-space tap test, generous around the rim for fat fingers */
+  hit(x: number, y: number) {
+    return x >= this.x - 12 && x <= this.x + this.w + 12 && y >= this.y - 18 && y <= this.y + this.h + 8;
+  }
+
+  /** a fingertip tap: one hop in the pile, then everything settles again */
+  shake() {
+    this.bump = 1;
+    for (const it of this.items) {
+      this.wake(it, (Math.random() - 0.5) * 170, -(50 + Math.random() * 110), (Math.random() - 0.5) * 9);
+      it.wakeBudget = 2;
+    }
+  }
+
   /** true while anything is still moving – lets callers skip the step entirely */
   get settled() {
     if (this.bump > 0 || this.dismissing) return false;
