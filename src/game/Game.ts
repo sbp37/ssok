@@ -6,8 +6,6 @@ import { Gel } from "./gel/Gel";
 import { MeshGL } from "./gel/MeshGL";
 import { PointerInput, type PointerSample } from "./input/Pointer";
 import { Pull, pullSizeStrength, type PullEvent } from "./physics/pull";
-import { Challenge, type ChallengeResult } from "./modes/Challenge";
-import { records } from "./storage/records";
 import { sfx } from "./audio/Sfx";
 import { haptics } from "./haptics";
 import { clamp, easeOutCubic, rng } from "./util/math";
@@ -19,17 +17,12 @@ import { ULTRA_TYPES } from "./beads/BeadTypes";
 import { TreasureStore, treasureKind, type TreasureKind } from "./rewards/treasure";
 import type { BeadType } from "./beads/BeadTypes";
 
-export type Mode = "free" | "challenge";
-
 export interface GameEvents {
-  pop: { bead: Bead; score: number; combo: number; rare: boolean; pulled: number };
+  pop: { bead: Bead; rare: boolean; pulled: number };
   firstPop: undefined;
-  tick: { remaining: number; score: number; pulled: number; combo: number };
-  challengeStart: undefined;
-  challengeEnd: { result: ChallengeResult; isBest: boolean; best: ChallengeResult | null };
   padEmpty: undefined;
   slipped: undefined;
-  /** free mode: how much of the current pad has been emptied */
+  /** how much of the current pad has been emptied */
   progress: { emptied: number; remaining: number; total: number };
   padChange: { pad: PadType; newPad: boolean; newVariant: boolean };
   /** a rare bead / hidden object / ultra landed in the treasure box */
@@ -80,7 +73,7 @@ interface FingerState {
 }
 
 /**
- * Orchestrates gel + beads + pulls + collector + modes and owns the frame loop.
+ * Orchestrates gel + beads + pulls + collector and owns the frame loop.
  * Everything that *feels* like something is deliberately staggered by a few
  * tens of ms (see doPop) – simultaneous animation reads as weightless.
  */
@@ -96,8 +89,6 @@ export class Game extends Emitter<GameEvents> {
   gel = new Gel();
   beads: Bead[] = [];
   collector = new Collector();
-  challenge = new Challenge(30);
-  mode: Mode = "free";
   private pulls = new Map<number, Pull>();
   private fingers = new Map<number, FingerState>();
   private scheduled: { at: number; fn: () => void }[] = [];
@@ -112,10 +103,8 @@ export class Game extends Emitter<GameEvents> {
   private neckSurface: HTMLCanvasElement | null = null;
   private padCx = 0;
   private padCy = 0;
-  private grabEnabled = true;
   private firstPopDone = false;
   private freePulled = 0;
-  private tickAcc = 0;
   /** pads */
   progressStore = new PadProgress();
   nextProvider: NextPadProvider = new DiscoveryProvider();
@@ -306,30 +295,6 @@ export class Game extends Emitter<GameEvents> {
     this.gel.fade = instant ? 1 : 0.15;
     this.threads = [];
     this.gel.markDirty();
-  }
-
-  startChallenge() {
-    this.mode = "challenge";
-    this.newPad();
-    this.collector.clear();
-    this.challenge.start();
-    this.grabEnabled = true;
-    this.emit("challengeStart", undefined);
-  }
-
-  goFree() {
-    this.mode = "free";
-    this.challenge.running = false;
-    this.grabEnabled = true;
-    this.freePulled = 0;
-    this.newPad();
-    this.collector.clear();
-    this.emit("padChange", { pad: this.pad, newPad: false, newVariant: false });
-    this.emitProgress();
-  }
-
-  get best() {
-    return records.getBest("challenge30");
   }
 
   get pad(): PadType {
@@ -523,7 +488,6 @@ export class Game extends Emitter<GameEvents> {
     this.gel.fingerDown(p.id, l.x, l.y);
     sfx.press();
     haptics.press();
-    if (!this.grabEnabled) return;
     if (b) {
       b.state = "held";
       const R = this.gel.R;
@@ -646,7 +610,7 @@ export class Game extends Emitter<GameEvents> {
     this.gel.reanchor(fingerId);
     b.state = "flying";
     b.lift = 1;
-    const lastInFree = this.mode === "free" && this.remainingCount() === 0;
+    const lastInPad = this.remainingCount() === 0;
 
     // 0ms: freed – kicks toward the finger, hangs there ~150ms so the moment lands, then arcs into the cup
     // (treasures arc up to the treasure box instead)
@@ -711,7 +675,7 @@ export class Game extends Emitter<GameEvents> {
     // +30ms: gel snaps back the other way, dent appears
     this.schedule(0.03, () => {
       const m = Math.pow(b.type.mass, 0.6);
-      const strength = (lastInFree ? 1.22 : 1) * (1 + sizeStrength * 0.18) * (king ? 1.3 : 1);
+      const strength = (lastInPad ? 1.22 : 1) * (1 + sizeStrength * 0.18) * (king ? 1.3 : 1);
       this.gel.recoil(-dx * 95 * s * m * strength, -dy * 95 * s * m * strength);
     });
     // +40ms: the gel around the hole bulges outward and rings down – neighbours ride it
@@ -721,46 +685,21 @@ export class Game extends Emitter<GameEvents> {
 
     if (kind) this.flashes.push({ x: pos.x, y: pos.y, t: 0 });
 
-    // scoring
-    let score = b.type.score;
-    let combo = 0;
-    let pulled: number;
-    if (this.mode === "challenge" && this.challenge.running) {
-      const r = this.challenge.onPop(b);
-      score = r.score;
-      combo = r.combo;
-      pulled = this.challenge.pulled;
-    } else {
-      this.freePulled++;
-      pulled = this.freePulled;
-    }
-    this.emit("pop", { bead: b, score, combo, rare, pulled });
+    this.freePulled++;
+    this.emit("pop", { bead: b, rare, pulled: this.freePulled });
     if (!this.firstPopDone) {
       this.firstPopDone = true;
       this.emit("firstPop", undefined);
     }
-    if (this.mode === "free") this.emitProgress();
+    this.emitProgress();
 
-    if (this.remainingCount() === 0) {
-      if (this.mode === "challenge" && this.challenge.running) this.schedule(0.35, () => this.newPad());
-      else {
-        // Keep the release readable as one recoil, then let the final flight and
-        // jar settle before the completion cue. Persist now even if the tab closes.
-        this.finishing = true;
-        this.finishQuiet = 0;
-        this.progressStore.complete();
-      }
+    if (lastInPad) {
+      // Keep the release readable as one recoil, then let the final flight and
+      // jar settle before the completion cue. Persist now even if the tab closes.
+      this.finishing = true;
+      this.finishQuiet = 0;
+      this.progressStore.complete();
     }
-  }
-
-  private endChallenge() {
-    for (const p of this.pulls.values()) this.releaseBead(p.bead, p);
-    this.pulls.clear();
-    this.grabEnabled = false;
-    const result = this.challenge.result();
-    const { isBest } = records.submit("challenge30", result);
-    sfx.chime(isBest);
-    this.emit("challengeEnd", { result, isBest, best: records.getBest("challenge30") });
   }
 
   private schedule(delay: number, fn: () => void) {
@@ -815,7 +754,7 @@ export class Game extends Emitter<GameEvents> {
 
     // pulls
     const now = performance.now();
-    const finalPull = this.mode === "free" && this.remainingCount() === 1 ? [...this.pulls.values()][0] ?? null : null;
+    const finalPull = this.remainingCount() === 1 ? [...this.pulls.values()][0] ?? null : null;
     if (finalPull !== this.finalePull) {
       this.finalePull = finalPull;
       this.finaleNote = 0;
@@ -894,20 +833,6 @@ export class Game extends Emitter<GameEvents> {
     for (let i = this.flashes.length - 1; i >= 0; i--) {
       this.flashes[i].t += dt;
       if (this.flashes[i].t > 0.55) this.flashes.splice(i, 1);
-    }
-
-    if (this.mode === "challenge" && this.challenge.running) {
-      if (this.challenge.tick(dt)) this.endChallenge();
-      this.tickAcc += dt;
-      if (this.tickAcc > 0.05) {
-        this.tickAcc = 0;
-        this.emit("tick", {
-          remaining: this.challenge.remaining,
-          score: this.challenge.score,
-          pulled: this.challenge.pulled,
-          combo: this.challenge.combo,
-        });
-      }
     }
   }
 

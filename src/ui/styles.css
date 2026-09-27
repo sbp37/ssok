@@ -122,16 +122,6 @@ body,
   gap: 10px;
   font-variant-numeric: tabular-nums;
 }
-.hud .timer {
-  font-size: 30px;
-  font-weight: 600;
-  letter-spacing: -0.02em;
-  color: var(--ink);
-  transition: color 0.2s;
-}
-.hud .timer.low {
-  color: var(--accent);
-}
 .hud .count {
   font-size: 36px;
   font-weight: 700;
@@ -142,18 +132,6 @@ body,
   font-weight: 500;
   color: var(--ink-soft);
   margin-left: 4px;
-}
-.hud .combo {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--accent);
-  animation: comboIn 0.18s ease-out;
-}
-@keyframes comboIn {
-  from {
-    transform: translateY(4px) scale(0.9);
-    opacity: 0;
-  }
 }
 
 /* centre hint */
@@ -202,14 +180,6 @@ body,
 .btn:active {
   transform: scale(0.96);
 }
-.btn.ghost {
-  background: rgba(255, 255, 255, 0.7);
-  color: var(--ink);
-  box-shadow: none;
-  border: 1px solid rgba(43, 39, 48, 0.1);
-  font-size: 15px;
-  padding: 12px 20px;
-}
 @keyframes btnIn {
   from {
     opacity: 0;
@@ -224,58 +194,6 @@ body,
   border: none;
   padding: 8px 4px;
   cursor: pointer;
-}
-
-/* result – lives at the bottom, pad stays visible */
-.result {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 4px;
-  animation: btnIn 0.5s ease-out;
-}
-.result .big {
-  font-size: 64px;
-  line-height: 1;
-  font-weight: 700;
-  letter-spacing: -0.04em;
-  font-variant-numeric: tabular-nums;
-}
-.result .big small {
-  font-size: 17px;
-  font-weight: 500;
-  color: var(--ink-soft);
-  margin-left: 8px;
-  letter-spacing: 0;
-}
-.result .best {
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--ink-soft);
-  letter-spacing: 0.02em;
-}
-.result .best.new {
-  color: var(--accent);
-}
-.result .meta {
-  font-size: 13px;
-  color: var(--ink-faint);
-  margin-bottom: 8px;
-}
-.result .row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.center-btn {
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: 45.5%;
-  display: flex;
-  justify-content: center;
-  transform: translateY(-50%);
 }
 
 /* NEXT tease + pad flow */
