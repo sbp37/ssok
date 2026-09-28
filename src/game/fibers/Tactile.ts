@@ -16,10 +16,13 @@ export function roundTactile(completed: number): TactileKind | undefined {
   return ROUND_ROTATION[(completed - 1) % ROUND_ROTATION.length];
 }
 
-/** Reuse safe slots, keeping the opening short while exposing two textures. */
+/** Reuse safe slots, keeping the opening short while exposing three textures. */
 export function installOpeningTactiles(beads: Bead[], padR: number, rng: Rng) {
+  // Install the bubble first so the opening pad gives its newest press gesture
+  // a large, central host that is easy to discover on a small phone.
+  const bubble = installTactile(beads, padR, rng, "bubble");
   const charm = installTactile(beads, padR, rng, "charm");
-  return [...charm, ...installFibers(beads, padR, rng, 2)];
+  return [...bubble, ...charm, ...installFibers(beads, padR, rng, 2)];
 }
 
 /** Every regular pad keeps one familiar yarn, plus its rotating discovery.

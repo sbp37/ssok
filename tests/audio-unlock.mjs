@@ -45,7 +45,7 @@ for (const kind of ['ordinary','fiber','chain','rainbow','charm','peel','swirl',
 {
   const sfx=await fresh(); sfx.beginGesture(1); sfx.tactileStep('bubble',1);
   starts=[]; now=50; context.activate();
-  assert(starts.length>0,'a fresh first tactile stage is not lost');
+  assert(starts.length>=4,'a fresh bubble stage keeps all four audible burst layers');
 }
 for (const clear of ['mute','cancel','destroy','stale-step','stale-pop','next-gesture']) {
   const sfx=await fresh(); sfx.beginGesture(1);
