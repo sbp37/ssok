@@ -304,10 +304,13 @@ class Sfx {
       case "peel":
         this.burst(.05, .025, {type:"bandpass", freq:1200+step*90, q:3, attack:.01});
         break;
-      case "bubble": // one large air-cell collapse: crisp skin snap + rounded "뽁"
-        this.burst(.022, .105, {type:"bandpass", freq:(2320+step*120)*this.j(.06), q:2.4});
-        this.tone("sine", (610+step*35)*this.j(.05), 250, .072, .085);
-        this.burst(.058, .042, {type:"lowpass", freq:480, q:.7, delay:.004});
+      case "bubble": // loud plastic skin crack + rounded air-pocket "뽁"
+        // The leading crack stays very short so it reads as a burst rather than
+        // another bead POP; the two lower layers make it audible on phone speakers.
+        this.burst(.009, .18, {type:"highpass", freq:(3200+step*140)*this.j(.06), q:.8});
+        this.burst(.027, .14, {type:"bandpass", freq:(1950+step*110)*this.j(.06), freq1:1100, q:2.1, delay:.002});
+        this.tone("sine", (560+step*30)*this.j(.05), 210, .085, .11);
+        this.burst(.075, .065, {type:"lowpass", freq:420, q:.7, delay:.005});
     }
   }
 

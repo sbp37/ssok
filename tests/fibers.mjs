@@ -65,12 +65,13 @@ for(const pad of PADS) for(let seed=1;seed<=30;seed++) {
     ||beads.some(x=>x.layer===1&&x.slot===b.slot));
   const before=protectedBeads.map(fingerprint);
   installOpeningTactiles(beads,170,rng);
+  assert.equal(beads.filter(b=>b.fiber?.kind==='bubble').length,1,'first round includes one large air bubble');
   assert.equal(beads.filter(b=>b.fiber?.kind==='charm').length,1,'first round includes a charm strand');
   assert.equal(beads.filter(b=>b.fiber&&!b.fiber.kind).length,2,'first round includes two separate yarns');
   assert.equal(beads.length,count,'first round gains variety, not extra picks');
   assert.deepEqual(protectedBeads.map(fingerprint),before,'opening never overwrites treasure or hidden hosts');
 }
-console.log('PASS: opening charm + 2 yarns on all pad shapes / same count / protected treasures');
+console.log('PASS: opening bubble + charm + 2 yarns on all pad shapes / same count / protected treasures');
 assert.equal(roundTactile(0),'charm','the opening pad has one short connected-bead surprise');
 assert.deepEqual([1,2,3,4,5,6,7,8,9,10].map(roundTactile),['bubble','chain','swirl','rainbow','peel','swirl','bubble','charm','swirl','bubble']);
 {
