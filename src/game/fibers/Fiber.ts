@@ -20,6 +20,8 @@ export interface Fiber {
   released?: FiberPoint[];
   /** 뽁뽁이 막 only: its air domes */
   domes?: Dome[];
+  /** bubble only: time the blister opened; the collapsed film fades briefly */
+  openedAt?: number;
 }
 
 const COLORS = [

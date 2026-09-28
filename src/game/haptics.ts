@@ -46,8 +46,14 @@ class Haptics {
     }
   }
   tactileStep(kind: TactileKind) {
-    const type: HapticFeedbackType = kind === "charm" || kind === "bubble" ? "tap" : kind === "swirl" || kind === "fiber" ? "softMedium" : "tickMedium";
-    this.buzz(kind === "charm" || kind === "bubble" ? 8 : 6, type);
+    if (kind === "bubble") {
+      // A single large air pocket should feel like a decisive collapse rather
+      // than one of the old five tiny taps.
+      this.buzz(13, "basicMedium");
+      return;
+    }
+    const type: HapticFeedbackType = kind === "charm" ? "tap" : kind === "swirl" || kind === "fiber" ? "softMedium" : "tickMedium";
+    this.buzz(kind === "charm" ? 8 : 6, type);
   }
   tactilePop(kind: TactileKind) {
     this.buzz(kind === "charm" ? [15, 24, 22] : 16, kind === "charm" ? "success" : "basicMedium");

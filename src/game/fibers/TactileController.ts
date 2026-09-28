@@ -89,6 +89,7 @@ export class TactileController {
   hitDistance(b: Bead, lx: number, ly: number) {
     const f = b.fiber!, tilt = this.host.gel.tilt;
     if (isBubble(f)) {
+      if (f.openedAt !== undefined) return Infinity;
       // the whole film is the target; the press finds the nearest dome itself
       const centre = this.local(b, { x: 0, y: 0 });
       const dc = Math.hypot(centre.x - lx, (centre.y - ly) * tilt);
@@ -106,7 +107,7 @@ export class TactileController {
 
   /** does pressing this material also dimple the gel under the finger? (pressing a film does) */
   dimples(b: Bead) {
-    return isBubble(b.fiber);
+    return isBubble(b.fiber) && b.fiber.openedAt === undefined;
   }
 
   holding(id: number) {
@@ -226,16 +227,18 @@ export class TactileController {
     const b = press.bead, f = b.fiber!, dome = f.domes![index];
     dome.at = time;
     this.tried.add("bubble");
-    // the air leaves: a tiny local shock right where the dome was
-    gel.shock(b.rx + dome.x * s, b.ry + dome.y * s, dome.r * 1.4 * s, 1.5 * s);
+    // One large air pocket collapses around the bead. It is a wrapper to open,
+    // not a substitute for pulling the bead itself.
+    gel.shock(b.rx + dome.x * s, b.ry + dome.y * s, dome.r * 1.55 * s, 2.35 * s);
+    sfx.tactileStep("bubble", 1);
+    haptics.tactileStep("bubble");
     if (press.complete) {
       this.presses.delete(id);
-      // the freed bead hops up out of its slot like a lifted peel
-      this.pop(b, id, 0, -1, 0);
+      f.openedAt = time;
+      b.state = "embedded";
+      gel.markDirty();
       return;
     }
-    sfx.tactileStep("bubble", f.pulled);
-    haptics.tactileStep("bubble");
   }
 
   /** held materials tug the gel; loose ends relax */
@@ -248,7 +251,18 @@ export class TactileController {
       gel.pulls.push({ hx: b.rx + root.x * s, hy: b.ry + root.y * s,
         sx: dx / d * Math.min(d, 10) * s, sy: dy / d * Math.min(d, 10) * s, r: 5 * s });
     }
-    for (const b of beads) if (b.fiber && b.state === "embedded") relaxFiber(b.fiber, dt);
+    for (const b of beads) {
+      const f = b.fiber;
+      if (!f || b.state !== "embedded") continue;
+      if (isBubble(f) && f.openedAt !== undefined && this.host.time - f.openedAt >= .22) {
+        // Once the collapsed cell has visibly vanished, this is an ordinary
+        // embedded bead again and uses the full tension → POP interaction.
+        b.fiber = undefined;
+        gel.markDirty();
+        continue;
+      }
+      relaxFiber(f, dt);
+    }
   }
 
   popStyle(b: Bead): TactilePopStyle {
@@ -309,7 +323,7 @@ export class TactileController {
    * "something to do" among ordinary beads. Static under reduced motion. */
   private glint(ctx: CanvasRenderingContext2D, b: Bead, map: (p: FiberPoint) => FiberPoint) {
     const f = b.fiber!;
-    if (b.state !== "embedded" || f.pulled > 0) return;
+    if (b.state !== "embedded" || f.pulled > 0 || f.openedAt !== undefined) return;
     const s = this.host.s;
     const at = isBubble(f) || f.kind === "peel"
       ? map({ x: f.radius * .55, y: -f.radius * .75 })

@@ -78,7 +78,7 @@ export const tactileHint: Record<TactileKind, string> = {
   charm: "작은 알 뒤에 큰 알이 숨어 있어 · 쭈욱!",
   swirl: "젤 끝을 잡고 빙글 · 어느 방향이든 돌려봐",
   peel: "반짝이는 막 끝을 잡고 벗겨봐",
-  bubble: "막 위 공기방울을 꾹꾹 · 뽁, 뽁!",
+  bubble: "볼록한 뽁뽁이를 눌러봐 · 뽁! 안에 비즈!",
 };
 
 /** how the NEXT tease names a pad's featured material */
@@ -89,5 +89,5 @@ export const tactileName: Record<TactileKind, string> = {
   charm: "큰 알 줄",
   swirl: "소용돌이",
   peel: "젤 막",
-  bubble: "뽁뽁이 막",
+  bubble: "뽁뽁이",
 };

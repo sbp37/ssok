@@ -2,8 +2,8 @@ import type { Bead } from "../beads/Bead";
 import type { Fiber, FiberPoint } from "./Fiber";
 
 /**
- * 뽁뽁이 막: a clear film with a few air domes over an ordinary bead.
- * Press → the dome squashes for a beat → 뽁. Every dome popped frees the bead.
+ * 뽁뽁이: one clear shipping-cushion dome over an ordinary bead.
+ * Press → the dome squashes for a beat → 뽁 → pull the revealed bead normally.
  *
  * All positions are in the bead's reference frame (reference-pad units).
  * Nothing depends on elapsed time except the short squeeze of the dome that is
@@ -20,17 +20,15 @@ export interface Dome {
   at: number;
 }
 
-export const BUBBLE_DOMES = 5;
+/** One readable shipping-air-cushion dome, not five tiny game buttons. */
+export const BUBBLE_DOMES = 1;
 /** how long a held press squeezes before it pops (s) – short enough to feel instant */
 export const BUBBLE_SQUEEZE = 0.09;
-/** finger travel (reference units) between two domes popped by rubbing across */
-const RUB_STEP = 7;
-
 export function bubbleDomes(radius: number, angle: number): Dome[] {
-  return Array.from({ length: BUBBLE_DOMES }, (_, i) => {
-    const a = angle + (i / BUBBLE_DOMES) * Math.PI * 2;
-    return { x: Math.cos(a) * radius * 0.58, y: Math.sin(a) * radius * 0.58, r: radius * 0.34, popped: false, squash: 0, at: -1 };
-  });
+  // Keep the argument for deterministic layout compatibility. A tiny offset
+  // makes the dome feel physically seated rather than perfectly stamped on.
+  return [{ x: Math.cos(angle) * radius * 0.025, y: Math.sin(angle) * radius * 0.025,
+    r: radius * 0.9, popped: false, squash: 0, at: -1 }];
 }
 
 export function isBubble(f?: Fiber): f is Fiber & { domes: Dome[] } {
@@ -47,17 +45,15 @@ function nearest(domes: Dome[], p: FiberPoint) {
   return best;
 }
 
-/** One finger on one film. Every method returns the index of a dome it popped, or -1. */
+/** One finger on one air cell. Every method returns the dome index it popped, or -1. */
 export class BubblePress {
   private pressing = -1;
   private held = 0;
-  private from: FiberPoint;
   private at: FiberPoint;
 
   constructor(readonly bead: Bead, x: number, y: number) {
-    this.from = { x, y };
     this.at = { x, y };
-    // a tap anywhere on the film presses the closest dome: no pixel hunting on a phone
+    // The whole blister is a forgiving mobile target.
     this.pressing = nearest(this.domes, this.at);
   }
 
@@ -73,17 +69,11 @@ export class BubblePress {
   /** the finger moved (bead-local reference units) */
   move(x: number, y: number) {
     this.at = { x, y };
-    if (this.pressing >= 0) {
-      const d = this.domes[this.pressing];
-      // rolled off the dome it was squeezing: that one goes
-      if (Math.hypot(d.x - x, d.y - y) > d.r * 1.6) return this.pop();
-      return -1;
-    }
-    // rubbing across the film presses the next dome, holding still does not
-    if (Math.hypot(x - this.from.x, y - this.from.y) >= RUB_STEP) {
-      this.pressing = nearest(this.domes, this.at);
-      this.held = 0;
-    }
+    if (this.pressing < 0) return -1;
+    const d = this.domes[this.pressing];
+    // A deliberate press or quick flick both feel responsive; moving far away
+    // cancels instead of popping an off-screen bubble by accident.
+    if (Math.hypot(d.x - x, d.y - y) > d.r * 1.55) this.cancel();
     return -1;
   }
 
@@ -114,7 +104,6 @@ export class BubblePress {
     this.bead.fiber!.pulled = this.domes.filter((x) => x.popped).length;
     this.pressing = -1;
     this.held = 0;
-    this.from = { ...this.at };
     return i;
   }
 }

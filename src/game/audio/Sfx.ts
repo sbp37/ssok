@@ -304,10 +304,10 @@ class Sfx {
       case "peel":
         this.burst(.05, .025, {type:"bandpass", freq:1200+step*90, q:3, attack:.01});
         break;
-      case "bubble": // crisp little air pop: snap, a short falling "뽁", a soft thump
-        this.burst(.018, .085, {type:"bandpass", freq:(2500+step*140)*this.j(.06), q:2.6});
-        this.tone("sine", (640+step*45)*this.j(.05), 290, .055, .07);
-        this.burst(.045, .03, {type:"lowpass", freq:520, q:.7, delay:.004});
+      case "bubble": // one large air-cell collapse: crisp skin snap + rounded "뽁"
+        this.burst(.022, .105, {type:"bandpass", freq:(2320+step*120)*this.j(.06), q:2.4});
+        this.tone("sine", (610+step*35)*this.j(.05), 250, .072, .085);
+        this.burst(.058, .042, {type:"lowpass", freq:480, q:.7, delay:.004});
     }
   }
 
