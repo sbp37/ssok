@@ -179,33 +179,24 @@ console.log('PASS: swirl clockwise/counterclockwise, radial no-op, reversal, idl
     if(!b) continue;
     layouts++;
     const f=b.fiber;
+    assert.equal(BUBBLE_DOMES,1,'one large readable air cell');
     assert.equal(f.domes.length,BUBBLE_DOMES);
     assert.equal(f.length,BUBBLE_DOMES);
     assert(f.domes.every(d=>Math.hypot(d.x,d.y)+d.r<=f.radius*1.001),'domes stay on the film');
     assert(!beads.some(x=>x.slot===b.slot&&x.layer===1),'never over a buried treasure');
-    // a quick tap pops the nearest dome, even between domes
-    let press=new BubblePress(b,0,0);
-    assert.equal(press.lift()>=0,true);assert.equal(f.pulled,1,'a tap pops one dome');
-    // holding still squeezes, pops one, then nothing more
-    const d1=f.domes.find(d=>!d.popped);
-    press=new BubblePress(b,d1.x,d1.y);
-    press.tick(BUBBLE_SQUEEZE*.5);assert(d1.squash>0&&d1.squash<1&&!d1.popped,'the dome squashes before it goes');
-    press.tick(BUBBLE_SQUEEZE*.6);assert(d1.popped,'a held press pops');
-    for(let i=0;i<300;i++)press.tick(1/60);
-    assert.equal(f.pulled,2,'holding still never pops a second dome');
-    assert.equal(press.lift(),-1,'lifting after the pop does nothing extra');
-    // a cancelled press pops nothing and springs back
-    const d2=f.domes.find(d=>!d.popped);
-    press=new BubblePress(b,d2.x,d2.y);press.tick(BUBBLE_SQUEEZE*.5);press.cancel();
-    assert.equal(f.pulled,2);assert.equal(d2.squash,0);
-    // rubbing across the film pops the rest, one per stretch of travel, then completes
-    press=new BubblePress(b,-f.radius,0);
-    let x=-f.radius,guard=0;
-    while(!press.complete&&guard++<2000){x+=.5;if(x>f.radius)x=-f.radius;press.move(x,Math.sin(x)*2);press.tick(1/60);}
-    assert(press.complete,'rubbing finishes the film');
+    const dome=f.domes[0];
+    assert(dome.r>f.radius*.85,'the dome wraps the bead rather than looking like a tiny button');
+    // cancelled squeeze springs back and preserves the unopened bead
+    let press=new BubblePress(b,dome.x,dome.y);
+    press.tick(BUBBLE_SQUEEZE*.5);assert(dome.squash>0&&dome.squash<1&&!dome.popped,'the dome visibly squashes before it goes');
+    press.cancel();assert.equal(f.pulled,0);assert.equal(dome.squash,0);
+    // one quick, forgiving tap opens the single cell
+    press=new BubblePress(b,0,0);
+    assert.equal(press.lift(),0);assert(press.complete,'one air-cell tap completes the wrapper');
     assert.equal(f.pulled,f.length);
-    assert(f.domes.every(d=>d.popped));
+    assert(dome.popped);
+    assert.equal(press.lift(),-1,'the opened wrapper never completes twice');
   }
   assert(layouts>150,'the film finds a slot on nearly every pad');
-  console.log(`PASS: bubble film on ${layouts} layouts / no added picks / tap, squeeze, idle, cancel, rub / completes once all domes pop`);
+  console.log(`PASS: single air-cell wrapper on ${layouts} layouts / no added bead or reward / squeeze, cancel, one-shot tap`);
 }
