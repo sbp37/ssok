@@ -1,6 +1,6 @@
 import { loadFullScreenAd, showFullScreenAd } from "@apps-in-toss/web-framework";
 
-export const AD_INTERVAL_PADS = 2;
+export const AD_INTERVAL_PADS = 1;
 const KEY = "ssok.ads.v1";
 const AD_GROUP_IDS: Record<AdKind, string> = {
   interstitial: "ait.v2.live.fd15b48eec824769",
@@ -135,7 +135,6 @@ export function createAdProvider(): AdProvider {
 
 export class AdPolicy {
   private lastAdCompleted = 0;
-  private skipNext = false;
   private busy = false;
   private active: AbortController | null = null;
   constructor(
@@ -150,16 +149,14 @@ export class AdPolicy {
       if (Number.isFinite(saved?.lastAdCompleted) && saved.lastAdCompleted >= 0) {
         this.lastAdCompleted = Math.floor(saved.lastAdCompleted);
       }
-      this.skipNext = saved?.skipNext === true;
     } catch { /* private mode / invalid storage must not block play */ }
   }
   private save() {
-    try { this.storage?.setItem(KEY, JSON.stringify({lastAdCompleted: this.lastAdCompleted, skipNext: this.skipNext})); } catch { /* optional persistence */ }
+    try { this.storage?.setItem(KEY, JSON.stringify({lastAdCompleted: this.lastAdCompleted})); } catch { /* optional persistence */ }
   }
-  /** Two completed pads between full-screen ads. Failed/no-fill ads never consume the interval. */
+  /** The opening play is ad-free; every completed-pad transition after it is eligible. */
   eligible(totalCompleted: number) {
     return totalCompleted >= AD_INTERVAL_PADS
-      && !this.skipNext
       && totalCompleted - this.lastAdCompleted >= AD_INTERVAL_PADS;
   }
   cancel() {
@@ -175,7 +172,6 @@ export class AdPolicy {
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
       if (kind === "interstitial") {
-        if (this.skipNext) { this.skipNext = false; this.save(); return "unavailable"; }
         if (!this.eligible(totalCompleted)) return "unavailable";
       }
       if (!this.provider.ready(kind)) return "unavailable";
@@ -186,8 +182,6 @@ export class AdPolicy {
       const result = await Promise.race([this.provider.show(kind, abort.signal), interrupted]);
       if (result === "closed" || result === "rewarded") {
         this.lastAdCompleted = Math.max(this.lastAdCompleted, totalCompleted);
-        // Even a dismissed rewarded video must not be followed by an interstitial.
-        this.skipNext = kind === "rewarded";
         this.save();
       }
       return result;
