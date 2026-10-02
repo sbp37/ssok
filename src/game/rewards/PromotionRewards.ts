@@ -1,25 +1,31 @@
 import { Promotion } from "@apps-in-toss/web-framework";
 
-export type PromotionMilestone = "firstPad" | "thirdPad" | "returnVisit";
+export type PromotionMilestone = "firstPad" | "thirdPad" | "fifthPad" | "tenthPad" | "returnVisit";
 
 const TEST_CODES: Record<PromotionMilestone, string> = {
   firstPad: "TEST_01M2G7DZXEHF60PHHQ6ZA5342T",
   thirdPad: "TEST_01M2G7F5WHW5HD8KWP1JRSFYYS",
+  fifthPad: "TEST_01M3PRX7ZP8GAM2HZ9Z7NQ31KT",
+  tenthPad: "TEST_01M3PS0C2YGKRKPC98FW37NSTZ",
   returnVisit: "TEST_01M2G7GN8PMTXBNVJWJXJ2V8MH",
 };
 
 const LIVE_CODES: Record<PromotionMilestone, string> = {
   firstPad: "01M2G7DZXEHF60PHHQ6ZA5342T",
   thirdPad: "01M2G7F5WHW5HD8KWP1JRSFYYS",
+  fifthPad: "01M3PRX7ZP8GAM2HZ9Z7NQ31KT",
+  tenthPad: "01M3PS0C2YGKRKPC98FW37NSTZ",
   returnVisit: "01M2G7GN8PMTXBNVJWJXJ2V8MH",
 };
 
 const LIVE_MODE = import.meta.env.VITE_PROMOTION_MODE === "live";
-const ACTIVE_CODES = LIVE_MODE ? LIVE_CODES : TEST_CODES;
+const ACTIVE_CODES: Record<PromotionMilestone, string> = LIVE_MODE ? LIVE_CODES : TEST_CODES;
 
 const AMOUNTS: Record<PromotionMilestone, number> = {
   firstPad: 1,
   thirdPad: 3,
+  fifthPad: 5,
+  tenthPad: 10,
   returnVisit: 2,
 };
 
@@ -86,6 +92,8 @@ export class PromotionRewards {
   onPadCompleted(totalCompleted: number) {
     if (totalCompleted >= 1) void this.grant("firstPad");
     if (totalCompleted >= 3) void this.grant("thirdPad");
+    if (totalCompleted >= 5) void this.grant("fifthPad");
+    if (totalCompleted >= 10) void this.grant("tenthPad");
   }
 
   onVisit(isNewDay: boolean, totalCompleted: number) {
