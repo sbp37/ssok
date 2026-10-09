@@ -105,6 +105,7 @@ export function PadSilhouette({
 export interface NextView {
   pad: PadType;
   rare: boolean;
+  tier?: "rare" | "super";
   rareNew: boolean;
   ultra: boolean;
   /** something is buried in the next pad (which thing stays secret) */
@@ -120,9 +121,10 @@ export interface NextView {
  * glimpse. Never the pad itself.
  */
 export function NextPanel({ info, emphasis, reveal = 0 }: { info: NextView; emphasis: number; reveal?: number }) {
-  const { pad, rare, rareNew, ultra, hidden, tactile } = info;
+  const { pad, rare, tier, rareNew, ultra, hidden, tactile } = info;
   let line = "???";
-  if (rare) line = rareNew ? "처음 보는 질감이다 ✦" : "희귀 패드가 지나가고 있어 ✦";
+  if (tier === "super") line = "초희귀 패드가 지나가고 있어 ✦";
+  else if (rare) line = rareNew ? "처음 보는 질감이다 ✦" : "희귀 패드가 지나가고 있어 ✦";
   else if (ultra) line = "뭔가 이상하다…";
   else if (hidden && reveal >= 1) line = "안에 뭔가 묻혀 있다";
   return (

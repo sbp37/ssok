@@ -421,8 +421,9 @@ body,
 }
 .gate {
   display: flex;
-  align-items: center;
-  gap: 6px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
   white-space: nowrap;
 }
 .gate .btn {
@@ -444,6 +445,58 @@ body,
 }
 .gate .btn:disabled {
   opacity: 0.7;
+}
+
+/* "광고 보고 고르기": three pads in their real colours, pick one */
+.choices {
+  display: flex;
+  gap: 8px;
+  animation: btnIn 0.5s ease-out;
+}
+.choice {
+  font: inherit;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 8px 10px 7px;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(43, 39, 48, 0.08);
+  border-radius: 16px;
+  box-shadow: 0 4px 14px rgba(43, 39, 48, 0.1);
+  cursor: pointer;
+  transition: transform 0.12s ease;
+}
+.choice:active {
+  transform: scale(0.95);
+}
+.choice span {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+/* "광고 보고 살짝 보기": one small pill under the glimmer line, mid-round */
+.peek {
+  position: absolute;
+  left: 50%;
+  top: 73%;
+  transform: translateX(-50%);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: #7a5aa8;
+  background: rgba(255, 255, 255, 0.86);
+  border: 1px solid rgba(122, 90, 168, 0.18);
+  border-radius: 999px;
+  padding: 7px 14px;
+  cursor: pointer;
+  box-shadow: 0 3px 12px rgba(117, 74, 93, 0.08);
+  backdrop-filter: blur(6px);
+  animation: btnIn 0.5s ease-out;
+}
+.peek:disabled {
+  opacity: 0.6;
 }
 
 /* top-right cluster */

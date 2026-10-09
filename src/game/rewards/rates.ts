@@ -122,3 +122,36 @@ export const DAY_NONE_FACTOR = 0.5;
 
 /** pad variant rolls, applied when the next pad is chosen */
 export const VARIANT_CHANCE = { rare: 0.07, super: 0.012 };
+
+/**
+ * A player who has never seen a variant gets one passing by as the 4th pad –
+ * the "광고 보고 잡기" door has to be met early, not after all eight base pads.
+ * Only that pad is forced; letting it pass goes back to the ordinary roll.
+ */
+export const FIRST_VARIANT_PAD = 4;
+
+/**
+ * What makes a caught variant worth the ad. Rare beads are scarce on an
+ * ordinary pad (RARITY_WEIGHT) and concentrated here: the centre bead is a
+ * rare for sure, the rare weight is multiplied, the 왕비즈 is likely, and the
+ * pad always hides something – a super one hides an ultra.
+ */
+export const VARIANT_PERKS = {
+  rare: { rareSkew: 8, rareCenterChance: 1, kingChance: 0.8, treasure: "guaranteed" as const },
+  super: { rareSkew: 12, rareCenterChance: 1, kingChance: 1, treasure: "ultra" as const },
+};
+
+/**
+ * Weight of one hidden-pool entry for this roll. `guarantee` removes "none"
+ * (a new player's first pads, a rare variant, a bonus dig); `ultraOnly` keeps
+ * just the ultra entries (a super variant); `dayBonus` halves "none".
+ */
+export function hiddenWeight(
+  e: { id: string; w: number },
+  o: { guarantee?: boolean; ultraOnly?: boolean; dayBonus?: boolean; ultraIds: readonly string[] },
+) {
+  if (o.ultraOnly) return o.ultraIds.includes(e.id) ? 1 : 0;
+  if (e.id !== NONE) return e.w;
+  if (o.guarantee) return 0;
+  return o.dayBonus ? e.w * DAY_NONE_FACTOR : e.w;
+}

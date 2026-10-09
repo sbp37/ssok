@@ -2,6 +2,9 @@ import type { BeadPreset } from './PadTypes';
 
 /** Count the entire round, including buried beads, so a short first pad
  * cannot quietly turn into another full layer of work. Uses existing progress. */
+/** A bonus dig after an empty pad: a few beads over one sure treasure. */
+export const BONUS_BUDGET = { surface: 6, maxTotal: 8 } as const;
+
 export function roundBeadBudget(preset: BeadPreset, completed: number) {
   const first = completed < 1;
   const second = completed === 1;

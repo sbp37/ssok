@@ -380,9 +380,10 @@ export const RARITY_WEIGHT: Record<Rarity, number> = {
   big: 20,
   odd: 10,
   special: 7,
-  // ≈0.55 plain rares per pad after the 30% smaller pads (≈34 surface + ≈21 deep beads through the
-  // weighted picker): a rare should be an "어? 나왔다" roughly every other pad, not a fixture
-  rare: 1.15,
+  // ≈0.25 plain rares per pad on an ordinary pad: a rare is an "어? 나왔다" every few pads, not a
+  // fixture – a caught variant multiplies this (rewards/rates.ts VARIANT_PERKS), which is what
+  // makes the rare pad worth its ad
+  rare: 0.5,
   hidden: 0, // never rolled – placed on purpose by the pad
   ultra: 0, // never rolled – tiny fixed chance handled by the layout
 };
