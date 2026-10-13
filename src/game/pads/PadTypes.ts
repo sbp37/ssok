@@ -598,13 +598,26 @@ export const PADS: readonly PadType[] = [
   },
 ];
 
+/**
+ * Limited theme pads (pads/ThemePads.ts), registered by rewards/themes when it
+ * loads. They stay out of PADS – the discovery order, the collection's pad
+ * count and the everyday draw – and only come up in their season.
+ */
+const EXTRA_PADS: PadType[] = [];
+export function registerPads(list: readonly PadType[]) {
+  for (const p of list) if (!EXTRA_PADS.some((q) => q.id === p.id) && !PADS.some((q) => q.id === p.id)) EXTRA_PADS.push(p);
+}
+
 /** base pad by id ("shell" or a variant id "shell:pearlshell" → the shell) */
-export const padById = (id: string) => PADS.find((p) => p.id === id.split(":")[0]);
+export const padById = (id: string) => {
+  const base = id.split(":")[0];
+  return PADS.find((p) => p.id === base) ?? EXTRA_PADS.find((p) => p.id === base);
+};
 
 /** full pad for an id, variants included ("shell:pearlshell" → the pearl shell) */
 export function resolvePad(id: string): PadType | undefined {
   const [baseId, vId] = id.split(":");
-  const base = PADS.find((p) => p.id === baseId);
+  const base = padById(baseId);
   if (!base) return undefined;
   if (!vId) return base;
   const v = (VARIANTS[baseId] ?? []).find((x) => x.id === vId);

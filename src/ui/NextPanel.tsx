@@ -115,6 +115,9 @@ export interface NextView {
   tactile?: string;
   /** the pinned treasure's name, when it can hide in the next pad */
   target?: string;
+  /** the monthly theme's name, when the next pad is one of its limited pads */
+  theme?: string;
+  themeId?: string;
 }
 
 /**
@@ -123,7 +126,7 @@ export interface NextView {
  * glimpse. Never the pad itself.
  */
 export function NextPanel({ info, emphasis, reveal = 0 }: { info: NextView; emphasis: number; reveal?: number }) {
-  const { pad, rare, tier, rareNew, ultra, hidden, tactile, target } = info;
+  const { pad, rare, tier, rareNew, ultra, hidden, tactile, target, theme, themeId } = info;
   let line = "???";
   if (tier === "super") line = "초희귀 패드가 지나가고 있어 ✦";
   else if (rare) line = rareNew ? "처음 보는 질감이다 ✦" : "희귀 패드가 지나가고 있어 ✦";
@@ -134,6 +137,12 @@ export function NextPanel({ info, emphasis, reveal = 0 }: { info: NextView; emph
       <div className="next-label">NEXT</div>
       <PadSilhouette pad={pad} size={64} mode={ultra ? "partial" : "dark"} shimmer={rare} glint={!ultra} reveal={ultra ? 0 : reveal} />
       <div className={"next-q" + (rare ? " rare" : "")}>{line}</div>
+      {theme && (
+        <div className="next-theme">
+          {themeId && <img src={`${import.meta.env.BASE_URL}collection/theme-badge-${themeId}.svg`} alt="" width={16} height={16} />}
+          {theme} 한정 패드
+        </div>
+      )}
       {tactile && <div className="next-t">다음엔 {tactile}</div>}
       {target && (
         <div className="next-pin">

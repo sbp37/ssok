@@ -1,5 +1,6 @@
 import { PADS, VARIANTS, applyVariant, padById, resolvePad, type PadType } from "./PadTypes";
 import { FIRST_VARIANT_PAD, VARIANT_CHANCE } from "../rewards/rates";
+import { THEME_CHANCE, THEME_FROM, activeTheme, themePads } from "../rewards/themes";
 
 /**
  * Where the player is, and what comes next – the whole save file.
@@ -243,12 +244,31 @@ export interface NextPadProvider {
  * variant is handed one as the FIRST_VARIANT_PAD-th pad.
  */
 export class DiscoveryProvider implements NextPadProvider {
-  constructor(private rand: () => number = Math.random) {}
+  constructor(private rand: () => number = Math.random, private now: () => Date = () => new Date()) {}
 
   next(progress: PadProgress): PadType {
-    const base = this.nextBase(progress);
     const forceRare = progress.discoveredVariants.length === 0 && progress.padIndex + 1 === FIRST_VARIANT_PAD;
+    // the forced variant pad must be a pad that has variants; theme pads have none
+    if (!forceRare) {
+      const seasonal = this.seasonal(progress);
+      if (seasonal) return seasonal;
+    }
+    const base = this.nextBase(progress);
     return this.rollVariant(base, forceRare);
+  }
+
+  /** now and then, one of this month's limited pads (never twice in a row, not in the opening pads) */
+  private seasonal(progress: PadProgress): PadType | undefined {
+    const theme = activeTheme(this.now());
+    if (!theme || progress.totalCompleted < THEME_FROM) return undefined;
+    const last = progress.recent[progress.recent.length - 1];
+    const cur = progress.current.variantOf ?? progress.current.id;
+    const pads = themePads(theme).filter((p) => p.id !== last && p.id !== cur);
+    if (!pads.length) return undefined;
+    const fresh = pads.filter((p) => !progress.isDiscovered(p.id));
+    if (this.rand() >= (fresh.length ? THEME_CHANCE.undiscovered : THEME_CHANCE.discovered)) return undefined;
+    const pool = fresh.length ? fresh : pads;
+    return pool[Math.floor(this.rand() * pool.length)];
   }
 
   /** the next pad plus `extra` other base pads, all distinct – for "광고 보고 고르기" */

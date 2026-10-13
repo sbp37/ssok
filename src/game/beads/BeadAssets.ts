@@ -30,6 +30,13 @@ const assetIds: Record<string, string> = {
   long: "long",
   gem: "faceted",
   king: "violet",
+  // theme treasures: the same recoloured photos
+  maplestar: "star",
+  snowstar: "star",
+  pumpkinglass: "faceted",
+  iceglass: "faceted",
+  chestnutpearl: "pearl",
+  snowpearl: "pearl",
 };
 
 /** photos that get recoloured to the bead's colour (keeps their shading and sparkle, swaps the hue) */

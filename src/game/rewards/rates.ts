@@ -127,6 +127,44 @@ export const HIDDEN_POOLS: Record<string, { id: string; w: number }[]> = {
     { id: "eye", w: 5 },
     { id: "bigduck", w: 1 },
   ],
+  // monthly theme pads (pads/ThemePads.ts): mostly their own season's treasures, so a theme
+  // pad nearly always hides something of the theme – plus an everyday one now and then
+  maple: [
+    { id: NONE, w: 24 },
+    { id: "maplestar", w: 40 },
+    { id: "pumpkinglass", w: 26 },
+    { id: "chestnutpearl", w: 22 },
+    { id: "candystar", w: 8 },
+    { id: "key", w: 5 },
+    { id: "holostar", w: 1 },
+  ],
+  pumpkin: [
+    { id: NONE, w: 24 },
+    { id: "pumpkinglass", w: 40 },
+    { id: "chestnutpearl", w: 26 },
+    { id: "maplestar", w: 22 },
+    { id: "bigopal", w: 8 },
+    { id: "minicherry", w: 5 },
+    { id: "crown", w: 1 },
+  ],
+  snowman: [
+    { id: NONE, w: 24 },
+    { id: "snowpearl", w: 40 },
+    { id: "iceglass", w: 26 },
+    { id: "snowstar", w: 22 },
+    { id: "bigpearl", w: 8 },
+    { id: "duck", w: 5 },
+    { id: "bigduck", w: 1 },
+  ],
+  snowflake: [
+    { id: NONE, w: 24 },
+    { id: "snowstar", w: 40 },
+    { id: "iceglass", w: 26 },
+    { id: "snowpearl", w: 22 },
+    { id: "bigglass", w: 8 },
+    { id: "eye", w: 5 },
+    { id: "holostar", w: 1 },
+  ],
 };
 
 /** chance that one deep bead of any pad is replaced by an ultra-rare object (on top of the pools' 1%) */

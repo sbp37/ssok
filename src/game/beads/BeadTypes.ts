@@ -417,6 +417,22 @@ export const HIDDEN_TYPES: readonly BeadType[] = [
   hidden({ id: "bigglass", name: "아주 큰 유리알", shape: "circle", material: "glass", radius: [25, 27], colors: ["#dbeeff"], mass: 2.8, sound: "pong" }),
 ];
 
+/**
+ * Theme treasures: buried only in a monthly theme's limited pads, so each can
+ * only be found in its season (and again when that season comes round).
+ * Ordinary hidden objects otherwise – same feel, new colours.
+ */
+export const THEME_TYPES: readonly BeadType[] = [
+  // 가을 숲 (10~11월)
+  hidden({ id: "maplestar", name: "단풍 별사탕", shape: "star", material: "plastic", radius: [22, 24], colors: ["#f08a5d", "#f4b06a"], mass: 1.4, sound: "tok" }),
+  hidden({ id: "pumpkinglass", name: "호박 유리알", shape: "circle", material: "glass", radius: [23, 25], colors: ["#f5a95c"], mass: 2.4, sound: "pong" }),
+  hidden({ id: "chestnutpearl", name: "밤빛 진주", shape: "circle", material: "pearl", radius: [21, 23], colors: ["#c99a72"], mass: 2, sound: "ting" }),
+  // 눈 오는 밤 (12~2월)
+  hidden({ id: "snowstar", name: "눈꽃 별사탕", shape: "star", material: "plastic", radius: [22, 24], colors: ["#eaf4ff", "#dfe9ff"], mass: 1.4, sound: "tok" }),
+  hidden({ id: "iceglass", name: "얼음 구슬", shape: "circle", material: "glass", radius: [23, 25], colors: ["#cfe6ff"], mass: 2.4, sound: "pong" }),
+  hidden({ id: "snowpearl", name: "눈 진주", shape: "circle", material: "pearl", radius: [21, 23], colors: ["#fbfdff"], mass: 2, sound: "ting" }),
+];
+
 /** Ultra-rare: 0.5~1%, any pad, once in a blue moon. "뭐야 이거?" – never a jackpot. */
 export const ULTRA_TYPES: readonly BeadType[] = [
   { ...hidden({ id: "crown", name: "왕관 비즈", shape: "crown", material: "metal", radius: [23, 25], colors: ["#f2c94c"], mass: 2.2, sound: "ting" }), rarity: "ultra" },
@@ -425,4 +441,5 @@ export const ULTRA_TYPES: readonly BeadType[] = [
 ];
 
 export const byId = (id: string) =>
-  BEAD_TYPES.find((t) => t.id === id) ?? HIDDEN_TYPES.find((t) => t.id === id) ?? ULTRA_TYPES.find((t) => t.id === id)!;
+  BEAD_TYPES.find((t) => t.id === id) ?? HIDDEN_TYPES.find((t) => t.id === id) ?? ULTRA_TYPES.find((t) => t.id === id)
+  ?? THEME_TYPES.find((t) => t.id === id)!;

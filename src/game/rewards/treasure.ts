@@ -1,4 +1,4 @@
-import { BEAD_TYPES, HIDDEN_TYPES, ULTRA_TYPES, type BeadType } from "../beads/BeadTypes";
+import { BEAD_TYPES, HIDDEN_TYPES, THEME_TYPES, ULTRA_TYPES, type BeadType } from "../beads/BeadTypes";
 import { completedBy, type TreasureSet } from "./sets";
 
 /** how many treasures the shelf shows */
@@ -28,12 +28,14 @@ export function treasureKind(t: BeadType): TreasureKind | null {
   return null;
 }
 
-/** everything the box can hold, in display order */
-export const TREASURE_TYPES: readonly BeadType[] = [
+/** the everyday box: what "보물 n/14" counts, in display order */
+export const BOX_TYPES: readonly BeadType[] = [
   ...BEAD_TYPES.filter((t) => t.rarity === "rare"),
   ...HIDDEN_TYPES,
   ...ULTRA_TYPES,
 ];
+/** everything that can be found and kept – the box plus the seasonal theme treasures */
+export const TREASURE_TYPES: readonly BeadType[] = [...BOX_TYPES, ...THEME_TYPES];
 
 const KEY = "ssok.treasure.v1";
 interface Blob {
@@ -178,10 +180,11 @@ export class TreasureStore {
   specialCount(id: string) {
     return this.data.seen[id] ?? 0;
   }
+  /** found treasures of the everyday box (theme treasures are counted in their own section) */
   get found() {
-    return Object.keys(this.data.counts).length;
+    return BOX_TYPES.filter((t) => this.has(t.id)).length;
   }
   get total() {
-    return TREASURE_TYPES.length;
+    return BOX_TYPES.length;
   }
 }
