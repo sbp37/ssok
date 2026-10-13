@@ -157,11 +157,11 @@ export function applyVariant(base: PadType, v: PadVariant): PadType {
   };
 }
 
-const TAU = Math.PI * 2;
-const sm = (t: number) => t * t * (3 - 2 * t);
-const clamp01 = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v);
+export const TAU = Math.PI * 2;
+export const sm = (t: number) => t * t * (3 - 2 * t);
+export const clamp01 = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v);
 /** gaussian bump in angle space, wraps around */
-const bump = (th: number, at: number, width: number) => {
+export const bump = (th: number, at: number, width: number) => {
   let d = ((th - at) % TAU + TAU * 1.5) % TAU - Math.PI;
   d /= width;
   return Math.exp(-d * d);

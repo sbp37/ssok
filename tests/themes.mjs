@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
-import { loadFresh } from './load.mjs';
+import { load } from './load.mjs';
 // Monthly themes: calendar, the seasonal draw, and theme pads/treasures wiring.
 const data = new Map();
 globalThis.localStorage = { getItem: (k) => data.get(k) ?? null, setItem: (k, v) => data.set(k, String(v)), removeItem: (k) => data.delete(k) };
 
-const themes = await loadFresh('rewards/themes');
+const themes = await load('rewards/themes');
 const { activeTheme, upcomingTheme, themeOfPad, themePads, THEMES, THEME_FROM } = themes;
 const d = (m, day = 15) => new Date(2026, m - 1, day);
 assert.equal(activeTheme(d(10))?.id, 'autumn');
@@ -16,9 +16,9 @@ assert.equal(upcomingTheme(d(10))?.id, 'winter');
 assert.equal(upcomingTheme(d(5))?.id, 'autumn');
 
 // every theme's pads exist, have hidden pools that bury their own treasures, and are not everyday pads
-const { PADS, padById } = await loadFresh('pads/PadTypes');
-const { HIDDEN_POOLS } = await loadFresh('rewards/rates');
-const { TREASURE_TYPES, BOX_TYPES } = await loadFresh('rewards/treasure');
+const { PADS, padById } = await load('pads/PadTypes');
+const { HIDDEN_POOLS } = await load('rewards/rates');
+const { TREASURE_TYPES, BOX_TYPES } = await load('rewards/treasure');
 for (const t of THEMES) {
   assert.equal(themePads(t).length, t.pads.length, `${t.id}: all pads present`);
   for (const id of t.pads) {
@@ -38,7 +38,7 @@ for (const t of THEMES) {
 assert.ok(padById('maple') && padById('snowman'), 'theme pads resolve by id');
 
 // the seasonal draw: only in season, only after the opening pads, never twice in a row
-const { PadProgress, DiscoveryProvider } = await loadFresh('pads/progress');
+const { PadProgress, DiscoveryProvider } = await load('pads/progress');
 function run(month, completed, n = 600) {
   data.clear();
   const p = new PadProgress();

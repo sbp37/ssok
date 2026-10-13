@@ -3,10 +3,12 @@ import { load } from './load.mjs';
 
 const { generatePad } = await load('beads/Bead');
 const { PADS } = await load('pads/PadTypes');
+const { THEME_PADS } = await load('pads/ThemePads');
+const allPads = [...PADS, ...THEME_PADS];
 const { roundBeadBudget } = await load('pads/pacing');
 const { Rng } = await load('util/math');
 const { installFibers, FiberPull, fiberPoint, exposedFiber, relaxFiber, chainCount, chainFraction } = await load('fibers/Fiber');
-for (const pad of PADS) for (const completed of [0,1,2,12]) {
+for (const pad of allPads) for (const completed of [0,1,2,12]) {
   const budget=roundBeadBudget(pad.beads,completed);
   const expected=completed===0?17:completed===1?21:Math.round(pad.beads.surface*.42)+3;
   assert.equal(budget.surface+(pad.beads.smallFillZones?.length??0),expected,'three extra visible beads in each round budget');
@@ -14,7 +16,7 @@ for (const pad of PADS) for (const completed of [0,1,2,12]) {
 }
 let rounds=0;
 const fingerprint = b => [b.id,b.type.id,b.color,b.rx,b.ry,b.radius,b.rot,b.layer,b.slot,b.hidden];
-for (const pad of PADS) for (const completed of [1,2,50]) for(let seed=1;seed<=30;seed++) {
+for (const pad of allPads) for (const completed of [1,2,50]) for(let seed=1;seed<=30;seed++) {
   const rng = new Rng(seed);
   const beads = generatePad(170,rng,{...pad.beads,...roundBeadBudget(pad.beads,completed),
     boundary:pad.outline,hole:pad.hole,hiddenObject:'bigpearl',kingChance:1,ultraChance:1,deeperChance:.5});
@@ -57,7 +59,7 @@ for (const pad of PADS) for (const completed of [1,2,50]) for(let seed=1;seed<=3
 console.log(`PASS: ${rounds} layouts / same total / protected treasure hosts / fitted geometry / pause + resume / no idle auto-pop / bounded fast swipe`);
 
 const {roundTactile,installTactile,installOpeningTactiles,installRoundTactiles}=await load('fibers/Tactile');
-for(const pad of PADS) for(let seed=1;seed<=30;seed++) {
+for(const pad of allPads) for(let seed=1;seed<=30;seed++) {
   const rng=new Rng(seed),beads=generatePad(170,rng,{...pad.beads,...roundBeadBudget(pad.beads,0),
     boundary:pad.outline,hole:pad.hole,hiddenObject:'bigpearl',kingChance:1});
   const count=beads.length;
@@ -81,7 +83,7 @@ assert.deepEqual([1,2,3,4,5,6,7,8,9,10].map(roundTactile),['bubble','chain','swi
   for(let i=0;i+9<=later.length;i++) for(const k of ['bubble','chain','rainbow','charm','peel'])
     assert(later.slice(i,i+9).includes(k),`${k} returns within any nine pads`);
 }
-for(const pad of PADS) for(const completed of [1,2,3,4,5,6,7,8,9]) for(let seed=1;seed<=15;seed++) {
+for(const pad of allPads) for(const completed of [1,2,3,4,5,6,7,8,9]) for(let seed=1;seed<=15;seed++) {
   const rng=new Rng(seed),beads=generatePad(170,rng,{...pad.beads,...roundBeadBudget(pad.beads,completed),
     boundary:pad.outline,hole:pad.hole,hiddenObject:'bigpearl',kingChance:1,ultraChance:1,deeperChance:.5});
   const count=beads.length,featured=roundTactile(completed);
@@ -109,7 +111,7 @@ console.log('PASS: every later pad has 1 yarn + 1 featured texture / swirl every
 }
 console.log('PASS: later-pad yarn rotates colour, twist and length');
 let treatments=0;
-for(const kind of ['chain','rainbow','charm','peel']) for(const pad of PADS) for(let seed=1;seed<=30;seed++) {
+for(const kind of ['chain','rainbow','charm','peel']) for(const pad of allPads) for(let seed=1;seed<=30;seed++) {
   const rng=new Rng(seed),beads=generatePad(170,rng,{...pad.beads,...roundBeadBudget(pad.beads,2),
     boundary:pad.outline,hole:pad.hole,hiddenObject:'bigpearl',kingChance:1,ultraChance:1,deeperChance:.5});
   const before=beads.map(fingerprint),count=beads.length;
@@ -148,7 +150,7 @@ for(const kind of ['chain','rainbow','charm','peel']) for(const pad of PADS) for
 }
 console.log(`PASS: ${treatments} chain/rainbow/charm/peel layouts / free-direction peeling / alternating rounds / no new rewards or picks / gradual drag / no idle progression / resume`);
 
-for(const direction of [-1,1]) for(const pad of PADS) {
+for(const direction of [-1,1]) for(const pad of allPads) {
  const rng=new Rng(91),beads=generatePad(170,rng,{...pad.beads,boundary:pad.outline,hole:pad.hole});
  const before=beads.map(fingerprint),[b]=installTactile(beads,170,rng,'swirl');
  assert.deepEqual(beads.map(fingerprint),before);
@@ -170,7 +172,7 @@ console.log('PASS: swirl clockwise/counterclockwise, radial no-op, reversal, idl
 {
   const { BubblePress, BUBBLE_DOMES, BUBBLE_SQUEEZE } = await load('fibers/Bubble');
   let layouts=0;
-  for(const pad of PADS) for(let seed=1;seed<=20;seed++) {
+  for(const pad of allPads) for(let seed=1;seed<=20;seed++) {
     const rng=new Rng(seed),beads=generatePad(170,rng,{...pad.beads,...roundBeadBudget(pad.beads,1),
       boundary:pad.outline,hole:pad.hole,hiddenObject:'bigpearl',kingChance:1,ultraChance:1,deeperChance:.5});
     const before=beads.map(fingerprint),count=beads.length;

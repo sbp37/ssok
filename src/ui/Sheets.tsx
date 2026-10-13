@@ -245,7 +245,7 @@ function ThemeSection({ game, onPick }: { game: Game; onPick: (id: string) => vo
             <button key={id} className={"card tap" + (n ? "" : " unknown")} onClick={() => onPick(id)}>
               <BeadIcon type={ty} size={44} found={n > 0} />
               <div className="card-name">{n ? ty.name : "???"}</div>
-              <div className="card-n">{n ? `×${n}` : "한정 패드에"}</div>
+              <div className="card-n">{n ? `×${n}` : "한정"}</div>
             </button>
           );
         })}

@@ -290,7 +290,8 @@ export function App() {
       setHintHidden(true);
     }
     const label = () => {
-      const n = game.progressStore.discoveredPads.length;
+      // the everyday pads only – a limited theme pad is counted in its own section
+      const n = game.progressStore.discoveredPads.filter((id) => PADS.some((p) => p.id === id)).length;
       setCollLabel(n > 0 && n < PADS.length ? `컬렉션 ${n}/${PADS.length}` : "컬렉션");
     };
     label();
