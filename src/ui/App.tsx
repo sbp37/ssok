@@ -277,6 +277,8 @@ export function App() {
     }
     const offs = [
       game.progressStore.subscribe(label),
+      // pin set / cleared in the collection: the NEXT line follows at once
+      game.treasure.subscribe(() => setNext((n) => (n ? game.nextInfo : n))),
       game.on("pop", ({ pulled }) => {
         lastActivity.current = performance.now();
         setStuck(null);

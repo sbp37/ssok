@@ -391,6 +391,13 @@ export class Game extends Emitter<GameEvents> implements PadView, TactileHost {
     this.progressStore.setNext(pad, id);
   }
 
+  /** roll the next pad's treasure again with the current state (see the completion in doPop) */
+  private rerollNextHidden() {
+    const pad = this.nextPad;
+    this.pendingHidden = this.rollHidden(pad);
+    this.progressStore.setNext(pad, this.pendingHidden);
+  }
+
   /** "광고 보고 고르기": the next pad and two other pads, all distinct */
   nextChoices(): PadType[] {
     return this.nextProvider.choices?.(this.progressStore, this.nextPad, 2) ?? [this.nextPad];
@@ -851,9 +858,15 @@ export class Game extends Emitter<GameEvents> implements PadView, TactileHost {
       // jar settle before the completion cue. Persist now even if the tab closes.
       this.finishing = true;
       this.finishQuiet = 0;
+      if (!this.bonusRound) {
+        // a pad with no first-time find nudges the missing treasures up a little (bonus digs do not count)
+        if (!this.foundNewThisPad) this.treasure.noteDryPad();
+        // what the next pad hides is decided now, with this pad's finds, the pin and the catch-up
+        // all counted. Hidden from view until here (NEXT names it only on the emptied pad), and
+        // never touched again after – a pin set later counts from the pad after next.
+        this.rerollNextHidden();
+      }
       this.progressStore.complete();
-      // a pad with no first-time find nudges the missing treasures up a little (bonus digs do not count)
-      if (!this.foundNewThisPad && !this.bonusRound) this.treasure.noteDryPad();
     }
   }
 
