@@ -59,6 +59,13 @@ clock += MIN_GAP_MS;
 restored.provider = provider;
 assert.equal(await restored.next('interstitial',7),'closed'); // lock released after failure
 
+// A failed rewarded door waives the interstitial of that same transition.
+clock += MIN_GAP_MS;
+assert.equal(restored.eligible(8), true);
+restored.waive(8);
+assert.equal(restored.eligible(8), false, 'failed door → plain NEXT without an interstitial');
+assert.equal(restored.eligible(9), true, 'the next transition is a candidate again');
+
 // Ad groups: dev/QA bundles never touch a live group.
 assert.equal(LIVE_ADS, false);
 for (const id of Object.values(AD_GROUP_IDS)) assert.ok(id.startsWith('ait-ad-test-'), id);

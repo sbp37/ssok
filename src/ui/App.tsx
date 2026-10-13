@@ -399,7 +399,10 @@ export function App() {
       if (result === null || gameRef.current !== g || g.pad !== current) return;
       if (result !== "rewarded") {
         // no reward: stay on this screen – the player chose a door, never swap it for another silently
-        if (result === "unavailable") pushToast(AD_MISS_TOAST);
+        if (result === "unavailable") {
+          pushToast(AD_MISS_TOAST);
+          policy.waive(g.progressStore.totalCompleted); // no interstitial on top of a failed door
+        }
         else pushToast({ tone: "soft", text: "끝까지 보면 받을 수 있어" });
         setRewardReady(policy.ready("rewarded"));
         return;

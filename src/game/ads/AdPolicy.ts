@@ -186,6 +186,12 @@ export class AdPolicy {
       && totalCompleted - this.lastAdCompleted >= AD_INTERVAL_PADS
       && this.now() - this.lastAdAt >= MIN_GAP_MS;
   }
+  /** the player already tried a rewarded door for this completion (it failed):
+   * the plain NEXT of the same transition must not add an interstitial on top */
+  waive(totalCompleted: number) {
+    this.lastAdCompleted = Math.max(this.lastAdCompleted, totalCompleted);
+    this.save();
+  }
   /** is a full-screen ad of this kind loaded right now (never waits) */
   ready(kind: AdKind) {
     try {

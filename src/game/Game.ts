@@ -517,7 +517,9 @@ export class Game extends Emitter<GameEvents> implements PadView, TactileHost {
    * Canvas CSS px, the same space as the UI overlay.
    */
   stuckHint(firstPull = false): { x: number; y: number; kind: "pull" | "swirl" | "peel" | "tap" | "yarn" | "chain" } | null {
-    const bead = this.debugBeads().filter((d) => !d.hidden).sort((p, q) => q.r - p.r)[0];
+    const grabbable = this.debugBeads().sort((p, q) => q.r - p.r);
+    // plain beads first; a surfaced treasure only when nothing else is left
+    const bead = grabbable.find((d) => !d.hidden) ?? grabbable[0];
     // a brand-new player first learns the plain pull on the biggest plain bead
     if (firstPull && bead) return { x: bead.x, y: bead.y, kind: "pull" };
     const fibers = this.tactile.debug((x, y) => this.toCanvas(x, y)).filter((f) => f.state === "embedded");
