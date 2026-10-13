@@ -22,6 +22,7 @@ import { FIRST_TREASURE_GUARANTEE, HIDDEN_POOLS, NONE, ULTRA_SURFACE_CHANCE, VAR
 import { HIDDEN_TYPES, ULTRA_TYPES } from "./beads/BeadTypes";
 import { TreasureStore, treasureKind, type FindResult, type TreasureKind } from "./rewards/treasure";
 import { JarAlbum } from "./rewards/album";
+import { themeOfPad } from "./rewards/themes";
 import type { BeadType } from "./beads/BeadTypes";
 import { TactileController, type TactileHost } from "./fibers/TactileController";
 import { roundTactile, tactileName } from "./fibers/Tactile";
@@ -421,6 +422,9 @@ export class Game extends Emitter<GameEvents> implements PadView, TactileHost {
       tactile: this.nextTactileName,
       // the pinned treasure can hide in this pad (a promise of a chance, never of the thing)
       target: this.pinCanHideIn(pad),
+      // one of this month's limited pads
+      theme: themeOfPad(pad.id)?.name,
+      themeId: themeOfPad(pad.id)?.id,
     };
   }
 

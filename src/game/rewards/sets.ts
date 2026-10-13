@@ -7,6 +7,8 @@ export interface TreasureSet {
   id: string;
   name: string;
   ids: readonly string[];
+  /** a monthly theme's set: shown with that theme, findable only in its season */
+  theme?: string;
 }
 
 export const TREASURE_SETS: readonly TreasureSet[] = [
@@ -15,6 +17,8 @@ export const TREASURE_SETS: readonly TreasureSet[] = [
   { id: "shine", name: "반짝", ids: ["bigopal", "opal", "key"] },
   { id: "friends", name: "친구", ids: ["duck", "eye"] },
   { id: "legend", name: "전설", ids: ["crown", "holostar", "bigduck"] },
+  { id: "autumn", name: "가을 숲", ids: ["maplestar", "pumpkinglass", "chestnutpearl"], theme: "autumn" },
+  { id: "winter", name: "눈 오는 밤", ids: ["snowstar", "iceglass", "snowpearl"], theme: "winter" },
 ];
 
 /** the set this find just completed, if any */

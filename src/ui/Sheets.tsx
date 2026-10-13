@@ -7,6 +7,7 @@ import type { JarEntry } from "../game/rewards/album";
 import { PADS, variantCount } from "../game/pads/PadTypes";
 import { SHELF_SIZE, SPECIAL_TYPES, RARE_TYPES, TREASURE_TYPES } from "../game/rewards/treasure";
 import { TREASURE_SETS } from "../game/rewards/sets";
+import { activeTheme, themePads, upcomingTheme, type Theme } from "../game/rewards/themes";
 import { HIDDEN_POOLS } from "../game/rewards/rates";
 import { haptics } from "../game/haptics";
 import { sfx } from "../game/audio/Sfx";
@@ -63,6 +64,10 @@ export function BeadIcon({ type, size, found }: { type: BeadType; size: number; 
   return <canvas ref={ref} style={{ width: size, height: size }} />;
 }
 
+const themeOfTreasure = (id: string): Theme | undefined => {
+  for (const th of [activeTheme(), upcomingTheme()]) if (th?.treasures.includes(id)) return th;
+  return undefined;
+};
 const asset = (name: string) => `${import.meta.env.BASE_URL}collection/${name}`;
 const typeOf = (id: string) => TREASURE_TYPES.find((t) => t.id === id);
 const dateLabel = (at?: number) => {
@@ -83,6 +88,7 @@ function TreasureDetail({ game, id, onClose }: { game: Game; id: string; onClose
   const shelfFull = t.shelf.length >= SHELF_SIZE && !t.onShelf(id);
   const where = n
     ? [dateLabel(first.at), first.pad ? `${first.pad} 패드에서 처음 찾음` : "처음 찾음"].filter(Boolean).join(" · ")
+    : themeOfTreasure(id) ? `${themeOfTreasure(id)!.name} 한정 패드에 숨어 (${themeOfTreasure(id)!.span})`
     : ultra ? "어느 패드든 아주 드물게 깊은 곳에" : hidesIn(id) ? `${hidesIn(id).replace("?", "")}에 자주 숨어` : "희귀 패드에서 잘 나와";
   return (
     <div className="detail-wrap" onClick={onClose}>
@@ -197,6 +203,58 @@ function JarShelf({ game }: { game: Game }) {
   );
 }
 
+/** this month's theme: its banner, its limited pads and treasures, and its set */
+function ThemeSection({ game, onPick }: { game: Game; onPick: (id: string) => void }) {
+  const theme = activeTheme();
+  const next = upcomingTheme();
+  if (!theme) {
+    return next ? (
+      <div className="theme-next">
+        다음 테마 · <strong>{next.name}</strong> ({next.span})
+      </div>
+    ) : null;
+  }
+  const t = game.treasure;
+  const prog = game.progressStore;
+  const pads = themePads(theme);
+  const have = theme.treasures.filter((id) => t.has(id)).length;
+  return (
+    <>
+      <div className="theme-banner" style={{ backgroundImage: `url(${asset(`theme-${theme.id}.svg`)})` }}>
+        <strong>{theme.name}</strong>
+        <span>
+          {theme.until} 한정 · 보물 {have}/{theme.treasures.length}
+        </span>
+      </div>
+      <div className="grid theme-grid">
+        {pads.map((p) => {
+          const found = prog.isDiscovered(p.id);
+          return (
+            <div key={p.id} className={"card" + (found ? "" : " unknown")}>
+              <PadSilhouette pad={p} size={44} mode={found ? "color" : "dark"} glint={false} />
+              <div className="card-name">{found ? p.name : "???"}</div>
+              <div className="card-n">{found ? `${prog.playCount(p.id)}회` : "한정"}</div>
+            </div>
+          );
+        })}
+        {theme.treasures.map((id) => {
+          const ty = typeOf(id);
+          if (!ty) return null;
+          const n = t.count(id);
+          return (
+            <button key={id} className={"card tap" + (n ? "" : " unknown")} onClick={() => onPick(id)}>
+              <BeadIcon type={ty} size={44} found={n > 0} />
+              <div className="card-name">{n ? ty.name : "???"}</div>
+              <div className="card-n">{n ? `×${n}` : "한정"}</div>
+            </button>
+          );
+        })}
+      </div>
+      {next && <div className="theme-next">다음 테마 · {next.name} ({next.span})</div>}
+    </>
+  );
+}
+
 /** the shelf: up to five favourite treasures, on show */
 function Shelf({ game, onPick }: { game: Game; onPick: (id: string) => void }) {
   const ids = game.treasure.shelf;
@@ -250,11 +308,12 @@ export function CollectionSheet({ game, onClose }: { game: Game; onClose: () => 
   };
   return (
     <Sheet title="컬렉션" sub={`패드 ${foundPads}/${PADS.length} · 보물 ${t.found}/${t.total}`} onClose={onClose}>
+      <ThemeSection game={game} onPick={setDetail} />
       <div className="section">진열장</div>
       <Shelf game={game} onPick={setDetail} />
       <div className="section">세트</div>
       <div className="sets">
-        {TREASURE_SETS.map((set) => {
+        {TREASURE_SETS.filter((set) => !set.theme || set.theme === activeTheme()?.id).map((set) => {
           const have = set.ids.filter((id) => t.has(id)).length;
           const done = have === set.ids.length;
           return (

@@ -3,12 +3,14 @@ import { load } from './load.mjs';
 
 const { generatePad } = await load('beads/Bead');
 const { PADS, VARIANTS, applyVariant } = await load('pads/PadTypes');
+const { THEME_PADS } = await load('pads/ThemePads');
+const allPads = [...PADS, ...THEME_PADS];
 const { roundBeadBudget } = await load('pads/pacing');
 const { Rng } = await load('util/math');
 const rows = [];
 for (const completed of [0, 1, 2, 50]) {
   let total = 0, oldTotal = 0, samples = 0, min = Infinity, max = 0;
-  for (const pad of PADS) {
+  for (const pad of allPads) {
     const budget = roundBeadBudget(pad.beads, completed);
     for (let seed = 1; seed <= 50; seed++) {
       const options = {
@@ -50,4 +52,4 @@ assert.deepEqual(roundBeadBudget(PADS[0].beads, 50), roundBeadBudget(PADS[0].bea
 const test = generatePad(170, new Rng(12), {surface:5,deeper:false,spacing:40,forceTypes:['tiny','pearl','star','marble','long']});
 assert.equal(test.length, 5, 'explicit tactile test mode stays exact');
 console.table(rows);
-console.log('PASS: 3,080 generated rounds / total budgets / treasure+king+ultra / variants / returning players / test mode');
+console.log(`PASS: ${allPads.length * 4 * 70} generated rounds / total budgets / treasure+king+ultra / variants / returning players / test mode`);

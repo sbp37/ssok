@@ -10,6 +10,7 @@ import { AD_GROUP_IDS, AdPolicy, createAdProvider } from "../game/ads/AdPolicy";
 import { OfferStats, pickOffer, type Offer } from "../game/ads/Offers";
 import { PromotionRewards } from "../game/rewards/PromotionRewards";
 import { PADS, type PadType } from "../game/pads/PadTypes";
+import { activeTheme } from "../game/rewards/themes";
 import { PadSilhouette } from "./NextPanel";
 import { useShare } from "./share";
 
@@ -25,6 +26,20 @@ type SheetName = "" | "collection" | "settings";
 
 const SHEET_HISTORY_KEY = "__ssokSheet";
 const TOMORROW_KEY = "ssok.tomorrow.v1";
+const THEME_SEEN_KEY = "ssok.theme.v1";
+/** "가을 숲 테마 ✦" once per theme per year, for players past the opening */
+function takeThemeLine(): { name: string; until: string } | null {
+  const t = activeTheme();
+  if (!t) return null;
+  const tag = `${t.id}-${new Date().getFullYear()}`;
+  try {
+    if (localStorage.getItem(THEME_SEEN_KEY) === tag) return null;
+    localStorage.setItem(THEME_SEEN_KEY, tag);
+  } catch {
+    return null;
+  }
+  return { name: t.name, until: t.until };
+}
 /** pads emptied this session before the "come back tomorrow" line (once a day) */
 const TOMORROW_AFTER = 3;
 const localDay = () => {
@@ -275,12 +290,18 @@ export function App() {
       setHintHidden(true);
     }
     const label = () => {
-      const n = game.progressStore.discoveredPads.length;
+      // the everyday pads only – a limited theme pad is counted in its own section
+      const n = game.progressStore.discoveredPads.filter((id) => PADS.some((p) => p.id === id)).length;
       setCollLabel(n > 0 && n < PADS.length ? `컬렉션 ${n}/${PADS.length}` : "컬렉션");
     };
     label();
     // a new day: one quiet line, and the first pad is a touch more generous. No streaks, no stamps.
     if (game.progressStore.newDay) later(() => pushToast({ tone: "soft", text: "오늘은 뭔가 좀 다르다. ✦" }), 900);
+    // a new monthly theme: one line, after the opening pads (a first-time player has enough to read)
+    if (game.progressStore.totalCompleted >= 3) {
+      const theme = takeThemeLine();
+      if (theme) later(() => pushToast({ tone: "hidden", text: `${theme.name} 테마 시작 ✦`, sub: `${theme.until} 한정 패드와 보물` }), 2200);
+    }
     promotions.current?.onVisit(game.progressStore.newDay, game.progressStore.totalCompleted);
     // AIT QA bundles use TEST_ codes, so opening the ordinary console test
     // push is enough to verify every promotion without a custom deep link.
