@@ -23,6 +23,7 @@ import { HIDDEN_TYPES, ULTRA_TYPES } from "./beads/BeadTypes";
 import { TreasureStore, treasureKind, type FindResult, type TreasureKind } from "./rewards/treasure";
 import { JarAlbum } from "./rewards/album";
 import { themeOfPad } from "./rewards/themes";
+import { colorKey, tinted } from "./pads/colors";
 import type { BeadType } from "./beads/BeadTypes";
 import { TactileController, type TactileHost } from "./fibers/TactileController";
 import { roundTactile, tactileName } from "./fibers/Tactile";
@@ -184,6 +185,9 @@ export class Game extends Emitter<GameEvents> implements PadView, TactileHost {
         if (!prog.isDiscovered(pad.variantOf ?? pad.id)) prog.open(pad);
       }
     }
+    // this opening's gel colour (a ?pad= QA start keeps the pad's own)
+    if (!forced) pad = this.tint(pad);
+    this.progressStore.noteColor(colorKey(pad.gelColor));
     this.gel.setShape(pad);
     this.newPad(true);
     this.last = performance.now();
@@ -369,10 +373,10 @@ export class Game extends Emitter<GameEvents> implements PadView, TactileHost {
       const prog = this.progressStore;
       const saved = prog.nextId ? resolvePad(prog.nextId) : undefined;
       if (saved && prog.nextHidden !== undefined) {
-        this.pendingNext = saved;
+        this.pendingNext = this.tint(saved);
         this.pendingHidden = prog.nextHidden;
       } else {
-        this.pendingNext = this.nextProvider.next(prog);
+        this.pendingNext = this.tint(this.nextProvider.next(prog));
         this.pendingHidden = this.rollHidden(this.pendingNext);
         prog.setNext(this.pendingNext, this.pendingHidden);
       }
@@ -404,7 +408,13 @@ export class Game extends Emitter<GameEvents> implements PadView, TactileHost {
 
   /** "광고 보고 고르기": the next pad and two other pads, all distinct */
   nextChoices(): PadType[] {
-    return this.nextProvider.choices?.(this.progressStore, this.nextPad, 2) ?? [this.nextPad];
+    // shown in the colours they will open with
+    const recent = [...this.progressStore.recentColors];
+    return (this.nextProvider.choices?.(this.progressStore, this.nextPad, 2) ?? [this.nextPad]).map((p) => {
+      const t = tinted(p, recent);
+      recent.push(colorKey(t.gelColor)); // three different colours side by side
+      return t;
+    });
   }
 
   /** everything the NEXT tease is allowed to know */
@@ -468,6 +478,8 @@ export class Game extends Emitter<GameEvents> implements PadView, TactileHost {
    * beads, so it is tidied away now – briefly, not wiped in one frame.
    */
   openPad(pad: PadType) {
+    pad = this.tint(pad);
+    this.progressStore.noteColor(colorKey(pad.gelColor));
     this.collector.dismiss();
     this.bonusRound = false;
     // the treasure rolled for NEXT travels with it; a different pad rolls fresh
@@ -501,8 +513,14 @@ export class Game extends Emitter<GameEvents> implements PadView, TactileHost {
 
   /** let a rare variant pass: open the plain version of that pad instead */
   openNextPlain() {
-    const base = padById(this.nextPad.id)!;
-    this.openPad(base);
+    const next = this.nextPad;
+    // a plain next pad keeps the colour NEXT already showed; a passing variant's base gets its own
+    this.openPad(next.variantOf ? padById(next.id)! : next);
+  }
+
+  /** the pad with this opening's gel colour, never one of the last few on the table */
+  private tint(pad: PadType): PadType {
+    return tinted(pad, this.progressStore.recentColors);
   }
 
   /** test/QA: empty the pad instantly (beads vanish, treasures are credited, completion logic runs) */

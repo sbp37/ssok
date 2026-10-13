@@ -74,6 +74,8 @@ export interface PadType {
   tier?: "rare" | "super";
   /** how visible the buried object is (1 = default; <1 harder to spot) */
   hiddenVisibility?: number;
+  /** gelColor was picked for this opening (pads/colors.ts) and is the final silicone colour */
+  tinted?: boolean;
 }
 
 /**

@@ -52,6 +52,9 @@ function sanitize(raw: unknown): Save {
     if (typeof o.nextHidden === "string" || o.nextHidden === null) s.nextHidden = o.nextHidden;
   }
   s.dayBonusPending = o.dayBonusPending === true;
+  s.recentColors = Array.isArray(o.recentColors)
+    ? o.recentColors.filter((x): x is string => typeof x === "string" && /^\d+,\d+,\d+$/.test(x)).slice(-8)
+    : [];
   return s;
 }
 
@@ -76,6 +79,8 @@ interface Save {
   nextHidden: string | null | undefined;
   /** first pad of a new day gets one small nudge; consumed when that pad is generated */
   dayBonusPending: boolean;
+  /** gel colours of the last pads opened ("r,g,b", newest last) – no repeats */
+  recentColors: string[];
 }
 
 const fresh = (): Save => ({
@@ -92,6 +97,7 @@ const fresh = (): Save => ({
   nextId: null,
   nextHidden: undefined,
   dayBonusPending: false,
+  recentColors: [],
 });
 
 export class PadProgress {
@@ -183,6 +189,14 @@ export class PadProgress {
   }
   get nextHidden() {
     return this.s.nextHidden;
+  }
+  get recentColors(): readonly string[] {
+    return this.s.recentColors;
+  }
+  /** remember a gel colour that went on the table */
+  noteColor(key: string) {
+    this.s.recentColors = [...this.s.recentColors, key].slice(-8);
+    this.save();
   }
   /** 1-based index of the pad on the table (completion is counted at the last POP) */
   get padIndex() {
