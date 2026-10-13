@@ -272,12 +272,55 @@ const bearR = (() => {
   };
 })();
 
-/** Right-facing crescent: the inner arc stays right of the origin so every
- * ray has one boundary. Angular smoothing rounds both tips for bead placement. */
-const moonR = polarOf((t) => [
-  0.5 + (t < Math.PI ? -1.5 : -0.38) * Math.abs(Math.sin(t)),
-  -0.95 * Math.cos(t),
-], 720, 5);
+/** Right-facing crescent, with a shallow circular bite and rounded horns.
+ * The origin lies in the visibility kernel: each ray crosses the boundary once.
+ * Smooth circle subtraction rounds the tips in Cartesian space, rather than
+ * blurring angles (which can flatten a tip when a curve folds back on a ray).
+ */
+const moonRaw = (theta: number): number => {
+  const dx = Math.cos(theta);
+  const dy = Math.sin(theta) / 0.8;
+  const boundary = (r: number) => {
+    const x = r * dx, y = r * dy;
+    const outer = Math.hypot(x - 0.35, y) - 1.35;
+    const bite = 3.5 - Math.hypot(x - 3.65, y);
+    // Smooth maximum of the two signed distances; 0.06R rounds the horns
+    // without losing the broad middle or leaving a zero-width cusp.
+    return (outer + bite + Math.hypot(outer - bite, 0.06)) / 2;
+  };
+  let lo = 0, hi = 1.8;
+  for (let i = 0; i < 28; i++) {
+    const mid = (lo + hi) / 2;
+    if (boundary(mid) < 0) lo = mid;
+    else hi = mid;
+  }
+  return (lo + hi) / 2;
+};
+
+/**
+ * A crescent's horns curl back past the centre's line of sight, so one radius
+ * per angle cuts each horn off along a ray – a straight edge. Blurring the
+ * radius over ±9° turns that cut into a tapered, rounded tip; the smooth arcs
+ * elsewhere barely change.
+ */
+const moonR = (() => {
+  const N = 720, W = 18; // 0.5° steps, ±9°
+  const raw = Array.from({ length: N }, (_, i) => moonRaw((i / N) * TAU));
+  const table = raw.map((_, i) => {
+    let sum = 0, wsum = 0;
+    for (let k = -W; k <= W; k++) {
+      const w = Math.cos((k / (W + 1)) * (Math.PI / 2)) ** 2;
+      sum += raw[(i + k + N) % N] * w;
+      wsum += w;
+    }
+    return sum / wsum;
+  });
+  return (theta: number) => {
+    const t = ((((theta % TAU) + TAU) % TAU) / TAU) * N;
+    const i = Math.floor(t) % N, f = t - Math.floor(t);
+    return table[i] * (1 - f) + table[(i + 1) % N] * f;
+  };
+})();
 
 /** Four rounded wings, larger above (y down), joined by a narrow body. */
 const butterflyR = (th: number) => 0.36
@@ -532,7 +575,8 @@ export const PADS: readonly PadType[] = [
     // Both crescent tips release easily; the broad middle holds a little harder.
     resistance: (_xn, yn) => 1.12 - 0.32 * sm(clamp01(Math.abs(yn) / 0.85)),
     grip: 1,
-    beads: { surface: 46, typeSkew: { star: 3, pearl: 1.6 } },
+    // the concave bite is a tight inner edge: keep beads (big pearls too) well inside it
+    beads: { surface: 42, edgeInset: 0.16, typeSkew: { star: 3, pearl: 1.6 } },
     hint: { color: "#fff0c4", label: "별사탕" },
   },
   {
