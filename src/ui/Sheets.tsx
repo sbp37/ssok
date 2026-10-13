@@ -2,7 +2,8 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { Game } from "../game/Game";
 import { getBeadSprite } from "../game/beads/BeadSprites";
 import type { BeadType } from "../game/beads/BeadTypes";
-import { HIDDEN_TYPES, ULTRA_TYPES } from "../game/beads/BeadTypes";
+import { BEAD_TYPES, HIDDEN_TYPES, ULTRA_TYPES } from "../game/beads/BeadTypes";
+import type { JarEntry } from "../game/rewards/album";
 import { PADS, variantCount } from "../game/pads/PadTypes";
 import { SHELF_SIZE, SPECIAL_TYPES, RARE_TYPES, TREASURE_TYPES } from "../game/rewards/treasure";
 import { TREASURE_SETS } from "../game/rewards/sets";
@@ -123,6 +124,79 @@ function TreasureDetail({ game, id, onClose }: { game: Game; id: string; onClose
   );
 }
 
+const anyType = (id: string) => BEAD_TYPES.find((t) => t.id === id) ?? typeOf(id);
+
+/** one emptied pad's jar: its beads settled in landing order under a small glass */
+function MiniJar({ jar }: { jar: JarEntry }) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const c = ref.current!;
+    const W = 64, H = 80;
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    c.width = W * dpr;
+    c.height = H * dpr;
+    const ctx = c.getContext("2d")!;
+    ctx.scale(dpr, dpr);
+    // hex-packed from the bottom of the glass (inside x 12..52, y 30..72)
+    const cols = 5, r = 40 / (cols * 2), rowH = r * 1.7;
+    jar.beads.forEach(([id, color], i) => {
+      const row = Math.floor(i / cols), col = i % cols;
+      const x = 12 + r + col * r * 2 + (row % 2 ? -r * 0.4 : r * 0.4) * (col === 0 || col === cols - 1 ? 0 : 1) + Math.sin(i * 12.9898) * 0.5;
+      const y = 72 - r - row * rowH;
+      if (y < 30) return;
+      const type = anyType(id);
+      if (type) {
+        // same sprite the jar uses in play, at album size
+        const sp = getBeadSprite(type, color, r * (type.shape === "oval" ? 0.8 : 1.12), dpr);
+        ctx.drawImage(sp.canvas, x - sp.w / 2, y - sp.h / 2, sp.w, sp.h);
+      } else {
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.arc(x, y, r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    });
+  }, [jar]);
+  const d = new Date(jar.at);
+  return (
+    <div className="mini-jar">
+      <span className="mini-jar-glass">
+        <canvas ref={ref} style={{ width: 64, height: 80 }} />
+        <img src={asset("mini-jar.svg")} alt="" width={64} height={80} />
+      </span>
+      <span className="mini-jar-cap">
+        {d.getMonth() + 1}/{d.getDate()} · {jar.pad}
+      </span>
+    </div>
+  );
+}
+
+/** the album: the latest jars, three to a shelf */
+function JarShelf({ game }: { game: Game }) {
+  const jars = game.album.latest.slice(0, 6);
+  if (!jars.length) {
+    return (
+      <div className="album-empty">
+        <img src={asset("album-empty.svg")} alt="" width={120} height={90} />
+        <span>패드를 다 비우면 병이 여기에 모여</span>
+      </div>
+    );
+  }
+  const rows: JarEntry[][] = [];
+  for (let i = 0; i < jars.length; i += 3) rows.push(jars.slice(i, i + 3));
+  return (
+    <div className="album">
+      {rows.map((row, i) => (
+        <div key={i} className="album-row" style={{ backgroundImage: `url(${asset("jar-shelf.svg")})` }}>
+          {row.map((j) => (
+            <MiniJar key={j.at} jar={j} />
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 /** the shelf: up to five favourite treasures, on show */
 function Shelf({ game, onPick }: { game: Game; onPick: (id: string) => void }) {
   const ids = game.treasure.shelf;
@@ -206,6 +280,8 @@ export function CollectionSheet({ game, onClose }: { game: Game; onClose: () => 
           );
         })}
       </div>
+      <div className="section">병 앨범{game.album.size ? ` · ${game.album.size}병` : ""}</div>
+      <JarShelf game={game} />
       <div className="section">패드</div>
       <div className="grid pads">
         {PADS.map((p) => {

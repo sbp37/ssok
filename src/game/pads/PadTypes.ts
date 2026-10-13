@@ -124,6 +124,14 @@ export const VARIANTS: Record<string, PadVariant[]> = {
     { id: "rainbowstar", name: "무지개 별", tier: "super", patch: { gelColor: { r: 226, g: 220, b: 248 }, transparency: 1.25, raritySkew: { rare: 2.6 }, hint: { color: "#ffe9ff", label: "???" } } },
     { id: "glassstar", name: "유리 별", tier: "rare", patch: { transparency: 1.4 } },
   ],
+  moon: [
+    { id: "clearmoon", name: "유리 달", tier: "rare", patch: { transparency: 1.4 } },
+    { id: "softmoon", name: "말랑 달", tier: "rare", patch: { softness: 1.3 } },
+  ],
+  butterfly: [
+    { id: "lavenderbutterfly", name: "라벤더 나비", tier: "rare", patch: { gelColor: { r: 226, g: 216, b: 244 } } },
+    { id: "clearbutterfly", name: "유리 나비", tier: "rare", patch: { transparency: 1.4 } },
+  ],
 };
 
 /** merge a variant onto its base pad */
@@ -263,6 +271,61 @@ const bearR = (() => {
     return sm2[i] * (1 - f) + sm2[j] * f;
   };
 })();
+
+/** Right-facing crescent, with a shallow circular bite and rounded horns.
+ * The origin lies in the visibility kernel: each ray crosses the boundary once.
+ * Smooth circle subtraction rounds the tips in Cartesian space, rather than
+ * blurring angles (which can flatten a tip when a curve folds back on a ray).
+ */
+const moonRaw = (theta: number): number => {
+  const dx = Math.cos(theta);
+  const dy = Math.sin(theta) / 0.8;
+  const boundary = (r: number) => {
+    const x = r * dx, y = r * dy;
+    const outer = Math.hypot(x - 0.35, y) - 1.35;
+    const bite = 3.5 - Math.hypot(x - 3.65, y);
+    // Smooth maximum of the two signed distances; 0.06R rounds the horns
+    // without losing the broad middle or leaving a zero-width cusp.
+    return (outer + bite + Math.hypot(outer - bite, 0.06)) / 2;
+  };
+  let lo = 0, hi = 1.8;
+  for (let i = 0; i < 28; i++) {
+    const mid = (lo + hi) / 2;
+    if (boundary(mid) < 0) lo = mid;
+    else hi = mid;
+  }
+  return (lo + hi) / 2;
+};
+
+/**
+ * A crescent's horns curl back past the centre's line of sight, so one radius
+ * per angle cuts each horn off along a ray – a straight edge. Blurring the
+ * radius over ±9° turns that cut into a tapered, rounded tip; the smooth arcs
+ * elsewhere barely change.
+ */
+const moonR = (() => {
+  const N = 720, W = 18; // 0.5° steps, ±9°
+  const raw = Array.from({ length: N }, (_, i) => moonRaw((i / N) * TAU));
+  const table = raw.map((_, i) => {
+    let sum = 0, wsum = 0;
+    for (let k = -W; k <= W; k++) {
+      const w = Math.cos((k / (W + 1)) * (Math.PI / 2)) ** 2;
+      sum += raw[(i + k + N) % N] * w;
+      wsum += w;
+    }
+    return sum / wsum;
+  });
+  return (theta: number) => {
+    const t = ((((theta % TAU) + TAU) % TAU) / TAU) * N;
+    const i = Math.floor(t) % N, f = t - Math.floor(t);
+    return table[i] * (1 - f) + table[(i + 1) % N] * f;
+  };
+})();
+
+/** Four rounded wings, larger above (y down), joined by a narrow body. */
+const butterflyR = (th: number) => 0.36
+  + 0.76 * (bump(th, -0.65, 0.5) + bump(th, -Math.PI + 0.65, 0.5))
+  + 0.57 * (bump(th, 0.7, 0.48) + bump(th, Math.PI - 0.7, 0.48));
 
 export const PADS: readonly PadType[] = [
   {
@@ -496,6 +559,42 @@ export const PADS: readonly PadType[] = [
     grip: 1.02,
     beads: { surface: 50, typeSkew: { gold: 2, gem: 1.4, pearl: 1.3 }, kingChance: 0.5 },
     hint: { color: "#f3dcc0", label: "곰돌이" },
+  },
+  {
+    id: "moon",
+    name: "달",
+    glyph: "☾",
+    outline: moonR,
+    noise: 0.006,
+    gelColor: { r: 248, g: 236, b: 198 },
+    transparency: 1.15,
+    thickness: 1,
+    softness: 1,
+    stretch: 1.05,
+    wobble: 1,
+    // Both crescent tips release easily; the broad middle holds a little harder.
+    resistance: (_xn, yn) => 1.12 - 0.32 * sm(clamp01(Math.abs(yn) / 0.85)),
+    grip: 1,
+    // the concave bite is a tight inner edge: keep beads (big pearls too) well inside it
+    beads: { surface: 42, edgeInset: 0.16, typeSkew: { star: 3, pearl: 1.6 } },
+    hint: { color: "#fff0c4", label: "별사탕" },
+  },
+  {
+    id: "butterfly",
+    name: "나비",
+    glyph: "⋈",
+    outline: butterflyR,
+    noise: 0.006,
+    gelColor: { r: 210, g: 224, b: 244 },
+    transparency: 1.1,
+    thickness: 0.95,
+    softness: 1.05,
+    stretch: 1.1,
+    wobble: 1.05,
+    coupling: 0.65,
+    grip: 0.98,
+    beads: { surface: 46, typeSkew: { flower: 2, gem: 1.6 }, raritySkew: { special: 1.4 } },
+    hint: { color: "#e6ddff", label: "오팔" },
   },
 ];
 

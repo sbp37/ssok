@@ -60,4 +60,18 @@ const u = new (await loadFresh('rewards/treasure')).TreasureStore();
 assert.deepEqual([...u.shelf], saved.shelf);
 assert.equal(u.target, 'bigopal');
 assert.equal(u.dry, 0);
-console.log('PASS: catch-up boost (cap, found, none, ultra, pin), sets, first find shelved, pin hit/unpin, shelf limit, persistence + repair');
+// jar album: newest first, capped, empty jars skipped, bad saves repaired
+const { JarAlbum, JAR_LIMIT, JAR_BEADS } = await loadFresh('rewards/album');
+const al = new JarAlbum();
+al.add({ at: 1, pad: '구름', padId: 'cloud', beads: [] });
+assert.equal(al.size, 0, 'an empty jar is not kept');
+for (let i = 0; i < JAR_LIMIT + 5; i++) al.add({ at: 100 + i, pad: '꽃', padId: 'flower', beads: Array.from({ length: 60 }, () => ['pearl', '#fff']) });
+assert.equal(al.size, JAR_LIMIT);
+assert.equal(al.latest[0].at, 100 + JAR_LIMIT + 4, 'newest first');
+assert.equal(al.latest[0].beads.length, JAR_BEADS);
+data.set('ssok.jars.v1', JSON.stringify([{ at: 5, pad: '별', padId: 'star', beads: [['pearl', '#fff'], [3, null]] }, { nope: 1 }, null]));
+const al2 = new (await loadFresh('rewards/album')).JarAlbum();
+assert.equal(al2.size, 1);
+assert.deepEqual(al2.latest[0].beads, [['pearl', '#fff']]);
+
+console.log('PASS: catch-up boost (cap, found, none, ultra, pin), sets, first find shelved, pin hit/unpin, shelf limit, persistence + repair, jar album');
