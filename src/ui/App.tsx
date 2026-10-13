@@ -24,6 +24,23 @@ type Phase = "intro" | "free";
 type SheetName = "" | "collection" | "settings";
 
 const SHEET_HISTORY_KEY = "__ssokSheet";
+const TOMORROW_KEY = "ssok.tomorrow.v1";
+/** pads emptied this session before the "come back tomorrow" line (once a day) */
+const TOMORROW_AFTER = 3;
+const localDay = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+};
+/** true once per calendar day; storage errors simply skip the line */
+function takeTomorrowLine() {
+  try {
+    if (localStorage.getItem(TOMORROW_KEY) === localDay()) return false;
+    localStorage.setItem(TOMORROW_KEY, localDay());
+    return true;
+  } catch {
+    return false;
+  }
+}
 /** how long a rewarded try that did not pay out keeps its line on screen */
 const AD_MISS_TOAST = { tone: "soft", text: "광고를 불러오지 못했어", sub: "잠시 뒤 다시 해 봐" } as const;
 
@@ -139,6 +156,7 @@ export function App() {
   const [padTitle, setPadTitle] = useState("");
   const [tactileHint, setTactileHint] = useState<string | null>(null);
   const toastId = useRef(0);
+  const sessionEmptied = useRef(0);
   /** last pop or touch; a long quiet spell mid-pad shows a gesture hint on something pullable */
   const lastActivity = useRef(performance.now());
   const [stuck, setStuck] = useState<{ x: number; y: number; kind: string; n: number } | null>(null);
@@ -292,6 +310,11 @@ export function App() {
       }),
       game.on("padEmpty", () => {
         promotions.current?.onPadCompleted(game.progressStore.totalCompleted);
+        // a reason to come back, said once a day after a little play – and true:
+        // the first pad of a new day really is more likely to hide something
+        if (!game.isBonus && ++sessionEmptied.current === TOMORROW_AFTER && takeTomorrowLine()) {
+          later(() => pushToast({ tone: "soft", text: "내일 오면 첫 판에 보물이 더 잘 묻혀 있어 ✦" }), 1500);
+        }
         setPadEmpty(true);
         const info = game.nextInfo;
         setNext(info);

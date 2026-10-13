@@ -21,6 +21,7 @@ import { BONUS_BUDGET, roundBeadBudget } from "./pads/pacing";
 import { FIRST_TREASURE_GUARANTEE, HIDDEN_POOLS, NONE, ULTRA_SURFACE_CHANCE, VARIANT_PERKS, hiddenWeight, missingBoost } from "./rewards/rates";
 import { HIDDEN_TYPES, ULTRA_TYPES } from "./beads/BeadTypes";
 import { TreasureStore, treasureKind, type FindResult, type TreasureKind } from "./rewards/treasure";
+import { JarAlbum } from "./rewards/album";
 import type { BeadType } from "./beads/BeadTypes";
 import { TactileController, type TactileHost } from "./fibers/TactileController";
 import { roundTactile, tactileName } from "./fibers/Tactile";
@@ -107,6 +108,8 @@ export class Game extends Emitter<GameEvents> implements PadView, TactileHost {
   progressStore = new PadProgress();
   nextProvider: NextPadProvider = new DiscoveryProvider();
   treasure = new TreasureStore();
+  /** every emptied pad's jar, for the collection's album */
+  album = new JarAlbum();
   /** the pad after this one – rolled once (and saved) so NEXT, the door and a restart all agree */
   private pendingNext: PadType | null = null;
   /** what that next pad hides (null = nothing), rolled together with it */
@@ -999,6 +1002,15 @@ export class Game extends Emitter<GameEvents> implements PadView, TactileHost {
         this.finaleT = 0;
         if (!this.reducedMotion) this.gel.recoil(0, 18 * this.s);
         sfx.done();
+        // keep this jar for the album (bonus digs are small extras, not a pad of their own)
+        if (!this.bonusRound) {
+          this.album.add({
+            at: Date.now(),
+            pad: this.pad.name,
+            padId: this.pad.id,
+            beads: this.collector.items.map((it) => [it.bead.type.id, it.bead.color] as [string, string]),
+          });
+        }
         this.emit("padEmpty", undefined);
       }
     }
