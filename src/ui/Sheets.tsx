@@ -138,17 +138,17 @@ function MiniJar({ jar }: { jar: JarEntry }) {
     const ctx = c.getContext("2d")!;
     ctx.scale(dpr, dpr);
     // hex-packed from the bottom of the glass (inside x 12..52, y 30..72)
-    const cols = 6, r = 40 / (cols * 2), rowH = r * 1.72;
+    const cols = 5, r = 40 / (cols * 2), rowH = r * 1.7;
     jar.beads.forEach(([id, color], i) => {
       const row = Math.floor(i / cols), col = i % cols;
-      const x = 12 + r + col * r * 2 + (row % 2 ? r * 0.5 : 0) + Math.sin(i * 12.9898) * 0.6;
+      const x = 12 + r + col * r * 2 + (row % 2 ? -r * 0.4 : r * 0.4) * (col === 0 || col === cols - 1 ? 0 : 1) + Math.sin(i * 12.9898) * 0.5;
       const y = 72 - r - row * rowH;
       if (y < 30) return;
       const type = anyType(id);
       if (type) {
-        const sp = getBeadSprite(type, color, r * 1.05, dpr);
-        const k = Math.min(1, (r * 2.3) / Math.max(sp.w, sp.h));
-        ctx.drawImage(sp.canvas, x - (sp.w * k) / 2, y - (sp.h * k) / 2, sp.w * k, sp.h * k);
+        // same sprite the jar uses in play, at album size
+        const sp = getBeadSprite(type, color, r * (type.shape === "oval" ? 0.8 : 1.12), dpr);
+        ctx.drawImage(sp.canvas, x - sp.w / 2, y - sp.h / 2, sp.w, sp.h);
       } else {
         ctx.fillStyle = color;
         ctx.beginPath();

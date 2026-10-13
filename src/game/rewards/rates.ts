@@ -109,6 +109,24 @@ export const HIDDEN_POOLS: Record<string, { id: string; w: number }[]> = {
     { id: "bigglass", w: 3 },
     { id: "holostar", w: 1 },
   ],
+  moon: [
+    { id: NONE, w: 38 },
+    { id: "candystar", w: 50 },
+    { id: "bigpearl", w: 22 },
+    { id: "bigglass", w: 14 },
+    { id: "key", w: 8 },
+    { id: "smallshell", w: 5 },
+    { id: "holostar", w: 1 },
+  ],
+  butterfly: [
+    { id: NONE, w: 38 },
+    { id: "bigopal", w: 50 },
+    { id: "minicherry", w: 22 },
+    { id: "bigglass", w: 14 },
+    { id: "duck", w: 8 },
+    { id: "eye", w: 5 },
+    { id: "bigduck", w: 1 },
+  ],
 };
 
 /** chance that one deep bead of any pad is replaced by an ultra-rare object (on top of the pools' 1%) */

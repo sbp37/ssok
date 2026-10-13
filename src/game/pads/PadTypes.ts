@@ -124,6 +124,14 @@ export const VARIANTS: Record<string, PadVariant[]> = {
     { id: "rainbowstar", name: "무지개 별", tier: "super", patch: { gelColor: { r: 226, g: 220, b: 248 }, transparency: 1.25, raritySkew: { rare: 2.6 }, hint: { color: "#ffe9ff", label: "???" } } },
     { id: "glassstar", name: "유리 별", tier: "rare", patch: { transparency: 1.4 } },
   ],
+  moon: [
+    { id: "clearmoon", name: "유리 달", tier: "rare", patch: { transparency: 1.4 } },
+    { id: "softmoon", name: "말랑 달", tier: "rare", patch: { softness: 1.3 } },
+  ],
+  butterfly: [
+    { id: "lavenderbutterfly", name: "라벤더 나비", tier: "rare", patch: { gelColor: { r: 226, g: 216, b: 244 } } },
+    { id: "clearbutterfly", name: "유리 나비", tier: "rare", patch: { transparency: 1.4 } },
+  ],
 };
 
 /** merge a variant onto its base pad */
@@ -263,6 +271,18 @@ const bearR = (() => {
     return sm2[i] * (1 - f) + sm2[j] * f;
   };
 })();
+
+/** Right-facing crescent: the inner arc stays right of the origin so every
+ * ray has one boundary. Angular smoothing rounds both tips for bead placement. */
+const moonR = polarOf((t) => [
+  0.5 + (t < Math.PI ? -1.5 : -0.38) * Math.abs(Math.sin(t)),
+  -0.95 * Math.cos(t),
+], 720, 5);
+
+/** Four rounded wings, larger above (y down), joined by a narrow body. */
+const butterflyR = (th: number) => 0.36
+  + 0.76 * (bump(th, -0.65, 0.5) + bump(th, -Math.PI + 0.65, 0.5))
+  + 0.57 * (bump(th, 0.7, 0.48) + bump(th, Math.PI - 0.7, 0.48));
 
 export const PADS: readonly PadType[] = [
   {
@@ -496,6 +516,41 @@ export const PADS: readonly PadType[] = [
     grip: 1.02,
     beads: { surface: 50, typeSkew: { gold: 2, gem: 1.4, pearl: 1.3 }, kingChance: 0.5 },
     hint: { color: "#f3dcc0", label: "곰돌이" },
+  },
+  {
+    id: "moon",
+    name: "달",
+    glyph: "☾",
+    outline: moonR,
+    noise: 0.006,
+    gelColor: { r: 248, g: 236, b: 198 },
+    transparency: 1.15,
+    thickness: 1,
+    softness: 1,
+    stretch: 1.05,
+    wobble: 1,
+    // Both crescent tips release easily; the broad middle holds a little harder.
+    resistance: (_xn, yn) => 1.12 - 0.32 * sm(clamp01(Math.abs(yn) / 0.85)),
+    grip: 1,
+    beads: { surface: 46, typeSkew: { star: 3, pearl: 1.6 } },
+    hint: { color: "#fff0c4", label: "별사탕" },
+  },
+  {
+    id: "butterfly",
+    name: "나비",
+    glyph: "⋈",
+    outline: butterflyR,
+    noise: 0.006,
+    gelColor: { r: 210, g: 224, b: 244 },
+    transparency: 1.1,
+    thickness: 0.95,
+    softness: 1.05,
+    stretch: 1.1,
+    wobble: 1.05,
+    coupling: 0.65,
+    grip: 0.98,
+    beads: { surface: 46, typeSkew: { flower: 2, gem: 1.6 }, raritySkew: { special: 1.4 } },
+    hint: { color: "#e6ddff", label: "오팔" },
   },
 ];
 
