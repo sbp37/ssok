@@ -1092,8 +1092,8 @@ body,
 
 /* ── notice bars ───────────────────────────────────────────────
  * Every on-pad notice (completion, finds, pad name, how-to lines) is one
- * look: a dark translucent band that fades out to both sides, white text.
- * Overrides the older card/pill looks above.
+ * look: a dark navy translucent band, only as wide as its words, that fades
+ * out at both ends; crisp top and bottom, white bold text.
  */
 .toast,
 .pad-title,
@@ -1101,118 +1101,101 @@ body,
 .glimmer,
 .tactile-hint,
 .hint {
-  --bar: rgba(46, 26, 40, 0.8);
-  background: linear-gradient(90deg, rgba(46, 26, 40, 0) 0%, var(--bar) 18%, var(--bar) 82%, rgba(46, 26, 40, 0) 100%);
-  /* feathered top and bottom too, like a soft shadow band rather than a hard strip */
-  -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 9%, #000 91%, transparent 100%);
-  mask-image: linear-gradient(180deg, transparent 0, #000 9%, #000 91%, transparent 100%);
+  --bar: rgba(18, 28, 56, 0.78);
+  background: linear-gradient(90deg, rgba(18, 28, 56, 0) 0%, var(--bar) 18%, var(--bar) 82%, rgba(18, 28, 56, 0) 100%);
   color: #fff;
   font-weight: 700;
   border: none;
   border-radius: 0;
   box-shadow: none;
   backdrop-filter: none;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
+  text-shadow: none;
   text-align: center;
   letter-spacing: -0.01em;
+  /* as wide as the words, centred, never edge to edge */
+  width: max-content;
+  max-width: calc(100% - 24px);
+  padding: 8px 34px;
+  font-size: 14px;
 }
 .toast small,
 .done small,
 .hint small {
-  color: rgba(255, 255, 255, 0.74);
+  color: rgba(255, 255, 255, 0.72);
 }
-/* full-width band, centred line */
 .pad-title,
-.done {
-  left: 10px;
-  right: 10px;
-  width: auto;
-  max-width: none;
-  transform: none;
+.done,
+.glimmer,
+.tactile-hint,
+.hint {
+  left: 50%;
+  right: auto;
+  transform: translateX(-50%);
 }
 .toasts {
-  left: 10px;
-  right: 10px;
-  align-items: stretch;
+  align-items: center;
 }
-.toast {
-  padding: 13px 40px;
-  font-size: 15px;
-  font-weight: 700;
-}
-.toast.soft {
-  --bar: rgba(46, 26, 40, 0.7);
-  color: #fff;
-  font-weight: 600;
-}
+.toast.soft { --bar: rgba(18, 28, 56, 0.66); font-weight: 600; color: #fff; }
 .toast.rare small { color: #ffd2e5; }
-.toast.hidden small { color: #e2d5ff; }
+.toast.hidden small { color: #dcd6ff; }
 .toast.ultra {
-  --bar: rgba(46, 26, 40, 0.86);
+  --bar: rgba(18, 28, 56, 0.86);
   color: #fff;
-  background: linear-gradient(90deg, rgba(46, 26, 40, 0) 0%, var(--bar) 24%, var(--bar) 76%, rgba(46, 26, 40, 0) 100%);
-  box-shadow: none;
+  background: linear-gradient(90deg, rgba(18, 28, 56, 0) 0%, var(--bar) 18%, var(--bar) 82%, rgba(18, 28, 56, 0) 100%);
 }
 .pad-title {
-  --bar: rgba(46, 26, 40, 0.72);
-  padding: 11px 40px;
-  font-size: 14px;
-  font-weight: 700;
-  color: #fff;
+  --bar: rgba(18, 28, 56, 0.66);
+  padding: 6px 30px;
+  font-size: 13px;
   animation: padBarIn 1.9s ease-out both;
 }
 @keyframes padBarIn {
-  0% { opacity: 0; transform: translateY(6px); }
-  13%, 76% { opacity: 1; transform: translateY(0); }
-  100% { opacity: 0; transform: translateY(-3px); }
+  0% { opacity: 0; transform: translate(-50%, 6px); }
+  13%, 76% { opacity: 1; transform: translate(-50%, 0); }
+  100% { opacity: 0; transform: translate(-50%, -3px); }
 }
 .done {
-  padding: 14px 40px 15px;
-  font-size: 13px;
-  font-weight: 500;
-  color: #fff;
+  padding: 10px 40px 11px;
   animation: doneBarIn 0.45s ease-out;
 }
 .done strong {
-  font-size: 17px;
+  font-size: 16px;
   letter-spacing: -0.03em;
 }
 .done small {
   font-size: 12px;
-  margin-top: 2px;
+  font-weight: 500;
+  margin-top: 1px;
 }
 @keyframes doneBarIn {
-  from { opacity: 0; transform: translateY(6px); }
-  to { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; transform: translate(-50%, 6px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
 }
 .done-share {
   display: inline-block;
-  margin: 7px auto 0;
-  min-height: 26px;
-  padding: 3px 12px;
+  margin: 6px auto 0;
+  min-height: 24px;
+  padding: 2px 11px;
   border: 1px solid rgba(255, 255, 255, 0.4);
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.1);
   color: #fff;
-  font-size: 12px;
+  font-size: 11.5px;
   font-weight: 600;
 }
 .glimmer,
-.tactile-hint,
-.hint {
-  left: 10px;
-  right: 10px;
-  padding: 12px 40px;
-  font-size: 14px;
-  font-weight: 700;
-  color: #fff;
+.tactile-hint {
+  --bar: rgba(18, 28, 56, 0.66);
+  font-size: 13px;
+  font-weight: 600;
+  white-space: normal;
 }
 .hint {
-  --bar: rgba(46, 26, 40, 0.72);
-  font-size: 15px;
+  --bar: rgba(18, 28, 56, 0.66);
 }
 .hint small {
-  margin-top: 3px;
-  font-size: 11.5px;
+  margin-top: 2px;
+  font-size: 11px;
+  font-weight: 500;
 }
 
 /* ── compact doors ─────────────────────────────────────────────
