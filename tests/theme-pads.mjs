@@ -5,7 +5,7 @@ const { THEME_PADS } = await load('pads/ThemePads');
 const { PADS } = await load('pads/PadTypes');
 const { generatePad } = await load('beads/Bead');
 const { Rng } = await load('util/math');
-assert.deepEqual(THEME_PADS.map(p => p.id), ['maple', 'pumpkin', 'snowman', 'snowflake']);
+assert.deepEqual(THEME_PADS.map(p => p.id), ['maple', 'pumpkin', 'snowman', 'snowflake', 'sakura', 'tulip', 'watermelon', 'icecream']);
 assert(THEME_PADS.every(p => !PADS.some(base => base.id === p.id)), 'limited pads stay outside the base catalog');
 const rows = [];
 for (const pad of THEME_PADS) {
@@ -36,4 +36,4 @@ for (const pad of THEME_PADS) {
   rows.push({ pad: pad.id, minRadius: +Math.min(...samples).toFixed(3), target: pad.beads.surface, minPlaced: Math.min(...counts), average });
 }
 console.table(rows);
-console.log('PASS: four limited silhouettes / continuity + wrap / broad radii / 200 near-target bead layouts');
+console.log(`PASS: ${THEME_PADS.length} limited silhouettes / continuity + wrap / broad radii / ${THEME_PADS.length * 50} near-target bead layouts`);
