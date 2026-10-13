@@ -2,9 +2,10 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { Game } from "../game/Game";
 import { getBeadSprite } from "../game/beads/BeadSprites";
 import type { BeadType } from "../game/beads/BeadTypes";
-import { ULTRA_TYPES } from "../game/beads/BeadTypes";
+import { HIDDEN_TYPES, ULTRA_TYPES } from "../game/beads/BeadTypes";
 import { PADS, variantCount } from "../game/pads/PadTypes";
-import { SPECIAL_TYPES, RARE_TYPES } from "../game/rewards/treasure";
+import { SHELF_SIZE, SPECIAL_TYPES, RARE_TYPES, TREASURE_TYPES } from "../game/rewards/treasure";
+import { TREASURE_SETS } from "../game/rewards/sets";
 import { HIDDEN_POOLS } from "../game/rewards/rates";
 import { haptics } from "../game/haptics";
 import { sfx } from "../game/audio/Sfx";
@@ -61,6 +62,93 @@ export function BeadIcon({ type, size, found }: { type: BeadType; size: number; 
   return <canvas ref={ref} style={{ width: size, height: size }} />;
 }
 
+const asset = (name: string) => `${import.meta.env.BASE_URL}collection/${name}`;
+const typeOf = (id: string) => TREASURE_TYPES.find((t) => t.id === id);
+const dateLabel = (at?: number) => {
+  if (!at) return "";
+  const d = new Date(at);
+  return `${d.getMonth() + 1}월 ${d.getDate()}일`;
+};
+
+/** one treasure, up close: when and where it was first found, shelf / pin actions */
+function TreasureDetail({ game, id, onClose }: { game: Game; id: string; onClose: () => void }) {
+  const t = game.treasure;
+  const type = typeOf(id);
+  if (!type) return null;
+  const n = t.count(id);
+  const first = t.firstFound(id);
+  const ultra = ULTRA_TYPES.some((u) => u.id === id);
+  const pinnable = !n && HIDDEN_TYPES.some((h) => h.id === id);
+  const shelfFull = t.shelf.length >= SHELF_SIZE && !t.onShelf(id);
+  const where = n
+    ? [dateLabel(first.at), first.pad ? `${first.pad} 패드에서 처음 찾음` : "처음 찾음"].filter(Boolean).join(" · ")
+    : ultra ? "어느 패드든 아주 드물게 깊은 곳에" : hidesIn(id) ? `${hidesIn(id).replace("?", "")}에 자주 숨어` : "희귀 패드에서 잘 나와";
+  return (
+    <div className="detail-wrap" onClick={onClose}>
+      <div className="detail" role="dialog" aria-label={n ? type.name : "아직 못 찾은 보물"} onClick={(e) => e.stopPropagation()}>
+        <BeadIcon type={type} size={96} found={n > 0} />
+        <div className="detail-name">{n ? type.name : "???"}</div>
+        <div className="detail-sub">{n ? `×${n} · ${where}` : where}</div>
+        {n > 0 && (
+          <button
+            className="btn"
+            disabled={shelfFull}
+            onClick={() => {
+              haptics.press();
+              t.toggleShelf(id);
+              onClose();
+            }}
+          >
+            {t.onShelf(id) ? "진열장에서 빼기" : shelfFull ? `진열장이 꽉 찼어 (${SHELF_SIZE}칸)` : "진열장에 놓기"}
+          </button>
+        )}
+        {pinnable && (
+          <button
+            className="btn"
+            onClick={() => {
+              haptics.press();
+              t.setTarget(t.target === id ? null : id);
+              onClose();
+            }}
+          >
+            {t.target === id ? "그만 찾기" : "📍 이거 찾을래"}
+            <small>{t.target === id ? "지금 찾는 중" : "조금 더 자주 묻혀 있게 할게"}</small>
+          </button>
+        )}
+        <button className="link" onClick={onClose}>
+          닫기
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** the shelf: up to five favourite treasures, on show */
+function Shelf({ game, onPick }: { game: Game; onPick: (id: string) => void }) {
+  const ids = game.treasure.shelf;
+  return (
+    <div className="shelf" style={{ backgroundImage: `url(${asset("shelf.svg")})` }}>
+      {Array.from({ length: SHELF_SIZE }, (_, i) => {
+        const id = ids[i];
+        const type = id ? typeOf(id) : undefined;
+        return (
+          <button
+            key={i}
+            className={"shelf-slot" + (type ? "" : " empty")}
+            style={{ left: `${10 + i * 20}%` }}
+            disabled={!type}
+            aria-label={type ? type.name : "빈 칸"}
+            onClick={() => type && onPick(type.id)}
+          >
+            {type && <BeadIcon type={type} size={48} found />}
+          </button>
+        );
+      })}
+      {!ids.length && <div className="shelf-empty">보물을 찾으면 여기에 놓을 수 있어</div>}
+    </div>
+  );
+}
+
 /**
  * The collection: what you have seen. Pads in their real gel colours (dark ???
  * when not yet found), then the treasure box. Nothing here is tappable into
@@ -68,6 +156,7 @@ export function BeadIcon({ type, size, found }: { type: BeadType; size: number; 
  */
 export function CollectionSheet({ game, onClose }: { game: Game; onClose: () => void }) {
   const [, tick] = useState(0);
+  const [detail, setDetail] = useState<string | null>(null);
   const [shareNotice, setShareNotice] = useState("");
   const { busy: shareBusy, share } = useShare(setShareNotice);
   useEffect(() => {
@@ -87,6 +176,36 @@ export function CollectionSheet({ game, onClose }: { game: Game; onClose: () => 
   };
   return (
     <Sheet title="컬렉션" sub={`패드 ${foundPads}/${PADS.length} · 보물 ${t.found}/${t.total}`} onClose={onClose}>
+      <div className="section">진열장</div>
+      <Shelf game={game} onPick={setDetail} />
+      <div className="section">세트</div>
+      <div className="sets">
+        {TREASURE_SETS.map((set) => {
+          const have = set.ids.filter((id) => t.has(id)).length;
+          const done = have === set.ids.length;
+          return (
+            <div key={set.id} className={"set-row" + (done ? " complete" : "")}>
+              <span className="set-name">
+                {done && <img src={asset("set-badge.svg")} alt="완성" width={20} height={20} />}
+                {set.name}
+              </span>
+              <span className="set-items">
+                {set.ids.map((id) => {
+                  const ty = typeOf(id);
+                  return ty ? (
+                    <button key={id} className="set-item" onClick={() => setDetail(id)} aria-label={t.has(id) ? ty.name : "???"}>
+                      <BeadIcon type={ty} size={28} found={t.has(id)} />
+                    </button>
+                  ) : null;
+                })}
+              </span>
+              <span className="set-n">
+                {have}/{set.ids.length}
+              </span>
+            </div>
+          );
+        })}
+      </div>
       <div className="section">패드</div>
       <div className="grid pads">
         {PADS.map((p) => {
@@ -113,23 +232,36 @@ export function CollectionSheet({ game, onClose }: { game: Game; onClose: () => 
           <div className="grid">
             {types.map((ty) => {
               const n = countOf(ty.id);
-              return (
-                <div key={ty.id} className={"card" + (n ? "" : " unknown")}>
+              const treasure = title !== "특수";
+              const pinned = t.target === ty.id;
+              const body = (
+                <>
+                  {pinned && <img className="card-pin" src={asset("pin.svg")} alt="찾는 중" width={16} height={16} />}
                   <BeadIcon type={ty} size={44} found={n > 0} />
                   <div className="card-name">{n ? ty.name : "???"}</div>
-                  <div className="card-n">{n ? `×${n}` : hidesIn(ty.id)}</div>
+                  <div className="card-n">{n ? `×${n}` : pinned ? "찾는 중" : hidesIn(ty.id)}</div>
+                </>
+              );
+              return treasure ? (
+                <button key={ty.id} className={"card tap" + (n ? "" : " unknown") + (pinned ? " pinned" : "")} onClick={() => setDetail(ty.id)}>
+                  {body}
+                </button>
+              ) : (
+                <div key={ty.id} className={"card" + (n ? "" : " unknown")}>
+                  {body}
                 </div>
               );
             })}
           </div>
         </div>
       ))}
-      <div className="sheet-foot">빈칸은 어느 패드에 숨어 있을까.</div>
+      <div className="sheet-foot">보물을 누르면 진열하거나 📍 찾을 보물로 정할 수 있어.</div>
       <button className="collection-share" disabled={shareBusy} onClick={onShare}>
         <span aria-hidden="true">↗</span>
         {shareBusy ? "공유 준비 중…" : "친구에게 공유하기"}
       </button>
       {shareNotice && <div className="share-notice" role="status">{shareNotice}</div>}
+      {detail && <TreasureDetail game={game} id={detail} onClose={() => setDetail(null)} />}
     </Sheet>
   );
 }

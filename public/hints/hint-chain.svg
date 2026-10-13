@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" fill="none" stroke-linecap="round" stroke-linejoin="round" role="img" aria-labelledby="title desc">
+  <title id="title">구슬 줄 당기기</title>
+  <desc id="desc">이어진 구슬 줄 끝을 검지로 잡고 오른쪽으로 길게 당기는 모습.</desc>
+  <defs>
+    <linearGradient id="bead" x1="0" y1="0" x2="1" y2="1" gradientUnits="objectBoundingBox">
+      <stop stop-color="#fbd7e6"/><stop offset="1" stop-color="#d9c7ef"/>
+    </linearGradient>
+  </defs>
+  <g stroke="#d9779f" stroke-width="4.5">
+    <path d="M14 86c22 0 36-4 54-16" stroke-opacity="0.65"/>
+    <circle cx="16" cy="86" r="8" fill="url(#bead)" stroke="#d9779f" stroke-width="4"/>
+    <circle cx="34" cy="84" r="8" fill="url(#bead)" stroke="#d9779f" stroke-width="4"/>
+    <circle cx="52" cy="78" r="8" fill="url(#bead)" stroke="#d9779f" stroke-width="4"/>
+    <circle cx="69" cy="68" r="10" fill="url(#bead)" stroke="#d9779f" stroke-width="4"/>
+    <g transform="translate(69 7) rotate(0)" opacity="0.85" stroke="#2b2730" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M-12 0v43c0 10 5 17 12 17s12-7 12-17V0" fill="#ffffff"/>
+    <path d="M-6 39v7c0 5 12 5 12 0v-7c0-5-12-5-12 0Z" fill="none" stroke-width="2.5"/>
+  </g>
+    <path d="M70 98h37" stroke-dasharray="3 7"/>
+    <path d="m98 88 10 10-10 10"/>
+  </g>
+</svg>

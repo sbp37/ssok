@@ -17,6 +17,8 @@ class Sfx {
   private pendingSound: { play: () => void; completion: boolean; at: number } | null = null;
   private gestures = new Set<number>();
   private startAt = 0;
+  /** reasons the output is paused right now ("ad", "hidden"); silent until all are released */
+  private holds = new Set<string>();
   enabled = true;
 
   constructor() {
@@ -26,6 +28,32 @@ class Sfx {
     } catch {
       /* ignore */
     }
+    // backgrounded app / switched tab: no sound until it is back in front
+    if (typeof document !== "undefined" && typeof document.addEventListener === "function") {
+      document.addEventListener("visibilitychange", () => {
+        if (document.hidden) this.pause("hidden");
+        else this.unpause("hidden");
+      });
+    }
+  }
+
+  /** pause all output (e.g. while a full-screen ad plays). Safe to call repeatedly. */
+  pause(reason: string) {
+    this.holds.add(reason);
+    this.pendingSound = null;
+    if (this.ctx && this.ctx.state === "running") void this.ctx.suspend().catch(() => { /* ignore */ });
+  }
+
+  /** resume once nothing holds the output any more */
+  unpause(reason: string) {
+    if (!this.holds.delete(reason) || this.holds.size) return;
+    if (this.ctx && this.ctx.state === "suspended") {
+      void this.ctx.resume().catch(() => { /* the next gesture retries */ });
+    }
+  }
+
+  get held() {
+    return this.holds.size > 0;
   }
 
   setEnabled(v: boolean) {
@@ -73,7 +101,7 @@ class Sfx {
     }
     // A touch pointerdown need not activate audio. Retry from pointerup/touchend
     // as well; a rejected/pending resume must never become an unhandled rejection.
-    if (this.ctx && this.ctx.state !== "running") {
+    if (this.ctx && this.ctx.state !== "running" && !this.holds.size) {
       void this.ctx.resume().then(() => this.flushPendingSound()).catch(() => { /* next gesture retries */ });
     }
     if (this.ctx && !this.warmed) {
@@ -116,6 +144,7 @@ class Sfx {
   }
 
   private defer(play: () => void, completion: boolean) {
+    if (this.holds.size) return;
     if (!this.enabled || (!completion && this.pendingSound?.completion)) return;
     // A single latest cue, never a backlog. Completion takes priority over steps.
     this.pendingSound = { play, completion, at: performance.now() };

@@ -18,8 +18,8 @@ function promotionModeGuard(value: string | undefined): Plugin {
       if (!["", "test", "live"].includes(mode)) {
         throw new Error(`VITE_PROMOTION_MODE must be "live", "test" or unset – got ${JSON.stringify(mode)}`);
       }
-      const label = mode === "live" ? "LIVE – real payouts" : "TEST_ codes only";
-      console.log(`\n  [ssok] promotion mode: ${label}\n`);
+      const label = mode === "live" ? "LIVE – real payouts, live ad groups" : "TEST_ codes only, test ad groups";
+      console.log(`\n  [ssok] promotion + ad mode: ${label}\n`);
     },
   };
 }

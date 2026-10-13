@@ -1,4 +1,5 @@
 import type { Rarity } from "../beads/BeadTypes";
+import { VARIANT_PERKS } from "../rewards/rates";
 
 /**
  * A pad is data. Every pad shares the same gel physics, pull state machine,
@@ -128,6 +129,10 @@ export const VARIANTS: Record<string, PadVariant[]> = {
 /** merge a variant onto its base pad */
 export function applyVariant(base: PadType, v: PadVariant): PadType {
   const { raritySkew, ...rest } = v.patch;
+  // every variant carries its tier's perks; a variant's own skew only ever raises them
+  const perks = VARIANT_PERKS[v.tier];
+  const skew = { ...(base.beads.raritySkew ?? {}), ...(raritySkew ?? {}) };
+  skew.rare = Math.max(skew.rare ?? 1, perks.rareSkew);
   return {
     ...base,
     ...rest,
@@ -135,7 +140,12 @@ export function applyVariant(base: PadType, v: PadVariant): PadType {
     name: v.name,
     variantOf: base.id,
     tier: v.tier,
-    beads: { ...base.beads, raritySkew: { ...(base.beads.raritySkew ?? {}), ...(raritySkew ?? {}) } },
+    beads: {
+      ...base.beads,
+      raritySkew: skew,
+      rareCenterChance: Math.max(base.beads.rareCenterChance ?? 0, perks.rareCenterChance),
+      kingChance: Math.max(base.beads.kingChance ?? 0, perks.kingChance),
+    },
   };
 }
 

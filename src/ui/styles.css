@@ -187,8 +187,8 @@ body,
   position: absolute;
   inset: 0;
   pointer-events: none;
-  /* bottom: 12px of air above the ad slot, so no button ever sits on the banner */
-  padding: calc(env(safe-area-inset-top, 0px) + 8px) 18px 14px;
+  /* bottom: a clear band of air above the ad slot, so no button ever sits next to the banner */
+  padding: calc(env(safe-area-inset-top, 0px) + 8px) 18px 30px;
   display: flex;
   flex-direction: column;
 }
@@ -387,7 +387,8 @@ body,
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
-  top: 67%;
+  /* over the emptied pad, clear of the NEXT tease and the doors below it on any height */
+  top: clamp(calc(env(safe-area-inset-top, 0px) + 104px), 24%, 38%);
   padding: 8px 18px;
   width: max-content;
   max-width: 90%;
@@ -421,8 +422,9 @@ body,
 }
 .gate {
   display: flex;
-  align-items: center;
-  gap: 6px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
   white-space: nowrap;
 }
 .gate .btn {
@@ -436,6 +438,14 @@ body,
 .gate .link {
   white-space: nowrap;
 }
+/* the plain way on: a real button, quieter than the ad door but never a hidden link */
+.btn.ghost {
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: inset 0 0 0 1.5px rgba(43, 39, 48, 0.18);
+  padding: 11px 18px;
+  font-size: 15px;
+}
 .gate .btn small {
   font-size: 11px;
   font-weight: 500;
@@ -444,6 +454,82 @@ body,
 }
 .gate .btn:disabled {
   opacity: 0.7;
+}
+
+/* "광고 보고 고르기": three pads in their real colours, pick one */
+.choices {
+  display: flex;
+  gap: 8px;
+  animation: btnIn 0.5s ease-out;
+}
+.choice {
+  font: inherit;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 8px 10px 7px;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(43, 39, 48, 0.08);
+  border-radius: 16px;
+  box-shadow: 0 4px 14px rgba(43, 39, 48, 0.1);
+  cursor: pointer;
+  transition: transform 0.12s ease;
+}
+.choice:active {
+  transform: scale(0.95);
+}
+.choice span {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+/* "광고 보고 살짝 보기": one small pill under the glimmer line, mid-round */
+.peek {
+  position: absolute;
+  left: 50%;
+  top: 73%;
+  transform: translateX(-50%);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: #7a5aa8;
+  background: rgba(255, 255, 255, 0.86);
+  border: 1px solid rgba(122, 90, 168, 0.18);
+  border-radius: 999px;
+  padding: 7px 14px;
+  cursor: pointer;
+  box-shadow: 0 3px 12px rgba(117, 74, 93, 0.08);
+  backdrop-filter: blur(6px);
+  animation: btnIn 0.5s ease-out;
+}
+.peek:disabled {
+  opacity: 0.6;
+}
+
+/* "stuck?" gesture hint: the finger's bead sits on the item, fades in, mimes once or twice, fades out */
+.stuck-hint {
+  position: absolute;
+  width: 84px;
+  height: 84px;
+  transform: translate(-48%, -70%);
+  pointer-events: none;
+  opacity: 0;
+  animation: stuckHint 3.2s ease-in-out forwards;
+  filter: drop-shadow(0 4px 10px rgba(117, 74, 93, 0.18));
+}
+@keyframes stuckHint {
+  0% { opacity: 0; transform: translate(-48%, -62%) scale(0.92); }
+  15% { opacity: 0.92; transform: translate(-48%, -70%) scale(1); }
+  45% { opacity: 0.92; transform: translate(-48%, -78%) scale(1); }
+  60% { opacity: 0.92; transform: translate(-48%, -70%) scale(1); }
+  85% { opacity: 0.92; transform: translate(-48%, -78%) scale(1); }
+  100% { opacity: 0; transform: translate(-48%, -78%) scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .stuck-hint { animation: stuckHintFade 3.2s ease-in-out forwards; transform: translate(-48%, -70%); }
+  @keyframes stuckHintFade { 0%, 100% { opacity: 0; } 15%, 85% { opacity: 0.92; } }
 }
 
 /* top-right cluster */
@@ -843,4 +929,317 @@ body,
   background: rgba(255, 255, 255, 0.7);
   font-weight: 500;
   animation-duration: 1.5s;
+}
+
+/* ── collection: shelf, sets, treasure detail ─────────────────── */
+.shelf {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 3 / 1;
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
+  margin-bottom: 4px;
+}
+.shelf-slot {
+  position: absolute;
+  top: 58%;
+  width: 52px;
+  height: 52px;
+  transform: translate(-50%, -50%);
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  filter: drop-shadow(0 4px 6px rgba(117, 74, 93, 0.18));
+}
+.shelf-slot:active:not(:disabled) {
+  transform: translate(-50%, -50%) scale(0.94);
+}
+.shelf-slot.empty {
+  cursor: default;
+  filter: none;
+}
+.shelf-empty {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 18%;
+  text-align: center;
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+.sets {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.set-row {
+  display: grid;
+  grid-template-columns: 72px 1fr auto;
+  align-items: center;
+  gap: 8px;
+  background: #fff;
+  border: 1px solid rgba(43, 39, 48, 0.06);
+  border-radius: 14px;
+  padding: 6px 12px;
+}
+.set-row.complete {
+  background: linear-gradient(90deg, #fff4f8, #f4efff);
+  border-color: rgba(217, 119, 159, 0.28);
+}
+.set-name {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink);
+}
+.set-items {
+  display: flex;
+  gap: 4px;
+}
+.set-item {
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  line-height: 0;
+}
+.set-n {
+  font-size: 12px;
+  color: var(--ink-soft);
+  font-variant-numeric: tabular-nums;
+}
+.card.tap {
+  font: inherit;
+  position: relative;
+  cursor: pointer;
+}
+.card.tap:active {
+  transform: scale(0.96);
+}
+.card.pinned {
+  border-color: rgba(217, 119, 159, 0.55);
+  box-shadow: 0 0 0 2px rgba(217, 119, 159, 0.14);
+}
+.card-pin {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+}
+.detail-wrap {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(43, 39, 48, 0.28);
+  animation: fadeIn 0.18s ease-out;
+}
+.detail {
+  width: min(320px, 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 22px 18px 12px;
+  border-radius: 22px;
+  background: linear-gradient(180deg, #fffdfb, #fbf6fa);
+  box-shadow: 0 18px 50px rgba(43, 39, 48, 0.22);
+  animation: btnIn 0.28s ease-out;
+}
+.detail .btn {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  padding: 12px 18px;
+  font-size: 15px;
+}
+.detail .btn small {
+  font-size: 11px;
+  font-weight: 500;
+  opacity: 0.7;
+}
+.detail-name {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+.detail-sub {
+  font-size: 12px;
+  color: var(--ink-soft);
+  text-align: center;
+  margin-bottom: 4px;
+}
+@keyframes fadeIn {
+  from { opacity: 0; }
+}
+.next-pin {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  margin-top: 2px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #b4577f;
+}
+
+/* ── notices ───────────────────────────────────────────────────
+ * Two looks, both only as wide as their words and centred:
+ *  - the moments (completion, finds): a small white glass card
+ *  - the passing lines (pad name, how-to, glimmer): just text with a soft
+ *    white glow, nothing drawn behind it
+ */
+.toast,
+.pad-title,
+.done,
+.glimmer,
+.tactile-hint,
+.hint {
+  width: max-content;
+  max-width: calc(100% - 24px);
+  text-align: center;
+  letter-spacing: -0.01em;
+  border: none;
+  box-shadow: none;
+  backdrop-filter: none;
+  text-shadow: none;
+}
+.pad-title,
+.done,
+.glimmer,
+.tactile-hint,
+.hint {
+  left: 50%;
+  right: auto;
+  transform: translateX(-50%);
+}
+.toasts {
+  align-items: center;
+}
+
+/* moments: white glass card */
+.done,
+.toast,
+.toast.soft,
+.toast.ultra {
+  background: rgba(255, 255, 255, 0.64);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  border-radius: 16px;
+  box-shadow: 0 4px 16px rgba(120, 80, 110, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  color: #3b2f45;
+  font-weight: 700;
+}
+.toast {
+  padding: 7px 16px;
+  font-size: 13.5px;
+}
+.toast small,
+.done small {
+  color: rgba(59, 47, 69, 0.6);
+  font-weight: 500;
+}
+.toast.soft { font-weight: 600; color: #4a3d55; }
+.toast.rare small { color: #b4577f; }
+.toast.hidden small { color: #7a5aa8; }
+.toast.ultra { background: rgba(255, 255, 255, 0.82); }
+.done {
+  padding: 9px 20px 10px;
+  animation: doneCardIn 0.45s ease-out;
+}
+.done strong {
+  font-size: 15px;
+  letter-spacing: -0.03em;
+}
+.done small {
+  font-size: 12px;
+  margin-top: 1px;
+}
+@keyframes doneCardIn {
+  from { opacity: 0; transform: translate(-50%, 6px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+.done-share {
+  display: inline-block;
+  margin: 6px auto 0;
+  min-height: 24px;
+  padding: 2px 11px;
+  border: 1px solid rgba(139, 82, 107, 0.28);
+  background: rgba(255, 255, 255, 0.7);
+  color: #8b526b;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+/* passing lines: text only, a white glow keeps it readable over beads */
+.pad-title,
+.glimmer,
+.tactile-hint,
+.hint {
+  background: none;
+  padding: 2px 8px;
+  color: #4a3a63;
+  font-weight: 700;
+  text-shadow: 0 0 8px #fff, 0 0 3px #fff, 0 0 1px #fff;
+}
+.pad-title {
+  font-size: 13px;
+  animation: padLineIn 1.9s ease-out both;
+}
+@keyframes padLineIn {
+  0% { opacity: 0; transform: translate(-50%, 6px); }
+  13%, 76% { opacity: 1; transform: translate(-50%, 0); }
+  100% { opacity: 0; transform: translate(-50%, -3px); }
+}
+.glimmer,
+.tactile-hint {
+  font-size: 13px;
+  font-weight: 600;
+  white-space: normal;
+}
+.hint {
+  font-size: 15px;
+}
+.hint small {
+  margin-top: 3px;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: rgba(74, 58, 99, 0.7);
+}
+
+/* ── compact doors ─────────────────────────────────────────────
+ * The ad door and the plain way on: small, quiet pills that share one width.
+ */
+.gate {
+  align-self: flex-start;
+  gap: 6px;
+}
+.gate .btn {
+  padding: 5px 13px 6px;
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.25;
+  box-shadow: none;
+  animation: btnIn 0.35s ease-out;
+}
+.gate .btn small {
+  font-size: 9.5px;
+  margin-top: 0;
+  line-height: 1.2;
+}
+.gate .btn.ghost {
+  padding: 5px 13px;
+  font-size: 12px;
+  box-shadow: inset 0 0 0 1px rgba(43, 39, 48, 0.16);
+  background: rgba(255, 255, 255, 0.6);
+}
+@media (prefers-reduced-motion: reduce) {
+  .done, .pad-title { animation: none; }
 }

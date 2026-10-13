@@ -17,10 +17,10 @@ import { beadFit, drawEmbeddedBead, embeddedPosition, embeddedScale } from "./re
 import { drawFinishStar, drawJarFinale, drawPadFinale, FINALE_DURATION } from "./render/Finale";
 import { PADS, padById, resolvePad, type PadType } from "./pads/PadTypes";
 import { DiscoveryProvider, PadProgress, isRareVariant, type NextPadProvider } from "./pads/progress";
-import { roundBeadBudget } from "./pads/pacing";
-import { DAY_NONE_FACTOR, FIRST_TREASURE_GUARANTEE, HIDDEN_POOLS, NONE, ULTRA_SURFACE_CHANCE } from "./rewards/rates";
-import { ULTRA_TYPES } from "./beads/BeadTypes";
-import { TreasureStore, treasureKind, type TreasureKind } from "./rewards/treasure";
+import { BONUS_BUDGET, roundBeadBudget } from "./pads/pacing";
+import { FIRST_TREASURE_GUARANTEE, HIDDEN_POOLS, NONE, ULTRA_SURFACE_CHANCE, VARIANT_PERKS, hiddenWeight, missingBoost } from "./rewards/rates";
+import { HIDDEN_TYPES, ULTRA_TYPES } from "./beads/BeadTypes";
+import { TreasureStore, treasureKind, type FindResult, type TreasureKind } from "./rewards/treasure";
 import type { BeadType } from "./beads/BeadTypes";
 import { TactileController, type TactileHost } from "./fibers/TactileController";
 import { roundTactile, tactileName } from "./fibers/Tactile";
@@ -32,11 +32,16 @@ export interface GameEvents {
   slipped: undefined;
   /** how much of the current pad has been emptied */
   progress: { emptied: number; remaining: number; total: number };
-  padChange: { pad: PadType; newPad: boolean; newVariant: boolean };
+  padChange: { pad: PadType; newPad: boolean; newVariant: boolean; bonus?: boolean };
   /** the round's one-line how-to for its featured material (null = hide) */
   tactileHint: { text: string | null };
   /** a rare bead / hidden object / ultra landed in the treasure box */
-  treasure: { type: BeadType; kind: TreasureKind; isNew: boolean; count: number; padName: string };
+  treasure: {
+    type: BeadType; kind: TreasureKind; isNew: boolean; count: number; padName: string;
+    /** the pinned treasure was found */ targetHit: boolean;
+    /** a collection set just completed */ setDone?: string;
+    /** the first find went straight onto the shelf */ shelved: boolean;
+  };
 }
 
 interface Flash {
@@ -74,6 +79,10 @@ export class Game extends Emitter<GameEvents> implements PadView, TactileHost {
   beads: Bead[] = [];
   collector = new Collector();
   private pulls = new Map<number, Pull>();
+  /** treasures already saved at their POP → what the find meant (for the landing toast) */
+  private creditedNew = new Map<Bead, FindResult>();
+  /** a first-time treasure came out of the pad on the table */
+  private foundNewThisPad = false;
   /** yarn, strands, swirl, film: everything that is not an ordinary bead pull */
   private tactile = new TactileController(this, (b, id, dx, dy, speed) => this.doPop(b, id, dx, dy, speed));
   private hint: string | null = null;
@@ -106,6 +115,8 @@ export class Game extends Emitter<GameEvents> implements PadView, TactileHost {
   private startHidden: string | null | undefined = undefined;
   /** while > time, the buried object is shown clearly (the "살짝 보기" hint) */
   private peekUntil = -1;
+  /** the pad on the table is a small bonus dig: not a completion, not a progress step */
+  private bonusRound = false;
   private padTotal = 0;
   private lastSocketRefresh = 0;
   /** Completion follows every flight and the existing collector sleep, not a POP timer. */
@@ -157,7 +168,11 @@ export class Game extends Emitter<GameEvents> implements PadView, TactileHost {
       if (prog.currentDone) {
         // emptied last time but never walked through the door → continue at the next pad, not the same one
         pad = (prog.nextId ? resolvePad(prog.nextId) : undefined) ?? this.nextProvider.next(prog);
-        this.startHidden = prog.nextId ? prog.nextHidden : undefined;
+        // a passing variant is only caught through its rewarded door – a restart opens the plain pad
+        const passing = !!pad.variantOf;
+        if (passing) pad = padById(pad.variantOf!) ?? pad;
+        // the variant's guaranteed treasure stays with the variant: the plain pad rolls its own
+        this.startHidden = prog.nextId && !passing ? prog.nextHidden : undefined;
         prog.open(pad);
       } else {
         pad = prog.current; // mid-pad exit → same pad, fresh
@@ -270,26 +285,40 @@ export class Game extends Emitter<GameEvents> implements PadView, TactileHost {
           // three distinct hand-feels side by side, then the two odd ones
           forceTypes: ["tiny", "pearl", "star", "marble", "long"],
         })
-      : generatePad(this.gel.R, rng, {
-          boundary,
-          hole,
-          edgeInset: preset.edgeInset,
-          smallFillZones: preset.smallFillZones,
-          ...roundBeadBudget(preset, this.progressStore.totalCompleted),
-          // how layered this pad is – some pads are mostly one layer, some hide a second one
-          // under half their beads; always denser toward the middle than at the rim
-          deeperChance: 0.26 + rng.next() * 0.3,
-          kingChance: preset.kingChance ?? 0.3,
-          raritySkew: preset.raritySkew,
-          typeSkew: preset.typeSkew,
-          rareCenterChance: preset.rareCenterChance,
-          hiddenObject: this.hiddenForThisPad(),
-          ultraChance: ULTRA_SURFACE_CHANCE,
-        });
-    this.tactile.install(this.progressStore.totalCompleted, rng, !!this.testBeads);
+      : this.bonusRound
+        ? generatePad(this.gel.R, rng, {
+            // a handful of beads around one sure treasure – a dig, not another round
+            boundary,
+            hole,
+            edgeInset: preset.edgeInset,
+            ...BONUS_BUDGET,
+            deeperChance: 0.2,
+            kingChance: 0,
+            raritySkew: preset.raritySkew,
+            typeSkew: preset.typeSkew,
+            hiddenObject: this.hiddenForThisPad(),
+          })
+        : generatePad(this.gel.R, rng, {
+            boundary,
+            hole,
+            edgeInset: preset.edgeInset,
+            smallFillZones: preset.smallFillZones,
+            ...roundBeadBudget(preset, this.progressStore.totalCompleted),
+            // how layered this pad is – some pads are mostly one layer, some hide a second one
+            // under half their beads; always denser toward the middle than at the rim
+            deeperChance: 0.26 + rng.next() * 0.3,
+            kingChance: preset.kingChance ?? 0.3,
+            raritySkew: preset.raritySkew,
+            typeSkew: preset.typeSkew,
+            rareCenterChance: preset.rareCenterChance,
+            hiddenObject: this.hiddenForThisPad(),
+            ultraChance: ULTRA_SURFACE_CHANCE,
+          });
+    this.tactile.install(this.progressStore.totalCompleted, rng, !!this.testBeads || this.bonusRound);
     this.padTotal = this.beads.length;
     this.collector.preparePad(this.beads.filter(b => !treasureKind(b.type)));
     this.peekUntil = -1;
+    this.foundNewThisPad = false;
     this.gel.sockets = [];
     this.gel.dents = [];
     this.gel.fade = instant ? 1 : 0.15;
@@ -306,11 +335,14 @@ export class Game extends Emitter<GameEvents> implements PadView, TactileHost {
    * outcome, except for a new player's first pads; the first pad of a new day
    * makes "none" half as likely – that is the only daily difference.
    */
-  private rollHidden(pad: PadType, dayBonus = false): string | null {
+  private rollHidden(pad: PadType, dayBonus = false, forceTreasure = false): string | null {
     const pool = HIDDEN_POOLS[pad.variantOf ?? pad.id];
     if (!pool?.length) return null;
-    const guarantee = this.progressStore.totalCompleted < FIRST_TREASURE_GUARANTEE;
-    const picked = rng.weighted(pool, (e) => (e.id === NONE ? (guarantee ? 0 : e.w * (dayBonus ? DAY_NONE_FACTOR : 1)) : e.w));
+    const perk = pad.tier ? VARIANT_PERKS[pad.tier].treasure : undefined;
+    const guarantee = forceTreasure || perk !== undefined || this.progressStore.totalCompleted < FIRST_TREASURE_GUARANTEE;
+    const ultraIds = ULTRA_TYPES.map((t) => t.id);
+    const boost = (id: string) => missingBoost(id, { found: this.treasure.has(id), dry: this.treasure.dry, target: this.treasure.target, ultraIds });
+    const picked = rng.weighted(pool, (e) => hiddenWeight(e, { guarantee, ultraOnly: perk === "ultra", dayBonus, ultraIds }) * boost(e.id));
     return picked.id === NONE ? null : picked.id;
   }
 
@@ -344,6 +376,33 @@ export class Game extends Emitter<GameEvents> implements PadView, TactileHost {
     return this.pendingNext;
   }
 
+  /** did the pad on the table bury something (the "dig" door is for the pads that did not) */
+  get hadTreasure() {
+    return this.beads.some((b) => b.hidden && treasureKind(b.type));
+  }
+  get isBonus() {
+    return this.bonusRound;
+  }
+
+  /** "광고 보고 심기": the next pad buries this treasure instead of whatever it rolled */
+  plantNext(id: string) {
+    const pad = this.nextPad;
+    this.pendingHidden = id;
+    this.progressStore.setNext(pad, id);
+  }
+
+  /** roll the next pad's treasure again with the current state (see the completion in doPop) */
+  private rerollNextHidden() {
+    const pad = this.nextPad;
+    this.pendingHidden = this.rollHidden(pad);
+    this.progressStore.setNext(pad, this.pendingHidden);
+  }
+
+  /** "광고 보고 고르기": the next pad and two other pads, all distinct */
+  nextChoices(): PadType[] {
+    return this.nextProvider.choices?.(this.progressStore, this.nextPad, 2) ?? [this.nextPad];
+  }
+
   /** everything the NEXT tease is allowed to know */
   get nextInfo() {
     const pad = this.nextPad;
@@ -351,11 +410,14 @@ export class Game extends Emitter<GameEvents> implements PadView, TactileHost {
     return {
       pad,
       rare,
+      tier: pad.tier,
       rareNew: rare && !this.progressStore.isVariantDiscovered(pad.id),
       ultra: !!this.pendingHidden && ULTRA_TYPES.some((t) => t.id === this.pendingHidden),
       hidden: !!this.pendingHidden && this.pendingHidden !== NONE && !this.treasure.has(this.pendingHidden),
       collection: this.progressStore.mode === "COLLECTION",
       tactile: this.nextTactileName,
+      // the pinned treasure can hide in this pad (a promise of a chance, never of the thing)
+      target: this.pinCanHideIn(pad),
     };
   }
 
@@ -367,6 +429,14 @@ export class Game extends Emitter<GameEvents> implements PadView, TactileHost {
     return kind ? tactileName[kind] : undefined;
   }
 
+  /** name of the pinned treasure if it is in this pad's pool */
+  pinCanHideIn(pad: PadType): string | undefined {
+    const id = this.treasure.target;
+    if (!id) return undefined;
+    if (!(HIDDEN_POOLS[pad.variantOf ?? pad.id] ?? []).some((e) => e.id === id)) return undefined;
+    return HIDDEN_TYPES.find((t) => t.id === id)?.name;
+  }
+
   /** is the next pad a rare variant passing by? */
   get nextIsRare() {
     return isRareVariant(this.nextPad);
@@ -374,7 +444,7 @@ export class Game extends Emitter<GameEvents> implements PadView, TactileHost {
 
   /** the buried object of the current pad, and whether it has never been found before */
   get hiddenInfo() {
-    const b = this.beads.find((x) => x.hidden && (x.state === "embedded" || x.state === "held"));
+    const b = this.beads.find((x) => x.hidden && treasureKind(x.type) && (x.state === "embedded" || x.state === "held"));
     if (!b) return null;
     return { type: b.type, isNew: !this.treasure.has(b.type.id) };
   }
@@ -383,7 +453,7 @@ export class Game extends Emitter<GameEvents> implements PadView, TactileHost {
   peekHidden(seconds = 1.8) {
     this.peekUntil = this.time + seconds;
     this.gel.markDirty();
-    this.schedule(seconds + 0.02, () => this.gel.markDirty());
+    if (Number.isFinite(seconds)) this.schedule(seconds + 0.02, () => this.gel.markDirty());
   }
 
   /**
@@ -392,6 +462,7 @@ export class Game extends Emitter<GameEvents> implements PadView, TactileHost {
    */
   openPad(pad: PadType) {
     this.collector.dismiss();
+    this.bonusRound = false;
     // the treasure rolled for NEXT travels with it; a different pad rolls fresh
     this.startHidden = this.pendingNext && this.pendingNext.id === pad.id ? this.pendingHidden : undefined;
     const { newPad, newVariant } = this.progressStore.open(pad);
@@ -401,6 +472,23 @@ export class Game extends Emitter<GameEvents> implements PadView, TactileHost {
     this.pendingNext = null;
     this.pendingHidden = undefined;
     this.emit("padChange", { pad, newPad, newVariant });
+    this.emitProgress();
+  }
+
+  /**
+   * "광고 보고 한 번 더 파기": the same pad again, tiny, with one treasure for
+   * sure. Progress is not touched – the pad stays "emptied", so this is neither
+   * a completion (promotions, ad interval) nor a new pad (play counts, NEXT):
+   * the rolled next pad still waits behind it, and a restart lands there.
+   */
+  openBonusPad() {
+    this.collector.dismiss();
+    this.bonusRound = true;
+    this.startHidden = this.rollHidden(this.pad, false, true);
+    this.gel.setShape(this.pad);
+    this.newPad();
+    this.glShadowR = -1;
+    this.emit("padChange", { pad: this.pad, newPad: false, newVariant: false, bonus: true });
     this.emitProgress();
   }
 
@@ -447,6 +535,27 @@ export class Game extends Emitter<GameEvents> implements PadView, TactileHost {
       out.push({ id: b.id, x: c.x, y: c.y, r: b.radius, type: b.type.id, layer: b.layer, hidden: !!b.hidden, t1: b.type.grip * s * deep, t2: b.type.grip * s * deep + b.type.pull * s * (b.layer === 1 ? 1.35 : 1) });
     }
     return out;
+  }
+
+  /**
+   * Where to show the "stuck?" gesture hint: a featured material first (those
+   * need a gesture of their own), otherwise any bead that can be pulled now.
+   * Canvas CSS px, the same space as the UI overlay.
+   */
+  stuckHint(firstPull = false): { x: number; y: number; kind: "pull" | "swirl" | "peel" | "tap" | "yarn" | "chain" } | null {
+    const grabbable = this.debugBeads().sort((p, q) => q.r - p.r);
+    // plain beads first; a surfaced treasure only when nothing else is left
+    const bead = grabbable.find((d) => !d.hidden) ?? grabbable[0];
+    // a brand-new player first learns the plain pull on the biggest plain bead
+    if (firstPull && bead) return { x: bead.x, y: bead.y, kind: "pull" };
+    const fibers = this.tactile.debug((x, y) => this.toCanvas(x, y)).filter((f) => f.state === "embedded");
+    if (fibers.length) {
+      const f = fibers[0];
+      const kind = f.kind === "swirl" ? "swirl" : f.kind === "peel" ? "peel" : f.kind === "bubble" ? (f.pulled >= f.length ? "pull" : "tap")
+        : f.kind === "fiber" ? "yarn" : "chain";
+      return { x: f.x, y: f.y, kind };
+    }
+    return bead ? { x: bead.x, y: bead.y, kind: "pull" } : null;
   }
 
   /** The actual touch targets, including a partially extracted yarn end. */
@@ -547,6 +656,12 @@ export class Game extends Emitter<GameEvents> implements PadView, TactileHost {
       const l = this.toLocal(p.x, p.y);
       this.tactile.move(p, l.x, l.y);
       this.tactile.lift(p);
+    }
+    const held = this.pulls.get(p.id);
+    if (!cancelled && held) {
+      const l = this.toLocal(p.x, p.y);
+      const events = held.update(l.x, l.y, p.speed, 0);
+      if (events.length) this.handlePullEvents(held, p.id, events);
     }
     sfx.endGesture(p.id, cancelled);
     const f = this.fingers.get(p.id);
@@ -721,7 +836,13 @@ export class Game extends Emitter<GameEvents> implements PadView, TactileHost {
     // the bead underneath waits at the bottom of the hole, then rises (slow spring, no overshoot)
     if (deeper) this.schedule(0.42, () => (deeper.depth.target = 0));
 
-    if (kind) this.flashes.push({ x: pos.x, y: pos.y, t: 0 });
+    if (kind) {
+      this.flashes.push({ x: pos.x, y: pos.y, t: 0 });
+      // credit it now: closing the app mid-flight must not lose a find
+      const found = this.treasure.add(b.type.id, this.bonusRound ? "보너스" : this.pad.name);
+      if (found.isNew) this.foundNewThisPad = true;
+      this.creditedNew.set(b, found);
+    }
 
     this.tactile.onPop();
     this.freePulled++;
@@ -737,6 +858,14 @@ export class Game extends Emitter<GameEvents> implements PadView, TactileHost {
       // jar settle before the completion cue. Persist now even if the tab closes.
       this.finishing = true;
       this.finishQuiet = 0;
+      if (!this.bonusRound) {
+        // a pad with no first-time find nudges the missing treasures up a little (bonus digs do not count)
+        if (!this.foundNewThisPad) this.treasure.noteDryPad();
+        // what the next pad hides is decided now, with this pad's finds, the pin and the catch-up
+        // all counted. Hidden from view until here (NEXT names it only on the emptied pad), and
+        // never touched again after – a pin set later counts from the pad after next.
+        this.rerollNextHidden();
+      }
       this.progressStore.complete();
     }
   }
@@ -842,9 +971,13 @@ export class Game extends Emitter<GameEvents> implements PadView, TactileHost {
           b.state = "collected";
           const kind = treasureKind(b.type);
           if (kind) {
-            const isNew = this.treasure.add(b.type.id);
+            const r = this.creditedNew.get(b) ?? this.treasure.add(b.type.id, this.pad.name);
+            this.creditedNew.delete(b);
             sfx.land("glass", b.type.mass * 0.6);
-            this.emit("treasure", { type: b.type, kind, isNew, count: this.treasure.count(b.type.id), padName: this.pad.name });
+            this.emit("treasure", {
+              type: b.type, kind, isNew: r.isNew, count: this.treasure.count(b.type.id), padName: this.pad.name,
+              targetHit: r.targetHit, setDone: r.setDone?.name, shelved: r.shelved,
+            });
           } else {
             const vx = (f.x1 - f.cx) * 2;
             const vy = (f.y1 - f.cy) * 2;

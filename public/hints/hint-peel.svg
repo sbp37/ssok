@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" fill="none" stroke-linecap="round" stroke-linejoin="round" role="img" aria-labelledby="title desc">
+  <title id="title">막 벗겨 올리기</title>
+  <desc id="desc">아래쪽 젤 막 끝을 검지로 잡아 말아 올리는 모습과 위쪽 화살표.</desc>
+  <defs>
+    <linearGradient id="bead" x1="0" y1="0" x2="1" y2="1" gradientUnits="objectBoundingBox">
+      <stop stop-color="#fbd7e6"/><stop offset="1" stop-color="#d9c7ef"/>
+    </linearGradient>
+  </defs>
+  <g stroke="#d9779f" stroke-width="4.5">
+    <path d="M22 73h43c14 0 21 10 20 23H22Z" fill="#fbd7e6" fill-opacity="0.35" stroke-opacity="0.65"/>
+    <path d="M22 95c1-19 14-24 23-37 7-10 18-10 24-3 7 9 0 20-10 20H45" fill="#fbd7e6" fill-opacity="0.65"/>
+    <path d="M46 59c-4 8 1 16 10 16"/>
+    <circle cx="34" cy="85" r="8" fill="url(#bead)" stroke="#d9779f" stroke-width="4"/>
+    <g transform="translate(56 4) rotate(-8)" opacity="0.85" stroke="#2b2730" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M-12 0v43c0 10 5 17 12 17s12-7 12-17V0" fill="#ffffff"/>
+    <path d="M-6 39v7c0 5 12 5 12 0v-7c0-5-12-5-12 0Z" fill="none" stroke-width="2.5"/>
+  </g>
+    <path d="M93 88c12-21 9-42-1-57" stroke-dasharray="3 8"/>
+    <path d="m88 44 3-15 13 6"/>
+  </g>
+</svg>
