@@ -23,6 +23,8 @@ export interface Theme {
 export const THEMES: readonly Theme[] = [
   { id: "autumn", name: "가을 숲", months: [10, 11], until: "11월까지", span: "10~11월", pads: ["maple", "pumpkin"], treasures: ["maplestar", "pumpkinglass", "chestnutpearl"] },
   { id: "winter", name: "눈 오는 밤", months: [12, 1, 2], until: "2월까지", span: "12~2월", pads: ["snowman", "snowflake"], treasures: ["snowstar", "iceglass", "snowpearl"] },
+  { id: "spring", name: "봄 정원", months: [3, 4, 5], until: "5월까지", span: "3~5월", pads: ["sakura", "tulip"], treasures: ["sakurastar", "springglass", "petalpearl"] },
+  { id: "summer", name: "여름 바다", months: [6, 7, 8, 9], until: "9월까지", span: "6~9월", pads: ["watermelon", "icecream"], treasures: ["sunstar", "waveglass", "conchpearl"] },
 ];
 
 registerPads(THEME_PADS);

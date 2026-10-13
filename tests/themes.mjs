@@ -11,9 +11,14 @@ assert.equal(activeTheme(d(10))?.id, 'autumn');
 assert.equal(activeTheme(d(11, 30))?.id, 'autumn');
 assert.equal(activeTheme(d(12, 1))?.id, 'winter');
 assert.equal(activeTheme(d(2, 28))?.id, 'winter');
-assert.equal(activeTheme(d(5)), undefined, 'spring/summer: no theme yet');
+assert.equal(activeTheme(d(3, 1))?.id, 'spring');
+assert.equal(activeTheme(d(5, 31))?.id, 'spring');
+assert.equal(activeTheme(d(6, 1))?.id, 'summer');
+assert.equal(activeTheme(d(9, 30))?.id, 'summer');
+for (let m = 1; m <= 12; m++) assert.ok(activeTheme(d(m)), `a theme every month (${m})`);
 assert.equal(upcomingTheme(d(10))?.id, 'winter');
-assert.equal(upcomingTheme(d(5))?.id, 'autumn');
+assert.equal(upcomingTheme(d(5))?.id, 'summer');
+assert.equal(upcomingTheme(d(8))?.id, 'autumn');
 
 // every theme's pads exist, have hidden pools that bury their own treasures, and are not everyday pads
 const { PADS, padById } = await load('pads/PadTypes');
@@ -57,7 +62,11 @@ function run(month, completed, n = 600) {
   }
   return { theme: theme / n, twice };
 }
-assert.equal(run(5, 10).theme, 0, 'out of season: never');
+// a pad of another season never comes up
+{ data.clear(); const p = new PadProgress(); for (let i = 0; i < 12; i++) { p.open(p.current); p.complete(); }
+  let seed = 3; const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  const prov = new DiscoveryProvider(rand, () => d(10));
+  for (let i = 0; i < 400; i++) { const pad = prov.next(p); const th = themeOfPad(pad.id); assert.ok(!th || th.id === 'autumn', `October drew ${pad.id}`); p.open(pad); p.complete(); } }
 assert.equal(run(10, 0, THEME_FROM).theme, 0, 'opening pads: never');
 const oct = run(10, 12);
 assert.ok(oct.theme > 0.12 && oct.theme < 0.3, `in season ~20% (got ${oct.theme})`);
