@@ -304,7 +304,8 @@ export class Gel {
       this.restR.push(pad.outline(th) + n);
       if (pad.hole) this.holeR.push(pad.hole(th) + n * 0.3);
     }
-    this.color = siliconeColor(pad.gelColor,pad.id);
+    // a colour picked for this opening is already final; otherwise the pad's own material colour
+    this.color = pad.tinted ? { ...pad.gelColor } : siliconeColor(pad.gelColor,pad.id);
     this.soft = pad.softness;
     this.stretchK = pad.stretch;
     this.wobbleK = pad.wobble;
