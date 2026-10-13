@@ -33,13 +33,25 @@ export const SPECIAL_TYPES: readonly BeadType[] = BEAD_TYPES.filter((t) => t.rar
 /** the 희귀 row: rare beads and every pad's buried object */
 export const RARE_TYPES: readonly BeadType[] = [...BEAD_TYPES.filter((t) => t.rarity === "rare"), ...HIDDEN_TYPES];
 
+/** a stored id → number map, with anything malformed dropped */
+function numbers(v: unknown): Record<string, number> {
+  const out: Record<string, number> = {};
+  if (v && typeof v === "object" && !Array.isArray(v)) {
+    for (const [k, n] of Object.entries(v)) if (Number.isFinite(n) && (n as number) >= 0) out[k] = n as number;
+  }
+  return out;
+}
+
 export class TreasureStore {
   private data: Blob = { counts: {}, firstAt: {}, seen: {} };
   private listeners = new Set<() => void>();
   constructor() {
     try {
       const raw = localStorage.getItem(KEY);
-      if (raw) this.data = { counts: {}, firstAt: {}, seen: {}, ...JSON.parse(raw) };
+      if (raw) {
+        const o = JSON.parse(raw) as Partial<Blob> | null;
+        this.data = { counts: numbers(o?.counts), firstAt: numbers(o?.firstAt), seen: numbers(o?.seen) };
+      }
     } catch {
       /* ignore */
     }

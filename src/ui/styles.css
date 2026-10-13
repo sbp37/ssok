@@ -187,8 +187,8 @@ body,
   position: absolute;
   inset: 0;
   pointer-events: none;
-  /* bottom: 12px of air above the ad slot, so no button ever sits on the banner */
-  padding: calc(env(safe-area-inset-top, 0px) + 8px) 18px 14px;
+  /* bottom: a clear band of air above the ad slot, so no button ever sits next to the banner */
+  padding: calc(env(safe-area-inset-top, 0px) + 8px) 18px 30px;
   display: flex;
   flex-direction: column;
 }
@@ -387,7 +387,8 @@ body,
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
-  top: 67%;
+  /* over the emptied pad, clear of the NEXT tease and the doors below it on any height */
+  top: clamp(calc(env(safe-area-inset-top, 0px) + 104px), 24%, 38%);
   padding: 8px 18px;
   width: max-content;
   max-width: 90%;
@@ -422,8 +423,8 @@ body,
 .gate {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
+  align-items: stretch;
+  gap: 8px;
   white-space: nowrap;
 }
 .gate .btn {
@@ -436,6 +437,14 @@ body,
 }
 .gate .link {
   white-space: nowrap;
+}
+/* the plain way on: a real button, quieter than the ad door but never a hidden link */
+.btn.ghost {
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: inset 0 0 0 1.5px rgba(43, 39, 48, 0.18);
+  padding: 11px 18px;
+  font-size: 15px;
 }
 .gate .btn small {
   font-size: 11px;
@@ -497,6 +506,30 @@ body,
 }
 .peek:disabled {
   opacity: 0.6;
+}
+
+/* "stuck?" gesture hint: the finger's bead sits on the item, fades in, mimes once or twice, fades out */
+.stuck-hint {
+  position: absolute;
+  width: 84px;
+  height: 84px;
+  transform: translate(-48%, -70%);
+  pointer-events: none;
+  opacity: 0;
+  animation: stuckHint 3.2s ease-in-out forwards;
+  filter: drop-shadow(0 4px 10px rgba(117, 74, 93, 0.18));
+}
+@keyframes stuckHint {
+  0% { opacity: 0; transform: translate(-48%, -62%) scale(0.92); }
+  15% { opacity: 0.92; transform: translate(-48%, -70%) scale(1); }
+  45% { opacity: 0.92; transform: translate(-48%, -78%) scale(1); }
+  60% { opacity: 0.92; transform: translate(-48%, -70%) scale(1); }
+  85% { opacity: 0.92; transform: translate(-48%, -78%) scale(1); }
+  100% { opacity: 0; transform: translate(-48%, -78%) scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .stuck-hint { animation: stuckHintFade 3.2s ease-in-out forwards; transform: translate(-48%, -70%); }
+  @keyframes stuckHintFade { 0%, 100% { opacity: 0; } 15%, 85% { opacity: 0.92; } }
 }
 
 /* top-right cluster */

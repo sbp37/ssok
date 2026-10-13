@@ -73,7 +73,13 @@ export class OfferStats {
     try {
       this.storage ??= localStorage;
       const raw = this.storage.getItem(STATS_KEY);
-      if (raw) this.data = { offered: {}, taken: {}, earned: {}, ...JSON.parse(raw) };
+      const o = raw ? JSON.parse(raw) : null;
+      for (const stat of ["offered", "taken", "earned"] as const) {
+        const v = o?.[stat];
+        if (v && typeof v === "object" && !Array.isArray(v)) {
+          for (const [k, n] of Object.entries(v)) if (Number.isFinite(n)) this.data[stat][k] = n as number;
+        }
+      }
     } catch {
       /* private mode: counters stay in memory */
     }

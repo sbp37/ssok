@@ -74,6 +74,8 @@ export class Game extends Emitter<GameEvents> implements PadView, TactileHost {
   beads: Bead[] = [];
   collector = new Collector();
   private pulls = new Map<number, Pull>();
+  /** treasures already saved at their POP → was it a first find (for the landing toast) */
+  private creditedNew = new Map<Bead, boolean>();
   /** yarn, strands, swirl, film: everything that is not an ordinary bead pull */
   private tactile = new TactileController(this, (b, id, dx, dy, speed) => this.doPop(b, id, dx, dy, speed));
   private hint: string | null = null;
@@ -159,7 +161,11 @@ export class Game extends Emitter<GameEvents> implements PadView, TactileHost {
       if (prog.currentDone) {
         // emptied last time but never walked through the door → continue at the next pad, not the same one
         pad = (prog.nextId ? resolvePad(prog.nextId) : undefined) ?? this.nextProvider.next(prog);
-        this.startHidden = prog.nextId ? prog.nextHidden : undefined;
+        // a passing variant is only caught through its rewarded door – a restart opens the plain pad
+        const passing = !!pad.variantOf;
+        if (passing) pad = padById(pad.variantOf!) ?? pad;
+        // the variant's guaranteed treasure stays with the variant: the plain pad rolls its own
+        this.startHidden = prog.nextId && !passing ? prog.nextHidden : undefined;
         prog.open(pad);
       } else {
         pad = prog.current; // mid-pad exit → same pad, fresh
@@ -363,7 +369,7 @@ export class Game extends Emitter<GameEvents> implements PadView, TactileHost {
 
   /** did the pad on the table bury something (the "dig" door is for the pads that did not) */
   get hadTreasure() {
-    return this.beads.some((b) => b.hidden);
+    return this.beads.some((b) => b.hidden && treasureKind(b.type));
   }
   get isBonus() {
     return this.bonusRound;
@@ -412,7 +418,7 @@ export class Game extends Emitter<GameEvents> implements PadView, TactileHost {
 
   /** the buried object of the current pad, and whether it has never been found before */
   get hiddenInfo() {
-    const b = this.beads.find((x) => x.hidden && (x.state === "embedded" || x.state === "held"));
+    const b = this.beads.find((x) => x.hidden && treasureKind(x.type) && (x.state === "embedded" || x.state === "held"));
     if (!b) return null;
     return { type: b.type, isNew: !this.treasure.has(b.type.id) };
   }
@@ -421,7 +427,7 @@ export class Game extends Emitter<GameEvents> implements PadView, TactileHost {
   peekHidden(seconds = 1.8) {
     this.peekUntil = this.time + seconds;
     this.gel.markDirty();
-    this.schedule(seconds + 0.02, () => this.gel.markDirty());
+    if (Number.isFinite(seconds)) this.schedule(seconds + 0.02, () => this.gel.markDirty());
   }
 
   /**
@@ -503,6 +509,25 @@ export class Game extends Emitter<GameEvents> implements PadView, TactileHost {
       out.push({ id: b.id, x: c.x, y: c.y, r: b.radius, type: b.type.id, layer: b.layer, hidden: !!b.hidden, t1: b.type.grip * s * deep, t2: b.type.grip * s * deep + b.type.pull * s * (b.layer === 1 ? 1.35 : 1) });
     }
     return out;
+  }
+
+  /**
+   * Where to show the "stuck?" gesture hint: a featured material first (those
+   * need a gesture of their own), otherwise any bead that can be pulled now.
+   * Canvas CSS px, the same space as the UI overlay.
+   */
+  stuckHint(firstPull = false): { x: number; y: number; kind: "pull" | "swirl" | "peel" | "tap" | "yarn" | "chain" } | null {
+    const bead = this.debugBeads().filter((d) => !d.hidden).sort((p, q) => q.r - p.r)[0];
+    // a brand-new player first learns the plain pull on the biggest plain bead
+    if (firstPull && bead) return { x: bead.x, y: bead.y, kind: "pull" };
+    const fibers = this.tactile.debug((x, y) => this.toCanvas(x, y)).filter((f) => f.state === "embedded");
+    if (fibers.length) {
+      const f = fibers[0];
+      const kind = f.kind === "swirl" ? "swirl" : f.kind === "peel" ? "peel" : f.kind === "bubble" ? (f.pulled >= f.length ? "pull" : "tap")
+        : f.kind === "fiber" ? "yarn" : "chain";
+      return { x: f.x, y: f.y, kind };
+    }
+    return bead ? { x: bead.x, y: bead.y, kind: "pull" } : null;
   }
 
   /** The actual touch targets, including a partially extracted yarn end. */
@@ -603,6 +628,12 @@ export class Game extends Emitter<GameEvents> implements PadView, TactileHost {
       const l = this.toLocal(p.x, p.y);
       this.tactile.move(p, l.x, l.y);
       this.tactile.lift(p);
+    }
+    const held = this.pulls.get(p.id);
+    if (!cancelled && held) {
+      const l = this.toLocal(p.x, p.y);
+      const events = held.update(l.x, l.y, p.speed, 0);
+      if (events.length) this.handlePullEvents(held, p.id, events);
     }
     sfx.endGesture(p.id, cancelled);
     const f = this.fingers.get(p.id);
@@ -777,7 +808,11 @@ export class Game extends Emitter<GameEvents> implements PadView, TactileHost {
     // the bead underneath waits at the bottom of the hole, then rises (slow spring, no overshoot)
     if (deeper) this.schedule(0.42, () => (deeper.depth.target = 0));
 
-    if (kind) this.flashes.push({ x: pos.x, y: pos.y, t: 0 });
+    if (kind) {
+      this.flashes.push({ x: pos.x, y: pos.y, t: 0 });
+      // credit it now: closing the app mid-flight must not lose a find
+      this.creditedNew.set(b, this.treasure.add(b.type.id));
+    }
 
     this.tactile.onPop();
     this.freePulled++;
@@ -898,7 +933,8 @@ export class Game extends Emitter<GameEvents> implements PadView, TactileHost {
           b.state = "collected";
           const kind = treasureKind(b.type);
           if (kind) {
-            const isNew = this.treasure.add(b.type.id);
+            const isNew = this.creditedNew.get(b) ?? this.treasure.add(b.type.id);
+            this.creditedNew.delete(b);
             sfx.land("glass", b.type.mass * 0.6);
             this.emit("treasure", { type: b.type, kind, isNew, count: this.treasure.count(b.type.id), padName: this.pad.name });
           } else {

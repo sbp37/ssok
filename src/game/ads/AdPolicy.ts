@@ -1,20 +1,39 @@
 import { loadFullScreenAd, showFullScreenAd } from "@apps-in-toss/web-framework";
 
 export const AD_INTERVAL_PADS = 1;
+/** completed pads before the first interstitial: the opening pads are ad-free */
+export const FREE_PADS = 2;
+/** at least this long since the last full-screen ad (interstitial OR rewarded) before an interstitial */
+export const MIN_GAP_MS = 75_000;
 const KEY = "ssok.ads.v1";
-const AD_GROUP_IDS: Record<AdKind, string> = {
-  interstitial: "ait.v2.live.fd15b48eec824769",
-  rewarded: "ait.v2.live.9a6ebffe05904cda",
-};
+
+/**
+ * Live ad groups only in the release bundle (`pnpm toss:build:live`). Every
+ * other build – dev, QA, the AIT test push – uses Toss's test groups, because
+ * testing against a live group is a policy violation.
+ */
+export const LIVE_ADS = import.meta.env.VITE_PROMOTION_MODE === "live";
 export type AdKind = "interstitial" | "rewarded";
+export const AD_GROUP_IDS: Record<AdKind | "banner", string> = LIVE_ADS
+  ? {
+      interstitial: "ait.v2.live.fd15b48eec824769",
+      rewarded: "ait.v2.live.9a6ebffe05904cda",
+      banner: "ait.v2.live.fa7e951585b7468c",
+    }
+  : {
+      interstitial: "ait-ad-test-interstitial-id",
+      rewarded: "ait-ad-test-rewarded-id",
+      banner: "ait-ad-test-banner-id",
+    };
 export type AdResult = "closed" | "rewarded" | "unavailable";
 
 export interface AdProvider {
   /** Must be synchronous: preload elsewhere; never wait for fill at NEXT. */
   ready(kind: AdKind): boolean;
   /** Resolve after dismissal. Abort must close/remove the provider overlay.
-   * Only the SDK's earned-reward callback may produce `rewarded`. */
-  show(kind: AdKind, signal: AbortSignal): Promise<AdResult>;
+   * Only the SDK's earned-reward callback may produce `rewarded`. `onOpen` is
+   * called once the ad is actually on screen: from then on only its dismissal ends it. */
+  show(kind: AdKind, signal: AbortSignal, onOpen?: () => void): Promise<AdResult>;
   destroy?(): void;
 }
 
@@ -87,7 +106,7 @@ export class TossAdProvider implements AdProvider {
     return this.loaded[kind];
   }
 
-  show(kind: AdKind, signal: AbortSignal): Promise<AdResult> {
+  show(kind: AdKind, signal: AbortSignal, onOpen?: () => void): Promise<AdResult> {
     if (!this.loaded[kind] || signal.aborted) return Promise.resolve("unavailable");
     this.loaded[kind] = false;
     return new Promise((resolve) => {
@@ -108,6 +127,7 @@ export class TossAdProvider implements AdProvider {
         unregister = showFullScreenAd({
           options: { adGroupId: AD_GROUP_IDS[kind] },
           onEvent: (event) => {
+            if (event.type === "show" || event.type === "impression") onOpen?.();
             if (event.type === "userEarnedReward") earned = true;
             else if (event.type === "dismissed") finish(kind === "rewarded" && earned ? "rewarded" : "closed");
             else if (event.type === "failedToShow") finish("unavailable");
@@ -135,11 +155,13 @@ export function createAdProvider(): AdProvider {
 
 export class AdPolicy {
   private lastAdCompleted = 0;
+  /** wall clock of the last full-screen ad that was actually shown */
+  private lastAdAt = 0;
   private busy = false;
   private active: AbortController | null = null;
   constructor(
     public provider: AdProvider = new MockAdProvider(),
-    _now = () => Date.now(),
+    private now = () => Date.now(),
     private storage: Pick<Storage, "getItem" | "setItem"> | undefined = undefined,
     private timeoutMs = 60_000,
   ) {
@@ -149,15 +171,28 @@ export class AdPolicy {
       if (Number.isFinite(saved?.lastAdCompleted) && saved.lastAdCompleted >= 0) {
         this.lastAdCompleted = Math.floor(saved.lastAdCompleted);
       }
+      if (Number.isFinite(saved?.lastAdAt) && saved.lastAdAt > 0 && saved.lastAdAt <= this.now()) {
+        this.lastAdAt = saved.lastAdAt;
+      }
     } catch { /* private mode / invalid storage must not block play */ }
   }
   private save() {
-    try { this.storage?.setItem(KEY, JSON.stringify({lastAdCompleted: this.lastAdCompleted})); } catch { /* optional persistence */ }
+    try { this.storage?.setItem(KEY, JSON.stringify({lastAdCompleted: this.lastAdCompleted, lastAdAt: this.lastAdAt})); } catch { /* optional persistence */ }
   }
-  /** The opening play is ad-free; every completed-pad transition after it is eligible. */
+  /** The opening pads are ad-free; after them a transition is eligible when no
+   * full-screen ad was shown for this completion and none in the last MIN_GAP_MS. */
   eligible(totalCompleted: number) {
-    return totalCompleted >= AD_INTERVAL_PADS
-      && totalCompleted - this.lastAdCompleted >= AD_INTERVAL_PADS;
+    return totalCompleted >= FREE_PADS
+      && totalCompleted - this.lastAdCompleted >= AD_INTERVAL_PADS
+      && this.now() - this.lastAdAt >= MIN_GAP_MS;
+  }
+  /** is a full-screen ad of this kind loaded right now (never waits) */
+  ready(kind: AdKind) {
+    try {
+      return this.provider.ready(kind);
+    } catch {
+      return false;
+    }
   }
   cancel() {
     this.active?.abort();
@@ -175,13 +210,18 @@ export class AdPolicy {
         if (!this.eligible(totalCompleted)) return "unavailable";
       }
       if (!this.provider.ready(kind)) return "unavailable";
+      // The watchdog only covers an ad that never opens. Once it is on screen,
+      // cutting it short would resume the game under it – and could drop a reward
+      // the player already earned – so from then on only its dismissal ends it.
       const interrupted = new Promise<AdResult>((resolve) => {
         abort.signal.addEventListener("abort", () => resolve("unavailable"), {once: true});
         timer = setTimeout(() => abort.abort(), this.timeoutMs);
       });
-      const result = await Promise.race([this.provider.show(kind, abort.signal), interrupted]);
+      const opened = () => clearTimeout(timer);
+      const result = await Promise.race([this.provider.show(kind, abort.signal, opened), interrupted]);
       if (result === "closed" || result === "rewarded") {
         this.lastAdCompleted = Math.max(this.lastAdCompleted, totalCompleted);
+        this.lastAdAt = this.now();
         this.save();
       }
       return result;

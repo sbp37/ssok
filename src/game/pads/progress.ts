@@ -19,7 +19,40 @@ export type Mode = "FIRST_DISCOVERY" | "COLLECTION";
 
 const KEY = "ssok.progress.v2";
 const LEGACY_KEY = "ssok.pads.v1";
-const today = () => new Date().toISOString().slice(0, 10);
+/** the player's own calendar day (a Korean player's day starts at midnight, not 9am UTC) */
+const today = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+};
+
+const strings = (v: unknown, valid: (id: string) => boolean): string[] =>
+  Array.isArray(v) ? v.filter((x): x is string => typeof x === "string" && valid(x)).filter((x, i, a) => a.indexOf(x) === i) : [];
+
+/** keep every field that is well-formed, repair the rest – a bad field must not wipe the whole save */
+function sanitize(raw: unknown): Save {
+  const s = fresh();
+  if (!raw || typeof raw !== "object") return s;
+  const o = raw as Record<string, unknown>;
+  if (o.mode === "COLLECTION" || o.mode === "FIRST_DISCOVERY") s.mode = o.mode;
+  if (typeof o.current === "string" && resolvePad(o.current)) s.current = o.current;
+  s.currentDone = o.currentDone === true;
+  s.discoveredPads = strings(o.discoveredPads, (id) => !!padById(id));
+  s.discoveredVariants = strings(o.discoveredVariants, (id) => !!resolvePad(id));
+  if (o.playCount && typeof o.playCount === "object") {
+    for (const [k, v] of Object.entries(o.playCount as Record<string, unknown>)) {
+      if (padById(k) && Number.isFinite(v) && (v as number) >= 0) s.playCount[k] = Math.floor(v as number);
+    }
+  }
+  if (Number.isFinite(o.totalCompleted) && (o.totalCompleted as number) >= 0) s.totalCompleted = Math.floor(o.totalCompleted as number);
+  if (typeof o.lastPlayDate === "string") s.lastPlayDate = o.lastPlayDate;
+  s.recent = Array.isArray(o.recent) ? o.recent.filter((x): x is string => typeof x === "string" && !!padById(x)).slice(-10) : [];
+  if (typeof o.nextId === "string" && resolvePad(o.nextId)) {
+    s.nextId = o.nextId;
+    if (typeof o.nextHidden === "string" || o.nextHidden === null) s.nextHidden = o.nextHidden;
+  }
+  s.dayBonusPending = o.dayBonusPending === true;
+  return s;
+}
 
 interface Save {
   v: 2;
@@ -69,7 +102,7 @@ export class PadProgress {
   constructor() {
     try {
       const raw = localStorage.getItem(KEY);
-      if (raw) this.s = { ...fresh(), ...JSON.parse(raw) };
+      if (raw) this.s = sanitize(JSON.parse(raw));
       else {
         const legacy = localStorage.getItem(LEGACY_KEY);
         if (legacy) this.migrate(JSON.parse(legacy));
