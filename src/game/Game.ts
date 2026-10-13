@@ -18,9 +18,9 @@ import { drawFinishStar, drawJarFinale, drawPadFinale, FINALE_DURATION } from ".
 import { PADS, padById, resolvePad, type PadType } from "./pads/PadTypes";
 import { DiscoveryProvider, PadProgress, isRareVariant, type NextPadProvider } from "./pads/progress";
 import { BONUS_BUDGET, roundBeadBudget } from "./pads/pacing";
-import { FIRST_TREASURE_GUARANTEE, HIDDEN_POOLS, NONE, ULTRA_SURFACE_CHANCE, VARIANT_PERKS, hiddenWeight } from "./rewards/rates";
-import { ULTRA_TYPES } from "./beads/BeadTypes";
-import { TreasureStore, treasureKind, type TreasureKind } from "./rewards/treasure";
+import { FIRST_TREASURE_GUARANTEE, HIDDEN_POOLS, NONE, ULTRA_SURFACE_CHANCE, VARIANT_PERKS, hiddenWeight, missingBoost } from "./rewards/rates";
+import { HIDDEN_TYPES, ULTRA_TYPES } from "./beads/BeadTypes";
+import { TreasureStore, treasureKind, type FindResult, type TreasureKind } from "./rewards/treasure";
 import type { BeadType } from "./beads/BeadTypes";
 import { TactileController, type TactileHost } from "./fibers/TactileController";
 import { roundTactile, tactileName } from "./fibers/Tactile";
@@ -36,7 +36,12 @@ export interface GameEvents {
   /** the round's one-line how-to for its featured material (null = hide) */
   tactileHint: { text: string | null };
   /** a rare bead / hidden object / ultra landed in the treasure box */
-  treasure: { type: BeadType; kind: TreasureKind; isNew: boolean; count: number; padName: string };
+  treasure: {
+    type: BeadType; kind: TreasureKind; isNew: boolean; count: number; padName: string;
+    /** the pinned treasure was found */ targetHit: boolean;
+    /** a collection set just completed */ setDone?: string;
+    /** the first find went straight onto the shelf */ shelved: boolean;
+  };
 }
 
 interface Flash {
@@ -74,8 +79,10 @@ export class Game extends Emitter<GameEvents> implements PadView, TactileHost {
   beads: Bead[] = [];
   collector = new Collector();
   private pulls = new Map<number, Pull>();
-  /** treasures already saved at their POP → was it a first find (for the landing toast) */
-  private creditedNew = new Map<Bead, boolean>();
+  /** treasures already saved at their POP → what the find meant (for the landing toast) */
+  private creditedNew = new Map<Bead, FindResult>();
+  /** a first-time treasure came out of the pad on the table */
+  private foundNewThisPad = false;
   /** yarn, strands, swirl, film: everything that is not an ordinary bead pull */
   private tactile = new TactileController(this, (b, id, dx, dy, speed) => this.doPop(b, id, dx, dy, speed));
   private hint: string | null = null;
@@ -311,6 +318,7 @@ export class Game extends Emitter<GameEvents> implements PadView, TactileHost {
     this.padTotal = this.beads.length;
     this.collector.preparePad(this.beads.filter(b => !treasureKind(b.type)));
     this.peekUntil = -1;
+    this.foundNewThisPad = false;
     this.gel.sockets = [];
     this.gel.dents = [];
     this.gel.fade = instant ? 1 : 0.15;
@@ -333,7 +341,8 @@ export class Game extends Emitter<GameEvents> implements PadView, TactileHost {
     const perk = pad.tier ? VARIANT_PERKS[pad.tier].treasure : undefined;
     const guarantee = forceTreasure || perk !== undefined || this.progressStore.totalCompleted < FIRST_TREASURE_GUARANTEE;
     const ultraIds = ULTRA_TYPES.map((t) => t.id);
-    const picked = rng.weighted(pool, (e) => hiddenWeight(e, { guarantee, ultraOnly: perk === "ultra", dayBonus, ultraIds }));
+    const boost = (id: string) => missingBoost(id, { found: this.treasure.has(id), dry: this.treasure.dry, target: this.treasure.target, ultraIds });
+    const picked = rng.weighted(pool, (e) => hiddenWeight(e, { guarantee, ultraOnly: perk === "ultra", dayBonus, ultraIds }) * boost(e.id));
     return picked.id === NONE ? null : picked.id;
   }
 
@@ -400,6 +409,8 @@ export class Game extends Emitter<GameEvents> implements PadView, TactileHost {
       hidden: !!this.pendingHidden && this.pendingHidden !== NONE && !this.treasure.has(this.pendingHidden),
       collection: this.progressStore.mode === "COLLECTION",
       tactile: this.nextTactileName,
+      // the pinned treasure can hide in this pad (a promise of a chance, never of the thing)
+      target: this.pinCanHideIn(pad),
     };
   }
 
@@ -409,6 +420,14 @@ export class Game extends Emitter<GameEvents> implements PadView, TactileHost {
     const prog = this.progressStore;
     const kind = roundTactile(prog.totalCompleted + (prog.currentDone ? 0 : 1));
     return kind ? tactileName[kind] : undefined;
+  }
+
+  /** name of the pinned treasure if it is in this pad's pool */
+  pinCanHideIn(pad: PadType): string | undefined {
+    const id = this.treasure.target;
+    if (!id) return undefined;
+    if (!(HIDDEN_POOLS[pad.variantOf ?? pad.id] ?? []).some((e) => e.id === id)) return undefined;
+    return HIDDEN_TYPES.find((t) => t.id === id)?.name;
   }
 
   /** is the next pad a rare variant passing by? */
@@ -813,7 +832,9 @@ export class Game extends Emitter<GameEvents> implements PadView, TactileHost {
     if (kind) {
       this.flashes.push({ x: pos.x, y: pos.y, t: 0 });
       // credit it now: closing the app mid-flight must not lose a find
-      this.creditedNew.set(b, this.treasure.add(b.type.id));
+      const found = this.treasure.add(b.type.id, this.bonusRound ? "보너스" : this.pad.name);
+      if (found.isNew) this.foundNewThisPad = true;
+      this.creditedNew.set(b, found);
     }
 
     this.tactile.onPop();
@@ -831,6 +852,8 @@ export class Game extends Emitter<GameEvents> implements PadView, TactileHost {
       this.finishing = true;
       this.finishQuiet = 0;
       this.progressStore.complete();
+      // a pad with no first-time find nudges the missing treasures up a little (bonus digs do not count)
+      if (!this.foundNewThisPad && !this.bonusRound) this.treasure.noteDryPad();
     }
   }
 
@@ -935,10 +958,13 @@ export class Game extends Emitter<GameEvents> implements PadView, TactileHost {
           b.state = "collected";
           const kind = treasureKind(b.type);
           if (kind) {
-            const isNew = this.creditedNew.get(b) ?? this.treasure.add(b.type.id);
+            const r = this.creditedNew.get(b) ?? this.treasure.add(b.type.id, this.pad.name);
             this.creditedNew.delete(b);
             sfx.land("glass", b.type.mass * 0.6);
-            this.emit("treasure", { type: b.type, kind, isNew, count: this.treasure.count(b.type.id), padName: this.pad.name });
+            this.emit("treasure", {
+              type: b.type, kind, isNew: r.isNew, count: this.treasure.count(b.type.id), padName: this.pad.name,
+              targetHit: r.targetHit, setDone: r.setDone?.name, shelved: r.shelved,
+            });
           } else {
             const vx = (f.x1 - f.cx) * 2;
             const vy = (f.y1 - f.cy) * 2;

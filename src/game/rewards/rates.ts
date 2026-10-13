@@ -155,3 +155,17 @@ export function hiddenWeight(
   if (o.guarantee) return 0;
   return o.dayBonus ? e.w * DAY_NONE_FACTOR : e.w;
 }
+
+/**
+ * Catch-up for missing treasures. Every completed pad without a first-time find
+ * raises the weight of the treasures not yet found by 25%, up to ×3; the pinned
+ * target counts double. Ultras are never boosted – they stay legendary. Found
+ * treasures and "none" are unchanged, so the bias only ever points at the gaps.
+ */
+export const DRY_STEP = 0.25;
+export const DRY_MAX = 3;
+export const TARGET_BOOST = 2;
+export function missingBoost(id: string, o: { found: boolean; dry: number; target: string | null; ultraIds: readonly string[] }) {
+  if (id === NONE || o.found || o.ultraIds.includes(id)) return 1;
+  return Math.min(DRY_MAX, 1 + DRY_STEP * o.dry) * (id === o.target ? TARGET_BOOST : 1);
+}

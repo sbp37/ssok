@@ -113,6 +113,8 @@ export interface NextView {
   collection: boolean;
   /** the next pad's featured material, e.g. "뽁뽁이 막" */
   tactile?: string;
+  /** the pinned treasure's name, when it can hide in the next pad */
+  target?: string;
 }
 
 /**
@@ -121,7 +123,7 @@ export interface NextView {
  * glimpse. Never the pad itself.
  */
 export function NextPanel({ info, emphasis, reveal = 0 }: { info: NextView; emphasis: number; reveal?: number }) {
-  const { pad, rare, tier, rareNew, ultra, hidden, tactile } = info;
+  const { pad, rare, tier, rareNew, ultra, hidden, tactile, target } = info;
   let line = "???";
   if (tier === "super") line = "초희귀 패드가 지나가고 있어 ✦";
   else if (rare) line = rareNew ? "처음 보는 질감이다 ✦" : "희귀 패드가 지나가고 있어 ✦";
@@ -133,6 +135,12 @@ export function NextPanel({ info, emphasis, reveal = 0 }: { info: NextView; emph
       <PadSilhouette pad={pad} size={64} mode={ultra ? "partial" : "dark"} shimmer={rare} glint={!ultra} reveal={ultra ? 0 : reveal} />
       <div className={"next-q" + (rare ? " rare" : "")}>{line}</div>
       {tactile && <div className="next-t">다음엔 {tactile}</div>}
+      {target && (
+        <div className="next-pin">
+          <img src={`${import.meta.env.BASE_URL}collection/pin.svg`} alt="" width={14} height={14} />
+          {target} 나올지도
+        </div>
+      )}
     </div>
   );
 }

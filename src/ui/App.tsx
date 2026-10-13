@@ -350,12 +350,14 @@ export function App() {
           later(() => pushToast({ tone: "hidden", text: `${name}, 어딘가에 묻어 뒀어` }), newPad || newVariant ? 2100 : 450);
         }
       }),
-      game.on("treasure", ({ type, kind, isNew, count, padName }) => {
+      game.on("treasure", ({ type, kind, isNew, count, padName, targetHit, setDone, shelved }) => {
         // a repeat rare only makes the box blink; new things and buried things get a short line
         setBoxPulse((p) => ({ n: p.n + 1, strong: kind !== "rare" || isNew }));
+        const firstLine = targetHit ? "찾던 보물이다! 📍" : shelved ? "처음 발견했어 ✦ 진열장에 놓았어" : "처음 발견했어 ✦";
         if (kind === "ultra") pushToast({ tone: "ultra", text: "뭐야 이거?", sub: `${isNew ? "NEW ✦ " : ""}${type.name}` });
-        else if (kind === "hidden") pushToast({ tone: "hidden", text: `${padName} 속 ${type.name} 발견`, sub: isNew ? "처음 발견했어 ✦" : `+1 · 모두 ${count}개` });
-        else if (isNew) pushToast({ tone: "rare", text: `NEW ✦ ${type.name}` });
+        else if (kind === "hidden") pushToast({ tone: "hidden", text: `${padName} 속 ${type.name} 발견`, sub: isNew ? firstLine : `+1 · 모두 ${count}개` });
+        else if (isNew) pushToast({ tone: "rare", text: `NEW ✦ ${type.name}`, sub: targetHit || shelved ? firstLine : undefined });
+        if (setDone) later(() => pushToast({ tone: "ultra", text: `세트 완성 ✦ ${setDone}`, sub: "컬렉션에서 볼 수 있어" }), 1400);
       }),
     ];
     return offs;
