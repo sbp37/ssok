@@ -30,7 +30,19 @@ const assetIds: Record<string, string> = {
   long: "long",
   gem: "faceted",
   king: "violet",
-  // Seasonal charms use their own procedural silhouettes.
+  // Seasonal photo charms retain their generated material colours.
+  maplestar: "leaf-red",
+  pumpkinglass: "leaf-amber",
+  chestnutpearl: "acorn",
+  snowstar: "snowflake",
+  iceglass: "snowflake-ice",
+  snowpearl: "mitten",
+  sakurastar: "sakura",
+  springglass: "sprout",
+  petalpearl: "sakura-pearl",
+  sunstar: "watermelon",
+  waveglass: "shell-blue",
+  conchpearl: "shell-pearl",
 };
 
 /** photos that get recoloured to the bead's colour (keeps their shading and sparkle, swaps the hue) */

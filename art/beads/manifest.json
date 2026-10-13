@@ -403,5 +403,305 @@
     ],
     "path": "assets/beads/faceted.png",
     "fit": "preserve aspect; subject fits existing diameter; oval rotated 90 degrees"
+  },
+  "leaf-red": {
+    "source": "AI image generation (built-in image_gen)",
+    "beadId": "maplestar",
+    "prompt": "a red to orange maple leaf, translucent molded resin, five rounded lobes and short stem; overhead product photograph matching original heart, flower, pearl and holostar; rounded domed charm; upper-left soft white reflection; pure black background",
+    "references": [
+      "original/heart.png",
+      "original/flower.png",
+      "original/pearl.png",
+      "original/holostar.png"
+    ],
+    "processing": "Black background removed with connected exterior mask and edge unmatting; tight crop; Lanczos resize; Pillow WebP quality 90",
+    "originalSize": [
+      250,
+      246
+    ],
+    "size": [
+      128,
+      126
+    ],
+    "pivot": [
+      0.5,
+      0.5
+    ],
+    "path": "assets/beads/leaf-red.webp"
+  },
+  "leaf-amber": {
+    "source": "AI image generation (built-in image_gen)",
+    "beadId": "pumpkinglass",
+    "prompt": "an amber orange to honey yellow maple leaf, transparent glass, five rounded lobes and short stem; overhead product photograph matching original heart, flower, pearl and holostar; rounded domed charm; upper-left soft white reflection; pure black background",
+    "references": [
+      "original/heart.png",
+      "original/flower.png",
+      "original/pearl.png",
+      "original/holostar.png"
+    ],
+    "processing": "Black background removed with connected exterior mask and edge unmatting; tight crop; Lanczos resize; Pillow WebP quality 90",
+    "originalSize": [
+      242,
+      250
+    ],
+    "size": [
+      124,
+      128
+    ],
+    "pivot": [
+      0.5,
+      0.5
+    ],
+    "path": "assets/beads/leaf-amber.webp"
+  },
+  "acorn": {
+    "source": "AI image generation (built-in image_gen)",
+    "beadId": "chestnutpearl",
+    "prompt": "an acorn with ivory pearlescent body and glossy brown textured cap; overhead product photograph matching original heart, flower, pearl and holostar; rounded domed charm; upper-left soft white reflection; pure black background",
+    "references": [
+      "original/heart.png",
+      "original/flower.png",
+      "original/pearl.png",
+      "original/holostar.png"
+    ],
+    "processing": "Black background removed with connected exterior mask and edge unmatting; tight crop; Lanczos resize; Pillow WebP quality 90",
+    "originalSize": [
+      218,
+      250
+    ],
+    "size": [
+      112,
+      128
+    ],
+    "pivot": [
+      0.5,
+      0.5
+    ],
+    "path": "assets/beads/acorn.webp"
+  },
+  "snowflake": {
+    "source": "AI image generation (built-in image_gen)",
+    "beadId": "snowstar",
+    "prompt": "a six armed snowflake made of milky clear white and pale sky blue translucent resin, thick softly rounded branches; overhead product photograph matching original heart, flower, pearl and holostar; rounded domed charm; upper-left soft white reflection; pure black background",
+    "references": [
+      "original/heart.png",
+      "original/flower.png",
+      "original/pearl.png",
+      "original/holostar.png"
+    ],
+    "processing": "Black background removed with connected exterior mask and edge unmatting; tight crop; Lanczos resize; Pillow WebP quality 90",
+    "originalSize": [
+      248,
+      250
+    ],
+    "size": [
+      127,
+      128
+    ],
+    "pivot": [
+      0.5,
+      0.5
+    ],
+    "path": "assets/beads/snowflake.webp"
+  },
+  "snowflake-ice": {
+    "source": "AI image generation (built-in image_gen)",
+    "beadId": "iceglass",
+    "prompt": "a six armed snowflake made of ice clear pale sky blue glass, thick softly rounded branches; overhead product photograph matching original heart, flower, pearl and holostar; rounded domed charm; upper-left soft white reflection; pure black background",
+    "references": [
+      "original/heart.png",
+      "original/flower.png",
+      "original/pearl.png",
+      "original/holostar.png"
+    ],
+    "processing": "Black background removed with connected exterior mask and edge unmatting; tight crop; Lanczos resize; Pillow WebP quality 90",
+    "originalSize": [
+      241,
+      250
+    ],
+    "size": [
+      123,
+      128
+    ],
+    "pivot": [
+      0.5,
+      0.5
+    ],
+    "path": "assets/beads/snowflake-ice.webp"
+  },
+  "mitten": {
+    "source": "AI image generation (built-in image_gen)",
+    "beadId": "snowpearl",
+    "prompt": "a single white pearlescent mitten charm, rounded thumb on one side and small cuff, smooth nacre surface; overhead product photograph matching original heart, flower, pearl and holostar; rounded domed charm; upper-left soft white reflection; pure black background",
+    "references": [
+      "original/heart.png",
+      "original/flower.png",
+      "original/pearl.png",
+      "original/holostar.png"
+    ],
+    "processing": "Black background removed with connected exterior mask and edge unmatting; tight crop; Lanczos resize; Pillow WebP quality 90",
+    "originalSize": [
+      226,
+      250
+    ],
+    "size": [
+      116,
+      128
+    ],
+    "pivot": [
+      0.5,
+      0.5
+    ],
+    "path": "assets/beads/mitten.webp"
+  },
+  "sakura": {
+    "source": "AI image generation (built-in image_gen)",
+    "beadId": "sakurastar",
+    "prompt": "a pale pink translucent resin cherry blossom, exactly five rounded petals each with a small notch at its tip, subtle pink center; overhead product photograph matching original heart, flower, pearl and holostar; rounded domed charm; upper-left soft white reflection; pure black background",
+    "references": [
+      "original/heart.png",
+      "original/flower.png",
+      "original/pearl.png",
+      "original/holostar.png"
+    ],
+    "processing": "Black background removed with connected exterior mask and edge unmatting; tight crop; Lanczos resize; Pillow WebP quality 90",
+    "originalSize": [
+      250,
+      235
+    ],
+    "size": [
+      128,
+      120
+    ],
+    "pivot": [
+      0.5,
+      0.5
+    ],
+    "path": "assets/beads/sakura.webp"
+  },
+  "sprout": {
+    "source": "AI image generation (built-in image_gen)",
+    "beadId": "springglass",
+    "prompt": "a light lime green transparent glass sprout, exactly two plump leaves on a short joined stem; overhead product photograph matching original heart, flower, pearl and holostar; rounded domed charm; upper-left soft white reflection; pure black background",
+    "references": [
+      "original/heart.png",
+      "original/flower.png",
+      "original/pearl.png",
+      "original/holostar.png"
+    ],
+    "processing": "Black background removed with connected exterior mask and edge unmatting; tight crop; Lanczos resize; Pillow WebP quality 90",
+    "originalSize": [
+      250,
+      202
+    ],
+    "size": [
+      128,
+      103
+    ],
+    "pivot": [
+      0.5,
+      0.5
+    ],
+    "path": "assets/beads/sprout.webp"
+  },
+  "sakura-pearl": {
+    "source": "AI image generation (built-in image_gen)",
+    "beadId": "petalpearl",
+    "prompt": "an ivory to very pale pink pearlescent cherry blossom, exactly five rounded petals each with a small notch at its tip; overhead product photograph matching original heart, flower, pearl and holostar; rounded domed charm; upper-left soft white reflection; pure black background",
+    "references": [
+      "original/heart.png",
+      "original/flower.png",
+      "original/pearl.png",
+      "original/holostar.png"
+    ],
+    "processing": "Black background removed with connected exterior mask and edge unmatting; tight crop; Lanczos resize; Pillow WebP quality 90",
+    "originalSize": [
+      250,
+      238
+    ],
+    "size": [
+      128,
+      122
+    ],
+    "pivot": [
+      0.5,
+      0.5
+    ],
+    "path": "assets/beads/sakura-pearl.webp"
+  },
+  "watermelon": {
+    "source": "AI image generation (built-in image_gen)",
+    "beadId": "sunstar",
+    "prompt": "a single triangular watermelon slice resin charm with pink flesh, a few tiny black seeds and curved green rind; overhead product photograph matching original heart, flower, pearl and holostar; rounded domed charm; upper-left soft white reflection; pure black background",
+    "references": [
+      "original/heart.png",
+      "original/flower.png",
+      "original/pearl.png",
+      "original/holostar.png"
+    ],
+    "processing": "Black background removed with connected exterior mask and edge unmatting; tight crop; Lanczos resize; Pillow WebP quality 90",
+    "originalSize": [
+      250,
+      232
+    ],
+    "size": [
+      128,
+      119
+    ],
+    "pivot": [
+      0.5,
+      0.5
+    ],
+    "path": "assets/beads/watermelon.webp"
+  },
+  "shell-blue": {
+    "source": "AI image generation (built-in image_gen)",
+    "beadId": "waveglass",
+    "prompt": "a pale sky blue transparent glass conch shell charm, tapered spiral silhouette with rounded raised spiral ridges; overhead product photograph matching original heart, flower, pearl and holostar; rounded domed charm; upper-left soft white reflection; pure black background",
+    "references": [
+      "original/heart.png",
+      "original/flower.png",
+      "original/pearl.png",
+      "original/holostar.png"
+    ],
+    "processing": "Black background removed with connected exterior mask and edge unmatting; tight crop; Lanczos resize; Pillow WebP quality 90",
+    "originalSize": [
+      177,
+      250
+    ],
+    "size": [
+      91,
+      128
+    ],
+    "pivot": [
+      0.5,
+      0.5
+    ],
+    "path": "assets/beads/shell-blue.webp"
+  },
+  "shell-pearl": {
+    "source": "AI image generation (built-in image_gen)",
+    "beadId": "conchpearl",
+    "prompt": "an apricot ivory pearlescent conch shell charm, tapered spiral silhouette with rounded raised spiral ridges; overhead product photograph matching original heart, flower, pearl and holostar; rounded domed charm; upper-left soft white reflection; pure black background",
+    "references": [
+      "original/heart.png",
+      "original/flower.png",
+      "original/pearl.png",
+      "original/holostar.png"
+    ],
+    "processing": "Black background removed with connected exterior mask and edge unmatting; tight crop; Lanczos resize; Pillow WebP quality 90",
+    "originalSize": [
+      162,
+      250
+    ],
+    "size": [
+      83,
+      128
+    ],
+    "pivot": [
+      0.5,
+      0.5
+    ],
+    "path": "assets/beads/shell-pearl.webp"
   }
 }
