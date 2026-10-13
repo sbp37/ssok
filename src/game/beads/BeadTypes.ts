@@ -431,6 +431,14 @@ export const THEME_TYPES: readonly BeadType[] = [
   hidden({ id: "snowstar", name: "눈꽃 별사탕", shape: "star", material: "plastic", radius: [22, 24], colors: ["#eaf4ff", "#dfe9ff"], mass: 1.4, sound: "tok" }),
   hidden({ id: "iceglass", name: "얼음 구슬", shape: "circle", material: "glass", radius: [23, 25], colors: ["#cfe6ff"], mass: 2.4, sound: "pong" }),
   hidden({ id: "snowpearl", name: "눈 진주", shape: "circle", material: "pearl", radius: [21, 23], colors: ["#fbfdff"], mass: 2, sound: "ting" }),
+  // 봄 정원 (3~5월)
+  hidden({ id: "sakurastar", name: "벚꽃 별사탕", shape: "star", material: "plastic", radius: [22, 24], colors: ["#ffc8dc", "#ffdbe8"], mass: 1.4, sound: "tok" }),
+  hidden({ id: "springglass", name: "새싹 유리알", shape: "circle", material: "glass", radius: [23, 25], colors: ["#c9efd6"], mass: 2.4, sound: "pong" }),
+  hidden({ id: "petalpearl", name: "꽃잎 진주", shape: "circle", material: "pearl", radius: [21, 23], colors: ["#ffe4ee"], mass: 2, sound: "ting" }),
+  // 여름 바다 (6~9월)
+  hidden({ id: "sunstar", name: "햇살 별사탕", shape: "star", material: "plastic", radius: [22, 24], colors: ["#ffe27a", "#ffd166"], mass: 1.4, sound: "tok" }),
+  hidden({ id: "waveglass", name: "파도 유리알", shape: "circle", material: "glass", radius: [23, 25], colors: ["#a6dcf2"], mass: 2.4, sound: "pong" }),
+  hidden({ id: "conchpearl", name: "소라 진주", shape: "circle", material: "pearl", radius: [21, 23], colors: ["#ffe9da"], mass: 2, sound: "ting" }),
 ];
 
 /** Ultra-rare: 0.5~1%, any pad, once in a blue moon. "뭐야 이거?" – never a jackpot. */

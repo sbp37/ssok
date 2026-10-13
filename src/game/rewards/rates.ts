@@ -165,6 +165,42 @@ export const HIDDEN_POOLS: Record<string, { id: string; w: number }[]> = {
     { id: "eye", w: 5 },
     { id: "holostar", w: 1 },
   ],
+  sakura: [
+    { id: NONE, w: 24 },
+    { id: "sakurastar", w: 40 },
+    { id: "petalpearl", w: 26 },
+    { id: "springglass", w: 22 },
+    { id: "minicherry", w: 8 },
+    { id: "bigopal", w: 5 },
+    { id: "crown", w: 1 },
+  ],
+  tulip: [
+    { id: NONE, w: 24 },
+    { id: "springglass", w: 40 },
+    { id: "sakurastar", w: 26 },
+    { id: "petalpearl", w: 22 },
+    { id: "candystar", w: 8 },
+    { id: "duck", w: 5 },
+    { id: "holostar", w: 1 },
+  ],
+  watermelon: [
+    { id: NONE, w: 24 },
+    { id: "sunstar", w: 40 },
+    { id: "waveglass", w: 26 },
+    { id: "conchpearl", w: 22 },
+    { id: "minicherry", w: 8 },
+    { id: "smallshell", w: 5 },
+    { id: "bigduck", w: 1 },
+  ],
+  icecream: [
+    { id: NONE, w: 24 },
+    { id: "waveglass", w: 40 },
+    { id: "conchpearl", w: 26 },
+    { id: "sunstar", w: 22 },
+    { id: "bigglass", w: 8 },
+    { id: "eye", w: 5 },
+    { id: "crown", w: 1 },
+  ],
 };
 
 /** chance that one deep bead of any pad is replaced by an ultra-rare object (on top of the pools' 1%) */

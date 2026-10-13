@@ -19,6 +19,8 @@ export const TREASURE_SETS: readonly TreasureSet[] = [
   { id: "legend", name: "전설", ids: ["crown", "holostar", "bigduck"] },
   { id: "autumn", name: "가을 숲", ids: ["maplestar", "pumpkinglass", "chestnutpearl"], theme: "autumn" },
   { id: "winter", name: "눈 오는 밤", ids: ["snowstar", "iceglass", "snowpearl"], theme: "winter" },
+  { id: "spring", name: "봄 정원", ids: ["sakurastar", "springglass", "petalpearl"], theme: "spring" },
+  { id: "summer", name: "여름 바다", ids: ["sunstar", "waveglass", "conchpearl"], theme: "summer" },
 ];
 
 /** the set this find just completed, if any */
