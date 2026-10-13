@@ -1101,8 +1101,8 @@ body,
 .glimmer,
 .tactile-hint,
 .hint {
-  --bar: rgba(18, 28, 56, 0.78);
-  background: linear-gradient(90deg, rgba(18, 28, 56, 0) 0%, var(--bar) 18%, var(--bar) 82%, rgba(18, 28, 56, 0) 100%);
+  --bar: rgba(40, 54, 92, 0.46);
+  background: linear-gradient(90deg, rgba(40, 54, 92, 0) 0%, var(--bar) 18%, var(--bar) 82%, rgba(40, 54, 92, 0) 100%);
   color: #fff;
   font-weight: 700;
   border: none;
@@ -1115,8 +1115,8 @@ body,
   /* as wide as the words, centred, never edge to edge */
   width: max-content;
   max-width: calc(100% - 24px);
-  padding: 8px 34px;
-  font-size: 14px;
+  padding: 6px 30px;
+  font-size: 13px;
 }
 .toast small,
 .done small,
@@ -1135,16 +1135,16 @@ body,
 .toasts {
   align-items: center;
 }
-.toast.soft { --bar: rgba(18, 28, 56, 0.66); font-weight: 600; color: #fff; }
+.toast.soft { --bar: rgba(40, 54, 92, 0.4); font-weight: 600; color: #fff; }
 .toast.rare small { color: #ffd2e5; }
 .toast.hidden small { color: #dcd6ff; }
 .toast.ultra {
-  --bar: rgba(18, 28, 56, 0.86);
+  --bar: rgba(40, 54, 92, 0.56);
   color: #fff;
-  background: linear-gradient(90deg, rgba(18, 28, 56, 0) 0%, var(--bar) 18%, var(--bar) 82%, rgba(18, 28, 56, 0) 100%);
+  background: linear-gradient(90deg, rgba(40, 54, 92, 0) 0%, var(--bar) 18%, var(--bar) 82%, rgba(40, 54, 92, 0) 100%);
 }
 .pad-title {
-  --bar: rgba(18, 28, 56, 0.66);
+  --bar: rgba(40, 54, 92, 0.4);
   padding: 6px 30px;
   font-size: 13px;
   animation: padBarIn 1.9s ease-out both;
@@ -1155,11 +1155,11 @@ body,
   100% { opacity: 0; transform: translate(-50%, -3px); }
 }
 .done {
-  padding: 10px 40px 11px;
+  padding: 8px 34px 9px;
   animation: doneBarIn 0.45s ease-out;
 }
 .done strong {
-  font-size: 16px;
+  font-size: 15px;
   letter-spacing: -0.03em;
 }
 .done small {
@@ -1184,13 +1184,13 @@ body,
 }
 .glimmer,
 .tactile-hint {
-  --bar: rgba(18, 28, 56, 0.66);
+  --bar: rgba(40, 54, 92, 0.4);
   font-size: 13px;
   font-weight: 600;
   white-space: normal;
 }
 .hint {
-  --bar: rgba(18, 28, 56, 0.66);
+  --bar: rgba(40, 54, 92, 0.4);
 }
 .hint small {
   margin-top: 2px;
