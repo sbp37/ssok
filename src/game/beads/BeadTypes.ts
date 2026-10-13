@@ -5,7 +5,7 @@
  * Distances are in px at a reference pad radius of 170px and are scaled by
  * the live pad size, so a small 360px phone and a tablet feel the same.
  */
-export type BeadShape = "circle" | "star" | "heart" | "flower" | "oval" | "disc" | "smile" | "cherry" | "eye" | "key" | "duck" | "crown";
+export type BeadShape = "circle" | "star" | "heart" | "flower" | "oval" | "disc" | "smile" | "cherry" | "eye" | "key" | "duck" | "crown" | "leaf" | "acorn" | "snowflake" | "mitten" | "petal" | "sprout" | "watermelon" | "shell";
 export type BeadMaterial = "plastic" | "glass" | "pearl" | "metal" | "shell";
 export type Rarity = "common" | "big" | "odd" | "special" | "rare" | "hidden" | "ultra";
 export type PopSound = "pok" | "ssok" | "pong" | "tok" | "ting";
@@ -424,21 +424,21 @@ export const HIDDEN_TYPES: readonly BeadType[] = [
  */
 export const THEME_TYPES: readonly BeadType[] = [
   // 가을 숲 (10~11월)
-  hidden({ id: "maplestar", name: "단풍 별사탕", shape: "star", material: "plastic", radius: [22, 24], colors: ["#f08a5d", "#f4b06a"], mass: 1.4, sound: "tok" }),
-  hidden({ id: "pumpkinglass", name: "호박 유리알", shape: "circle", material: "glass", radius: [23, 25], colors: ["#f5a95c"], mass: 2.4, sound: "pong" }),
-  hidden({ id: "chestnutpearl", name: "밤빛 진주", shape: "circle", material: "pearl", radius: [21, 23], colors: ["#c99a72"], mass: 2, sound: "ting" }),
+  hidden({ id: "maplestar", name: "단풍잎 비즈", shape: "leaf", material: "plastic", radius: [22, 24], colors: ["#f08a5d", "#f4b06a"], mass: 1.4, sound: "tok" }),
+  hidden({ id: "pumpkinglass", name: "호박빛 단풍잎", shape: "leaf", material: "glass", radius: [23, 25], colors: ["#f5a95c"], mass: 2.4, sound: "pong" }),
+  hidden({ id: "chestnutpearl", name: "도토리 진주", shape: "acorn", material: "pearl", radius: [21, 23], colors: ["#c99a72"], mass: 2, sound: "ting" }),
   // 눈 오는 밤 (12~2월)
-  hidden({ id: "snowstar", name: "눈꽃 별사탕", shape: "star", material: "plastic", radius: [22, 24], colors: ["#eaf4ff", "#dfe9ff"], mass: 1.4, sound: "tok" }),
-  hidden({ id: "iceglass", name: "얼음 구슬", shape: "circle", material: "glass", radius: [23, 25], colors: ["#cfe6ff"], mass: 2.4, sound: "pong" }),
-  hidden({ id: "snowpearl", name: "눈 진주", shape: "circle", material: "pearl", radius: [21, 23], colors: ["#fbfdff"], mass: 2, sound: "ting" }),
+  hidden({ id: "snowstar", name: "눈송이 비즈", shape: "snowflake", material: "plastic", radius: [22, 24], colors: ["#eaf4ff", "#dfe9ff"], mass: 1.4, sound: "tok" }),
+  hidden({ id: "iceglass", name: "얼음 눈송이", shape: "snowflake", material: "glass", radius: [23, 25], colors: ["#cfe6ff"], mass: 2.4, sound: "pong" }),
+  hidden({ id: "snowpearl", name: "벙어리장갑", shape: "mitten", material: "pearl", radius: [21, 23], colors: ["#e6edf9"], mass: 2, sound: "ting" }),
   // 봄 정원 (3~5월)
-  hidden({ id: "sakurastar", name: "벚꽃 별사탕", shape: "star", material: "plastic", radius: [22, 24], colors: ["#ffc8dc", "#ffdbe8"], mass: 1.4, sound: "tok" }),
-  hidden({ id: "springglass", name: "새싹 유리알", shape: "circle", material: "glass", radius: [23, 25], colors: ["#c9efd6"], mass: 2.4, sound: "pong" }),
-  hidden({ id: "petalpearl", name: "꽃잎 진주", shape: "circle", material: "pearl", radius: [21, 23], colors: ["#ffe4ee"], mass: 2, sound: "ting" }),
+  hidden({ id: "sakurastar", name: "벚꽃 비즈", shape: "petal", material: "plastic", radius: [22, 24], colors: ["#ffc8dc", "#ffdbe8"], mass: 1.4, sound: "tok" }),
+  hidden({ id: "springglass", name: "새싹 유리알", shape: "sprout", material: "glass", radius: [23, 25], colors: ["#c9efd6"], mass: 2.4, sound: "pong" }),
+  hidden({ id: "petalpearl", name: "벚꽃 진주", shape: "petal", material: "pearl", radius: [21, 23], colors: ["#ffe4ee"], mass: 2, sound: "ting" }),
   // 여름 바다 (6~9월)
-  hidden({ id: "sunstar", name: "햇살 별사탕", shape: "star", material: "plastic", radius: [22, 24], colors: ["#ffe27a", "#ffd166"], mass: 1.4, sound: "tok" }),
-  hidden({ id: "waveglass", name: "파도 유리알", shape: "circle", material: "glass", radius: [23, 25], colors: ["#a6dcf2"], mass: 2.4, sound: "pong" }),
-  hidden({ id: "conchpearl", name: "소라 진주", shape: "circle", material: "pearl", radius: [21, 23], colors: ["#ffe9da"], mass: 2, sound: "ting" }),
+  hidden({ id: "sunstar", name: "수박 비즈", shape: "watermelon", material: "plastic", radius: [22, 24], colors: ["#ff8ea2", "#ff9bb0"], mass: 1.4, sound: "tok" }),
+  hidden({ id: "waveglass", name: "파도 소라", shape: "shell", material: "glass", radius: [23, 25], colors: ["#a6dcf2"], mass: 2.4, sound: "pong" }),
+  hidden({ id: "conchpearl", name: "소라 진주", shape: "shell", material: "pearl", radius: [21, 23], colors: ["#ffe9da"], mass: 2, sound: "ting" }),
 ];
 
 /** Ultra-rare: 0.5~1%, any pad, once in a blue moon. "뭐야 이거?" – never a jackpot. */

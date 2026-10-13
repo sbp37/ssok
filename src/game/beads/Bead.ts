@@ -380,7 +380,8 @@ export function generatePad(padR: number, rng: Rng, opts: PadOptions = {}): Bead
   for (const bead of beads) {
     if (bead.type.shape === "circle") continue;
     const group = orientations.get(bead.type.id) ?? { phase: bead.rot, count: 0 };
-    const period = bead.type.shape === "star" ? Math.PI * 2 / 5
+    const period = (bead.type.shape === "star" || bead.type.shape === "petal") ? Math.PI * 2 / 5
+      : bead.type.shape === "snowflake" ? Math.PI / 3
       : bead.type.shape === "oval" ? Math.PI : Math.PI * 2;
     bead.rot = group.phase + group.count * period * 0.61803398875 + Math.sin(bead.rot) * period * 0.025;
     bead.rot = Math.atan2(Math.sin(bead.rot), Math.cos(bead.rot));

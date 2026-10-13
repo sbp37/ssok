@@ -71,6 +71,95 @@ export function shapePath(ctx: CanvasRenderingContext2D, type: BeadType, r: numb
       ctx.closePath();
       break;
     }
+    case "leaf": {
+      // Five maple lobes and a short stem, contained within the hit radius.
+      const points = [[0,-1],[.2,-.48],[.55,-.73],[.48,-.28],[.94,-.3],
+        [.66,.12],[.8,.35],[.25,.46],[.09,.62],[.09,.93],
+        [-.09,.93],[-.09,.62],[-.25,.46],[-.8,.35],[-.66,.12],
+        [-.94,-.3],[-.48,-.28],[-.55,-.73],[-.2,-.48]];
+      points.forEach(([x,y],i) => i ? ctx.lineTo(x*r,y*r) : ctx.moveTo(x*r,y*r));
+      ctx.closePath();
+      break;
+    }
+    case "acorn":
+      ctx.moveTo(-r*.65,-r*.25);
+      ctx.bezierCurveTo(-r*.72,r*.32,-r*.42,r*.7,0,r*.94);
+      ctx.bezierCurveTo(r*.42,r*.7,r*.72,r*.32,r*.65,-r*.25);
+      ctx.quadraticCurveTo(r*.7,-r*.7,r*.1,-r*.76);
+      ctx.lineTo(r*.08,-r*.96); ctx.lineTo(-r*.08,-r*.96);
+      ctx.lineTo(-r*.1,-r*.76);
+      ctx.quadraticCurveTo(-r*.7,-r*.7,-r*.65,-r*.25);
+      ctx.closePath();
+      break;
+    case "snowflake": {
+      // A single rounded outline: six arms with two small branch tips each.
+      const points: number[][] = [];
+      for (let i=0;i<6;i++) {
+        const a=i*Math.PI/3-Math.PI/2;
+        for (const [x,y] of [[.3,-.16],[.58,-.32],[.69,-.23],[.53,-.1],
+          [.95,-.1],[1,0],[.95,.1],[.53,.1],[.69,.23],[.58,.32],[.3,.16]]) {
+          points.push([(Math.cos(a)*x-Math.sin(a)*y)*r,(Math.sin(a)*x+Math.cos(a)*y)*r]);
+        }
+      }
+      const first=points[0],last=points[points.length-1];
+      ctx.moveTo((first[0]+last[0])/2,(first[1]+last[1])/2);
+      points.forEach(([x,y],i)=>{
+        const next=points[(i+1)%points.length];
+        ctx.quadraticCurveTo(x,y,(x+next[0])/2,(y+next[1])/2);
+      });
+      ctx.closePath();
+      break;
+    }
+    case "mitten":
+      ctx.moveTo(-r*.5,r*.78); ctx.lineTo(r*.42,r*.78);
+      ctx.lineTo(r*.44,r*.24);
+      ctx.bezierCurveTo(r*.98,r*.05,r*.93,-r*.46,r*.64,-r*.39);
+      ctx.lineTo(r*.4,-r*.12);
+      ctx.lineTo(r*.4,-r*.47);
+      ctx.bezierCurveTo(r*.4,-r*1.05,-r*.58,-r*1.05,-r*.58,-r*.45);
+      ctx.lineTo(-r*.5,r*.78); ctx.closePath();
+      break;
+    case "petal": {
+      // Five connected petals, each with the characteristic cherry-blossom notch.
+      const point=(a:number,d:number)=>[Math.cos(a)*r*d,Math.sin(a)*r*d];
+      for(let i=0;i<5;i++){
+        const a=i*Math.PI*2/5-Math.PI/2;
+        const at=(offset:number,d:number)=>point(a+offset,d);
+        const [sx,sy]=at(-Math.PI/5,.36);
+        if(i===0)ctx.moveTo(sx,sy);
+        const [c1x,c1y]=at(-.5,.92),[c2x,c2y]=at(-.22,1.08),[ex,ey]=at(-.1,.97);
+        ctx.bezierCurveTo(c1x,c1y,c2x,c2y,ex,ey);
+        const [nx,ny]=at(0,.8);ctx.lineTo(nx,ny);
+        const [tx,ty]=at(.1,.97);ctx.lineTo(tx,ty);
+        const [d1x,d1y]=at(.22,1.08),[d2x,d2y]=at(.5,.92),[fx,fy]=at(Math.PI/5,.36);
+        ctx.bezierCurveTo(d1x,d1y,d2x,d2y,fx,fy);
+      }
+      ctx.closePath();
+      break;
+    }
+    case "sprout":
+      ctx.moveTo(-r*.07,r*.88);ctx.lineTo(r*.07,r*.88);ctx.lineTo(r*.07,r*.03);
+      ctx.bezierCurveTo(r*.72,r*.13,r*.9,-r*.42,r*.88,-r*.7);
+      ctx.bezierCurveTo(r*.39,-r*.76,r*.08,-r*.48,0,-r*.1);
+      ctx.bezierCurveTo(-r*.14,-r*.62,-r*.57,-r*.87,-r*.9,-r*.72);
+      ctx.bezierCurveTo(-r*.89,-r*.2,-r*.57,r*.07,-r*.07,r*.03);
+      ctx.closePath();
+      break;
+    case "watermelon":
+      ctx.moveTo(0,-r*.82);
+      ctx.lineTo(r*.87,r*.18);
+      ctx.quadraticCurveTo(0,r*1.15,-r*.87,r*.18);
+      ctx.closePath();
+      break;
+    case "shell":
+      ctx.moveTo(r*.78,r*.54);
+      ctx.bezierCurveTo(r*.99,-r*.02,r*.74,-r*.82,r*.12,-r*.91);
+      ctx.bezierCurveTo(-r*.57,-r*1.02,-r*.98,-r*.38,-r*.89,r*.2);
+      ctx.bezierCurveTo(-r*.83,r*.73,-r*.3,r*.91,r*.12,r*.64);
+      ctx.quadraticCurveTo(r*.33,r*.99,r*.73,r*.87);
+      ctx.quadraticCurveTo(r*.93,r*.8,r*.78,r*.54);
+      ctx.closePath();
+      break;
     case "heart": {
       const s = r / 16;
       ctx.moveTo(0, 12 * s);
@@ -221,6 +310,82 @@ function paintBody(ctx: CanvasRenderingContext2D, type: BeadType, color: string,
   ctx.lineWidth = Math.max(0.8, r * 0.07);
   ctx.strokeStyle = m === "glass" ? lighten(color, 0.4, 0.35) : darken(color, 0.4, 0.3);
   ctx.stroke();
+}
+
+/** Small moulded details share the body's clipping, lighting and material. */
+function paintThemeDetails(ctx: CanvasRenderingContext2D, type: BeadType, color: string, r: number) {
+  ctx.save();
+  shapePath(ctx,type,r); ctx.clip();
+  ctx.scale(r,r);
+  ctx.lineCap="round"; ctx.lineJoin="round";
+  ctx.lineWidth=.045; ctx.strokeStyle=darken(color,.5,.5);
+  const line=(x:number,y:number,ex:number,ey:number)=>{
+    ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(ex,ey);ctx.stroke();
+  };
+  switch(type.shape){
+    case "leaf":
+      line(0,.65,0,-.72);
+      for(const side of [-1,1]){
+        line(0,.2,side*.63,-.2);line(0,-.08,side*.42,-.51);
+        line(0,.35,side*.52,.3);
+      }
+      break;
+    case "acorn": {
+      const cap=ctx.createLinearGradient(-.6,-.7,.5,-.15);
+      cap.addColorStop(0,"#ddba8a");cap.addColorStop(.5,"#9c6745");cap.addColorStop(1,"#684630");
+      ctx.fillStyle=cap;ctx.beginPath();
+      ctx.moveTo(-.74,-.23);ctx.quadraticCurveTo(0,-.05,.74,-.23);
+      ctx.lineTo(.74,-1);ctx.lineTo(-.74,-1);ctx.closePath();ctx.fill();
+      ctx.strokeStyle="rgba(255,232,194,.4)";
+      for(let x=-.6;x<.7;x+=.2){line(x,-.68,x+.3,-.25);line(x,-.25,x+.3,-.68);}
+      break;
+    }
+    case "snowflake":
+      ctx.strokeStyle="rgba(122,167,214,.5)";
+      for(let i=0;i<6;i++){
+        ctx.save();ctx.rotate(i*Math.PI/3);line(0,0,0,-.78);
+        line(0,-.4,-.18,-.55);line(0,-.4,.18,-.55);ctx.restore();
+      }
+      break;
+    case "mitten":
+      ctx.fillStyle=darken(color,.22);ctx.fillRect(-.6,.48,1.05,.3);
+      ctx.strokeStyle="rgba(140,169,202,.5)";
+      for(let x=-.4;x<.4;x+=.16)line(x,.53,x,.73);
+      ctx.beginPath();ctx.arc(-.12,-.15,.17,0,Math.PI*2);ctx.stroke();
+      break;
+    case "petal":
+      ctx.fillStyle="#e69ab2";
+      for(let i=0;i<5;i++){
+        const a=i*Math.PI*2/5-Math.PI/2;
+        line(Math.cos(a)*.08,Math.sin(a)*.08,Math.cos(a)*.28,Math.sin(a)*.28);
+        ctx.beginPath();ctx.arc(Math.cos(a)*.22,Math.sin(a)*.22,.045,0,Math.PI*2);ctx.fill();
+      }
+      break;
+    case "sprout":
+      line(0,.65,0,-.08);line(0,-.08,-.65,-.55);line(0,-.08,.66,-.5);
+      break;
+    case "watermelon":
+      ctx.strokeStyle="#75b879";ctx.lineWidth=.18;
+      ctx.beginPath();ctx.moveTo(-.86,.18);ctx.quadraticCurveTo(0,1.15,.86,.18);ctx.stroke();
+      ctx.fillStyle="#84554b";
+      for(const [x,y] of [[0,-.3],[-.29,.12],[.29,.12],[0,.4]]){
+        ctx.beginPath();ctx.ellipse(x,y,.04,.07,-x,0,Math.PI*2);ctx.fill();
+      }
+      break;
+    case "shell":
+      // Recessed spiral with a fine bright ridge beside it.
+      for(const [width,ink] of [[.09,darken(color,.55,.5)],[.025,"rgba(255,255,255,.8)"]] as const){
+        ctx.lineWidth=width;ctx.strokeStyle=ink;ctx.beginPath();
+        for(let i=0;i<=100;i++){
+          const a=i/100*Math.PI*3.5,rad=.025+i/100*.68;
+          const x=-.1+Math.cos(a)*rad,y=-.12+Math.sin(a)*rad;
+          if(i===0)ctx.moveTo(x,y);else ctx.lineTo(x,y);
+        }
+        ctx.stroke();
+      }
+      break;
+  }
+  ctx.restore();
 }
 
 function paintFace(ctx: CanvasRenderingContext2D, type: BeadType, r: number) {
@@ -424,6 +589,7 @@ export function getBeadSprite(type: BeadType, color: string, radius: number, dpr
   ctx.save();
   shapePath(ctx, type, r);
   ctx.clip();
+  paintThemeDetails(ctx, type, color, r);
   paintSpecular(ctx, type, r);
   ctx.restore();
   paintFace(ctx, type, r);
