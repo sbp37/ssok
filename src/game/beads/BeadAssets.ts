@@ -15,6 +15,10 @@ const assetIds: Record<string, string> = {
   holostar: "holostar",
   duck: "duck",
   bigduck: "duck",
+  cloudcharm: "cloud-charm",
+  pawcharm: "paw-charm",
+  gummybear: "gummy-bear",
+  ribboncharm: "ribbon-charm",
   // plain beads – the photo is recoloured to each bead's own colour (see TINTED)
   tiny: "pink",
   bigmatte: "violet",

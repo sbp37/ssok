@@ -28,7 +28,7 @@ export function treasureKind(t: BeadType): TreasureKind | null {
   return null;
 }
 
-/** the everyday box: what "보물 n/14" counts, in display order */
+/** the everyday box: what "보물 n/18" counts, in display order */
 export const BOX_TYPES: readonly BeadType[] = [
   ...BEAD_TYPES.filter((t) => t.rarity === "rare"),
   ...HIDDEN_TYPES,
