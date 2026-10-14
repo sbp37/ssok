@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 120" fill="none">
+  <title>작은 반짝임과 빈 유리병</title>
+  <defs><radialGradient id="shadow"><stop stop-color="#d7c5df" stop-opacity=".2"/><stop offset="1" stop-color="#d7c5df" stop-opacity="0"/></radialGradient></defs>
+  <ellipse cx="80" cy="106" rx="39" ry="8" fill="url(#shadow)"/>
+  <path d="M52 35C52 29 108 29 108 35L105 87C104.5 100 97 105 80 105S55.5 100 55 87Z" fill="#f5dce9" fill-opacity=".1" stroke="#e9b8cc" stroke-opacity=".8" stroke-width="2"/>
+  <ellipse cx="80" cy="35" rx="28" ry="5.5" fill="#fff" fill-opacity=".12" stroke="#e9b8cc" stroke-opacity=".8" stroke-width="2"/>
+  <path d="M57 38C67 42 93 42 103 38" stroke="#fff" stroke-width="2" stroke-linecap="round"/>
+  <path d="M61 48L63 83" stroke="#fff" stroke-opacity=".95" stroke-width="4" stroke-linecap="round"/>
+  <path d="M98 48L97 63" stroke="#fff" stroke-opacity=".7" stroke-width="2" stroke-linecap="round"/>
+  <path d="M57 92C64 102 96 102 103 92L102 97C95 107 65 107 58 97Z" fill="#e9b8cc" fill-opacity=".16"/>
+  <path d="M65 99C73 102 87 102 95 99" stroke="#fff" stroke-width="2" stroke-linecap="round"/>
+  <path d="M35 45C35 51 33 53 27 53C33 53 35 55 35 61C35 55 37 53 43 53C37 53 35 51 35 45Z" fill="#e8d7f5"/>
+  <path d="M122 22C122 27 120 29 115 29C120 29 122 31 122 36C122 31 124 29 129 29C124 29 122 27 122 22Z" fill="#f0c8da"/>
+  <path d="M126 77C126 80 125 81 122 81C125 81 126 82 126 85C126 82 127 81 130 81C127 81 126 80 126 77Z" fill="#e8d7f5"/>
+</svg>

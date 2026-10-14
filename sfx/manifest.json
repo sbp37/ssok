@@ -1,0 +1,4 @@
+{
+  "_readme": "Drop close-mic ASMR samples here and list them: name → file (relative to this folder). Names: press, stretch, tick, pop_small, pop_big, release, land_glass, land_plastic, land_metal, land_shell, rare. Missing names fall back to procedural sound.",
+  "samples": {}
+}
