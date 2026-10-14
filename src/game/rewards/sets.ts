@@ -16,6 +16,7 @@ export const TREASURE_SETS: readonly TreasureSet[] = [
   { id: "sweet", name: "달콤", ids: ["minicherry", "candystar", "rainbow"] },
   { id: "shine", name: "반짝", ids: ["bigopal", "opal", "key"] },
   { id: "friends", name: "친구", ids: ["duck", "eye"] },
+  { id: "cozy", name: "포근", ids: ["cloudcharm", "pawcharm", "gummybear", "ribboncharm"] },
   { id: "legend", name: "전설", ids: ["crown", "holostar", "bigduck"] },
   { id: "autumn", name: "가을 숲", ids: ["maplestar", "pumpkinglass", "chestnutpearl"], theme: "autumn" },
   { id: "winter", name: "눈 오는 밤", ids: ["snowstar", "iceglass", "snowpearl"], theme: "winter" },

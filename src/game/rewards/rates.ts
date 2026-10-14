@@ -11,6 +11,7 @@
 export const NONE = "none";
 export const HIDDEN_POOLS: Record<string, { id: string; w: number }[]> = {
   cloud: [
+    { id: "cloudcharm", w: 16 },
     { id: NONE, w: 38 },
     { id: "bigglass", w: 55 },
     { id: "candystar", w: 20 },
@@ -29,6 +30,7 @@ export const HIDDEN_POOLS: Record<string, { id: string; w: number }[]> = {
     { id: "holostar", w: 1 },
   ],
   donut: [
+    { id: "gummybear", w: 5 },
     { id: NONE, w: 38 },
     { id: "key", w: 48 },
     { id: "bigglass", w: 24 },
@@ -38,6 +40,7 @@ export const HIDDEN_POOLS: Record<string, { id: string; w: number }[]> = {
     { id: "crown", w: 1 },
   ],
   paw: [
+    { id: "pawcharm", w: 16 },
     { id: NONE, w: 38 },
     { id: "eye", w: 50 },
     { id: "duck", w: 22 },
@@ -47,6 +50,7 @@ export const HIDDEN_POOLS: Record<string, { id: string; w: number }[]> = {
     { id: "bigduck", w: 1 },
   ],
   ribbon: [
+    { id: "ribboncharm", w: 16 },
     { id: NONE, w: 38 },
     { id: "bigopal", w: 50 },
     { id: "key", w: 22 },
@@ -65,6 +69,7 @@ export const HIDDEN_POOLS: Record<string, { id: string; w: number }[]> = {
     { id: "crown", w: 1 },
   ],
   cherry: [
+    { id: "gummybear", w: 5 },
     { id: NONE, w: 38 },
     { id: "minicherry", w: 55 },
     { id: "bigglass", w: 20 },
@@ -74,6 +79,8 @@ export const HIDDEN_POOLS: Record<string, { id: string; w: number }[]> = {
     { id: "holostar", w: 1 },
   ],
   heart: [
+    { id: "pawcharm", w: 5 },
+    { id: "ribboncharm", w: 5 },
     { id: NONE, w: 38 },
     { id: "minicherry", w: 40 },
     { id: "bigopal", w: 24 },
@@ -83,6 +90,7 @@ export const HIDDEN_POOLS: Record<string, { id: string; w: number }[]> = {
     { id: "crown", w: 1 },
   ],
   cat: [
+    { id: "pawcharm", w: 5 },
     { id: NONE, w: 38 },
     { id: "eye", w: 42 },
     { id: "smallshell", w: 22 },
@@ -92,6 +100,7 @@ export const HIDDEN_POOLS: Record<string, { id: string; w: number }[]> = {
     { id: "holostar", w: 1 },
   ],
   bear: [
+    { id: "gummybear", w: 16 },
     { id: NONE, w: 38 },
     { id: "bigpearl", w: 40 },
     { id: "key", w: 22 },
@@ -101,6 +110,7 @@ export const HIDDEN_POOLS: Record<string, { id: string; w: number }[]> = {
     { id: "bigduck", w: 1 },
   ],
   star: [
+    { id: "cloudcharm", w: 5 },
     { id: NONE, w: 38 },
     { id: "duck", w: 45 },
     { id: "bigopal", w: 28 },
@@ -110,6 +120,7 @@ export const HIDDEN_POOLS: Record<string, { id: string; w: number }[]> = {
     { id: "holostar", w: 1 },
   ],
   moon: [
+    { id: "cloudcharm", w: 5 },
     { id: NONE, w: 38 },
     { id: "candystar", w: 50 },
     { id: "bigpearl", w: 22 },
@@ -119,6 +130,7 @@ export const HIDDEN_POOLS: Record<string, { id: string; w: number }[]> = {
     { id: "holostar", w: 1 },
   ],
   butterfly: [
+    { id: "ribboncharm", w: 5 },
     { id: NONE, w: 38 },
     { id: "bigopal", w: 50 },
     { id: "minicherry", w: 22 },

@@ -415,6 +415,10 @@ export const HIDDEN_TYPES: readonly BeadType[] = [
   hidden({ id: "smallshell", name: "작은 조개", shape: "disc", material: "shell", radius: [21, 23], colors: ["#f5eef0"], mass: 1.5, sound: "tok" }),
   hidden({ id: "bigopal", name: "오팔", shape: "circle", material: "pearl", radius: [21, 23], colors: ["#f4eefc"], mass: 2, sound: "ting" }),
   hidden({ id: "bigglass", name: "아주 큰 유리알", shape: "circle", material: "glass", radius: [25, 27], colors: ["#dbeeff"], mass: 2.8, sound: "pong" }),
+  hidden({ id: "cloudcharm", name: "구름 참", shape: "circle", material: "plastic", radius: [22, 24], colors: ["#d8efff", "#ffffff"], mass: 1.4, sound: "tok" }),
+  hidden({ id: "pawcharm", name: "발바닥 참", shape: "flower", material: "plastic", radius: [21, 23], colors: ["#ffafd1"], mass: 1.5, sound: "ssok" }),
+  hidden({ id: "gummybear", name: "곰젤리", shape: "circle", material: "plastic", radius: [21, 23], colors: ["#ffad70", "#ff91a9"], mass: 1.6, sound: "pok" }),
+  hidden({ id: "ribboncharm", name: "리본 참", shape: "flower", material: "plastic", radius: [22, 24], colors: ["#d6b6ff", "#ffc5e5"], mass: 1.4, sound: "ting" }),
 ];
 
 /**

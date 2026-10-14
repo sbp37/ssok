@@ -703,5 +703,105 @@
       0.5
     ],
     "path": "assets/beads/shell-pearl.webp"
+  },
+  "cloud-charm": {
+    "source": "AI image generation (built-in image_gen)",
+    "beadId": "cloudcharm",
+    "prompt": "Use case: product-mockup. Input images are style references only: existing photographed heart, flower, pearl and holostar beads. Generate a plump soft resin cloud charm, three rounded cloud lobes, milky white blending into pale sky blue. One small physical charm photographed almost straight overhead, matching the references' rounded domed thickness, soft large white reflection upper left and small reflection right, pastel colours and internal refraction. Centered isolated on pure solid black background with generous margin. Photographic real material, no illustration, no vector, no text, no extra objects, no metal chain or loop, no cast shadow or halo.",
+    "references": [
+      "original/heart.png",
+      "original/flower.png",
+      "original/pearl.png",
+      "original/holostar.png"
+    ],
+    "processing": "Black background removed with connected exterior mask and edge unmatting; tight crop; Lanczos resize; Pillow WebP quality 90",
+    "originalSize": [
+      250,
+      176
+    ],
+    "size": [
+      128,
+      90
+    ],
+    "pivot": [
+      0.5,
+      0.5
+    ],
+    "path": "assets/beads/cloud-charm.webp"
+  },
+  "paw-charm": {
+    "source": "AI image generation (built-in image_gen)",
+    "beadId": "pawcharm",
+    "prompt": "Use case: product-mockup. Input images are style references only: existing photographed heart, flower, pearl and holostar beads. Generate a pink jelly cat paw charm, four small rounded toe pads joined to one larger paw pad, molded translucent pink resin. One small physical charm photographed almost straight overhead, matching the references' rounded domed thickness, soft large white reflection upper left and small reflection right, pastel colours and internal refraction. Centered isolated on pure solid black background with generous margin. Photographic real material, no illustration, no vector, no text, no extra objects, no metal chain or loop, no cast shadow or halo.",
+    "references": [
+      "original/heart.png",
+      "original/flower.png",
+      "original/pearl.png",
+      "original/holostar.png"
+    ],
+    "processing": "Black background removed with connected exterior mask and edge unmatting; tight crop; Lanczos resize; Pillow WebP quality 90",
+    "originalSize": [
+      250,
+      198
+    ],
+    "size": [
+      128,
+      101
+    ],
+    "pivot": [
+      0.5,
+      0.5
+    ],
+    "path": "assets/beads/paw-charm.webp"
+  },
+  "gummy-bear": {
+    "source": "AI image generation (built-in image_gen)",
+    "beadId": "gummybear",
+    "prompt": "Use case: product-mockup. Input images are style references only: existing photographed heart, flower, pearl and holostar beads. Generate a single translucent orange to strawberry pink gummy bear charm, upright round ears short arms and two feet, glossy jelly resin, subtle molded face. One small physical charm photographed almost straight overhead, matching the references' rounded domed thickness, soft large white reflection upper left and small reflection right, pastel colours and internal refraction. Centered isolated on pure solid black background with generous margin. Photographic real material, no illustration, no vector, no text, no extra objects, no metal chain or loop, no cast shadow or halo.",
+    "references": [
+      "original/heart.png",
+      "original/flower.png",
+      "original/pearl.png",
+      "original/holostar.png"
+    ],
+    "processing": "Black background removed with connected exterior mask and edge unmatting; tight crop; Lanczos resize; Pillow WebP quality 90",
+    "originalSize": [
+      182,
+      250
+    ],
+    "size": [
+      93,
+      128
+    ],
+    "pivot": [
+      0.5,
+      0.5
+    ],
+    "path": "assets/beads/gummy-bear.webp"
+  },
+  "ribbon-charm": {
+    "source": "AI image generation (built-in image_gen)",
+    "beadId": "ribboncharm",
+    "prompt": "Use case: product-mockup. Input images are style references only: existing photographed heart, flower, pearl and holostar beads. Generate a pale lavender and pink glitter resin bow ribbon charm, two plump symmetrical loops central knot and two short tails, tiny embedded glitter. One small physical charm photographed almost straight overhead, matching the references' rounded domed thickness, soft large white reflection upper left and small reflection right, pastel colours and internal refraction. Centered isolated on pure solid black background with generous margin. Photographic real material, no illustration, no vector, no text, no extra objects, no metal chain or loop, no cast shadow or halo.",
+    "references": [
+      "original/heart.png",
+      "original/flower.png",
+      "original/pearl.png",
+      "original/holostar.png"
+    ],
+    "processing": "Black background removed with connected exterior mask and edge unmatting; tight crop; Lanczos resize; Pillow WebP quality 90",
+    "originalSize": [
+      250,
+      188
+    ],
+    "size": [
+      128,
+      96
+    ],
+    "pivot": [
+      0.5,
+      0.5
+    ],
+    "path": "assets/beads/ribbon-charm.webp"
   }
 }
