@@ -709,7 +709,7 @@ export function App() {
             />
           )}
           {toasts.length > 0 && (
-            <div className="toasts">
+            <div className={"toasts" + (phase === "free" && padEmpty && flow !== "" ? " over-done" : "")}>
               {toasts.map((t) => (
                 <div key={t.id} className={"toast " + t.tone}>
                   <div>{t.text}</div>

@@ -635,6 +635,10 @@ body,
   gap: 6px;
   pointer-events: none;
 }
+/* the completion card sits where toasts usually do (short screens): lines go above it, under the HUD */
+.toasts.over-done {
+  top: calc(env(safe-area-inset-top, 0px) + 62px);
+}
 .toast {
   text-align: center;
   font-size: 14px;
@@ -1196,12 +1200,22 @@ body,
  * The ad door carries a picture of its prize in a small white disc: the treasure
  * (a dark silhouette while it is new), or the passing pad. Still a quiet pill.
  */
+/* never wider than the room left of the jar (Game.resize: jar = clamp(31vw, 112, 136) + 14px from the
+   edge; 18px page inset, 8px air) – a long treasure name wraps instead of covering the jar */
+.gate {
+  max-width: calc(100vw - clamp(112px, 31vw, 136px) - 40px);
+}
 .gate .btn.door {
   flex-direction: row;
   align-items: center;
   gap: 7px;
   padding: 4px 13px 4px 4px;
   text-align: left;
+}
+.gate .btn.door .door-text > span,
+.gate .btn.door .door-text > small {
+  white-space: normal;
+  word-break: keep-all;
 }
 .door-icon {
   flex: 0 0 auto;
