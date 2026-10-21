@@ -19,6 +19,7 @@ import { drawFinishStar, drawJarFinale, drawPadFinale, FINALE_DURATION } from ".
 import { PADS, padById, resolvePad, type PadType } from "./pads/PadTypes";
 import { DiscoveryProvider, PadProgress, isRareVariant, today, type NextPadProvider } from "./pads/progress";
 import { DailyStore, dailyPad } from "./rewards/daily";
+import { BraceletStore } from "./rewards/bracelets";
 import { BONUS_BUDGET, roundBeadBudget } from "./pads/pacing";
 import { FIRST_TREASURE_GUARANTEE, HIDDEN_POOLS, NONE, ULTRA_SURFACE_CHANCE, VARIANT_PERKS, hiddenWeight, missingBoost } from "./rewards/rates";
 import { HIDDEN_TYPES, ULTRA_TYPES } from "./beads/BeadTypes";
@@ -118,6 +119,11 @@ export class Game extends Emitter<GameEvents> implements PadView, TactileHost {
   album = new JarAlbum();
   /** today's gel, the stamp card and plant tickets */
   daily = new DailyStore(today(), this.progressStore.totalCompleted === 0);
+  /** the bead box and the bracelets strung from it (a first start is seeded from the jar album) */
+  bracelets = new BraceletStore(
+    () => this.album.latest.flatMap((jar) => jar.beads),
+    (id) => this.treasure.count(id),
+  );
   /** the pad after this one – rolled once (and saved) so NEXT, the door and a restart all agree */
   private pendingNext: PadType | null = null;
   /** what that next pad hides (null = nothing), rolled together with it */
@@ -629,11 +635,15 @@ export class Game extends Emitter<GameEvents> implements PadView, TactileHost {
   /** test/QA: empty the pad instantly (beads vanish, treasures are credited, completion logic runs) */
   debugFinishPad() {
     this.finishing = false;
+    // what already landed in this pad's jar, plus everything emptied now
+    const pulled: [string, string][] = this.collector.dismissing ? [] : this.collector.items.map((it) => [it.bead.type.id, it.bead.color]);
     for (const b of this.beads)
       if (b.state === "embedded" || b.state === "held") {
         b.state = "collected";
+        pulled.push([b.type.id, b.color]);
         if (treasureKind(b.type)) this.treasure.add(b.type.id);
       }
+    this.bracelets.addBeads(pulled);
     this.pulls.clear();
     this.tactile.clear();
     this.gel.markDirty();
@@ -1133,6 +1143,8 @@ export class Game extends Emitter<GameEvents> implements PadView, TactileHost {
         this.finaleT = 0;
         if (!this.reducedMotion) this.gel.recoil(0, 18 * this.s);
         sfx.done();
+        // every bead that landed in the jar drops into the bead box (bonus digs too)
+        this.bracelets.addBeads(this.collector.items.map((it) => [it.bead.type.id, it.bead.color] as [string, string]));
         // keep this jar for the album (bonus digs are small extras, not a pad of their own)
         if (!this.bonusRound) {
           this.album.add({

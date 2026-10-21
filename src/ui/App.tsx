@@ -13,6 +13,7 @@ import { PADS, type PadType } from "../game/pads/PadTypes";
 import { activeTheme } from "../game/rewards/themes";
 import { PadSilhouette } from "./NextPanel";
 import { useShare } from "./share";
+import type { AdHook } from "./Bracelet";
 import { RELEASE } from "../game/release";
 import { backupNow, backupSoon, restoreBackup } from "../game/backup";
 import { track } from "../game/analytics";
@@ -63,6 +64,16 @@ function takeSeasonLine(missing: number): { name: string; days: number } | null 
   return { name: t.name, days };
 }
 const typeName = (id: string) => TREASURE_TYPES.find((t) => t.id === id)?.name ?? "보물";
+/** true the first time only (a one-off hint); storage errors skip it */
+function takeOnce(key: string) {
+  try {
+    if (localStorage.getItem(key)) return false;
+    localStorage.setItem(key, "1");
+    return true;
+  } catch {
+    return false;
+  }
+}
 /** completions worth a funnel step of their own */
 const FUNNEL = new Set([1, 2, 3, 5, 10, 20]);
 
@@ -435,6 +446,10 @@ export function App() {
         if (!game.isBonus && ++sessionEmptied.current === TOMORROW_AFTER && takeTomorrowLine()) {
           later(() => pushToast({ tone: "soft", text: "내일은 오늘의 젤 ✦", sub: "보물 하나 확정" }), 3200);
         }
+        // enough beads for a bracelet and none made yet: say where, once
+        if (!game.isBonus && !game.bracelets.bracelets.length && game.bracelets.spareTotal >= 16 && takeOnce("ssok.bracelet-hint.v1")) {
+          later(() => pushToast({ tone: "hidden", text: "비즈가 모였어 ✦", sub: "컬렉션에서 팔찌를 만들어 봐" }), 4600);
+        }
         // the day's stamp, once a day; seven make a plant ticket
         if (!game.isBonus) {
           const st = game.daily.stamp(today());
@@ -621,6 +636,35 @@ export function App() {
     }
   };
 
+  /** the glitter cord's rewarded ad: the same pacing, sound pause and counting as the doors */
+  const braceletAds: AdHook = {
+    ready: () => ads.current?.ready("rewarded") ?? false,
+    watch: async () => {
+      const g = gameRef.current;
+      const policy = ads.current;
+      if (!g || !policy || transitioning.current) return false;
+      transitioning.current = true;
+      offerStats.current?.note("taken", "cord");
+      track("door_cord_take");
+      sfx.unlock();
+      sfx.pause("ad");
+      try {
+        const result = await policy.next("rewarded", g.progressStore.totalCompleted, () => g.bracelets.earnGlitter());
+        if (result === "rewarded") {
+          g.bracelets.earnGlitter();
+          offerStats.current?.note("earned", "cord");
+          track("door_cord_earn");
+          return true;
+        }
+        if (result) track(`door_cord_${result}`);
+        return false;
+      } finally {
+        sfx.unpause("ad");
+        transitioning.current = false;
+      }
+    },
+  };
+
   return (
     <div className="stage">
       <div
@@ -764,7 +808,7 @@ export function App() {
             )}
           </div>
         </div>
-        {sheet === "collection" && gameRef.current && <CollectionSheet game={gameRef.current} onClose={closeSheet} />}
+        {sheet === "collection" && gameRef.current && <CollectionSheet game={gameRef.current} onClose={closeSheet} ads={braceletAds} />}
         {sheet === "settings" && <SettingsSheet onClose={closeSheet} />}
       </div>
       <BannerAd hidden={sheet !== "" || loading} retryKey={padSerial} />

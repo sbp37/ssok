@@ -6,8 +6,8 @@ const SHARE_IMAGE_URL = `${SHARE_PAGE_URL}branding/share-stretch.jpg?v=20260915`
 const TAGLINE = "쭈우욱… 쏙! 말랑한 젤 비즈를 뽑아봐";
 
 /** Toss deep link inside the app, Web Share API or a copied link elsewhere. */
-async function shareGame(padName?: string): Promise<"shared" | "copied"> {
-  const lead = padName ? `${padName} 패드 다 비웠다!` : "";
+async function shareGame(padName?: string, line?: string): Promise<"shared" | "copied"> {
+  const lead = line ?? (padName ? `${padName} 패드 다 비웠다!` : "");
   let inToss = false;
   try {
     inToss = Environment.environment === "toss" || Environment.environment === "sandbox";
@@ -52,12 +52,13 @@ async function shareGame(padName?: string): Promise<"shared" | "copied"> {
 export function useShare(onNotice: (text: string) => void, onShared?: () => void) {
   const sharing = useRef(false);
   const [busy, setBusy] = useState(false);
-  const share = async (padName?: string) => {
+  /** `line`: the first line instead of the pad's ("내가 만든 팔찌 ✦") */
+  const share = async (padName?: string, line?: string) => {
     if (sharing.current) return;
     sharing.current = true;
     setBusy(true);
     try {
-      const result = await shareGame(padName);
+      const result = await shareGame(padName, line);
       if (result === "copied") onNotice("링크를 복사했어.");
       onShared?.();
     } catch (error) {
