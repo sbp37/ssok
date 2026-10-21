@@ -219,7 +219,8 @@ export function App() {
     const offs: (() => void)[] = [];
     void Promise.all([
       Promise.race([preloadBeadAssets(), new Promise<void>((r) => setTimeout(r, 350))]),
-      restoreBackup(),
+      // a copy that only answers after the game started: restore it and start again
+      restoreBackup(1500, () => location.reload()),
     ]).then(() => {
       if (cancelled) return;
       game = new Game(canvas);
@@ -297,18 +298,18 @@ export function App() {
   // a door counts as offered only once it is actually on screen (no loaded ad → no door)
   const offerSeen = useRef("");
   useEffect(() => {
-    if (!(padEmpty && flow === "ready" && offer && rewardReady && !choices)) return;
+    if (!(padEmpty && flow === "ready" && offer && rewardReady && !choices && !sheet && !loading)) return;
     const tag = `${padSerial}:${offer.kind}`;
     if (offerSeen.current === tag) return;
     offerSeen.current = tag;
     offerStats.current?.note("offered", offer.kind);
-  }, [padEmpty, flow, offer, rewardReady, choices, padSerial]);
+  }, [padEmpty, flow, offer, rewardReady, choices, sheet, loading, padSerial]);
   const peekSeen = useRef(-1);
   useEffect(() => {
-    if (!(phase === "free" && peek === "ready" && rewardReady && !padEmpty) || peekSeen.current === padSerial) return;
+    if (!(phase === "free" && peek === "ready" && rewardReady && !padEmpty && !sheet && !loading) || peekSeen.current === padSerial) return;
     peekSeen.current = padSerial;
     offerStats.current?.note("offered", "peek");
-  }, [phase, peek, rewardReady, padEmpty, padSerial]);
+  }, [phase, peek, rewardReady, padEmpty, sheet, loading, padSerial]);
 
   const openSheet = (next: Exclude<SheetName, "">) => {
     if (!sheet) {

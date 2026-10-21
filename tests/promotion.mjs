@@ -146,6 +146,14 @@ globalThis.__sdk = { grantReward: () => { attempts++; return new Promise(() => {
 const hung = memory();
 for (let i = 0; i < test.MAX_UNSURE + 3; i++) { new test.PromotionRewards(hung).onPadCompleted(1); await tick(); }
 assert.equal(attempts, test.MAX_UNSURE, 'restarts during unanswered requests cannot pay out again and again');
+// A save from before this version (no pending list) still gets its unpaid milestones on the next start.
+calls.length = 0;
+globalThis.__sdk = { grantReward: async (o) => (calls.push(o), { key: 'k' }) };
+const legacy = memory();
+legacy.setItem('ssok.promotions.v1', JSON.stringify({ granted: ['TEST_01M2G7DZXEHF60PHHQ6ZA5342T'] }));
+new test.PromotionRewards(legacy).onVisit(false, 10);
+await tick();
+assert.deepEqual(calls.map((c) => c.amount).sort((a, b) => a - b), [3, 5, 10]);
 console.warn = warn;
 // malformed saved state is repaired, not trusted
 const junk = memory();

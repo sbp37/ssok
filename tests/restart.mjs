@@ -41,25 +41,25 @@ p.catchNext();
 p.open(variant);
 assert.equal(restart().nextCaught, false, 'opening it uses the catch up');
 
-// A bonus dig earned: kept until dug (or until a new pad opens).
+// A bonus dig paid for: its treasure is kept until dug up (or until a new pad opens).
 p = restart();
 p.complete();
-p.setBonusPending(true);
-assert.equal(restart().bonusPending, true);
+p.setBonusTreasure('key');
+assert.equal(restart().bonusTreasure, 'key', 'a restart digs the same treasure, never a re-roll');
 p = restart();
-p.setBonusPending(false);
-assert.equal(restart().bonusPending, false);
-p.setBonusPending(true);
+p.setBonusTreasure(null); // dug up
+assert.equal(restart().bonusTreasure, null, 'once found it is not buried again');
+p.setBonusTreasure('eye');
 p.open(PADS[3]);
-assert.equal(restart().bonusPending, false);
+assert.equal(restart().bonusTreasure, null);
 
 // Junk in the new fields is repaired, not trusted.
 const saved = JSON.parse(data.get('ssok.progress.v2'));
-data.set('ssok.progress.v2', JSON.stringify({ ...saved, currentHidden: 5, nextCaught: 'yes', bonusPending: 1, nextId: null }));
+data.set('ssok.progress.v2', JSON.stringify({ ...saved, currentHidden: 5, nextCaught: 'yes', bonusTreasure: 7, nextId: null }));
 p = restart();
 assert.equal(p.currentHidden, undefined);
 assert.equal(p.nextCaught, false);
-assert.equal(p.bonusPending, false);
+assert.equal(p.bonusTreasure, null);
 
 // Midnight with the game open: the day turns once, and the next pad gets the new-day nudge.
 p = restart();
@@ -71,4 +71,4 @@ assert.equal(p.takeDayBonus(), true, 'the next pad gets the nudge');
 assert.equal(p.rollDay(), false, 'only once');
 assert.equal(p.takeDayBonus(), false);
 assert.notEqual(JSON.parse(data.get('ssok.progress.v2')).lastPlayDate, '2000-01-01', 'the new day is saved');
-console.log('PASS: buried treasure kept across a mid-pad restart / caught variant + earned bonus dig survive a restart / junk repaired / midnight rolls the day once');
+console.log('PASS: buried treasure kept across a mid-pad restart / caught variant + paid bonus treasure survive a restart, never re-rolled / junk repaired / midnight rolls the day once');

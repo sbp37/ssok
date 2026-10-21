@@ -53,7 +53,7 @@ function sanitize(raw: unknown): Save {
   }
   if (typeof o.currentHidden === "string" || o.currentHidden === null) s.currentHidden = o.currentHidden;
   s.nextCaught = o.nextCaught === true && s.nextId !== null;
-  s.bonusPending = o.bonusPending === true;
+  if (typeof o.bonusTreasure === "string") s.bonusTreasure = o.bonusTreasure;
   s.dayBonusPending = o.dayBonusPending === true;
   s.recentColors = Array.isArray(o.recentColors)
     ? o.recentColors.filter((x): x is string => typeof x === "string" && /^\d+,\d+,\d+$/.test(x)).slice(-8)
@@ -85,8 +85,9 @@ interface Save {
   currentHidden: string | null | undefined;
   /** the passing variant's ad already paid out: a restart opens the variant, not the plain pad */
   nextCaught: boolean;
-  /** a "한 번 더 파기" was earned and not dug to the end yet: a restart digs it first */
-  bonusPending: boolean;
+  /** the sure treasure of a paid "한 번 더 파기" that is not dug up yet: a restart digs it
+   * first – the same treasure, never a re-roll, and never again once it is found */
+  bonusTreasure: string | null;
   /** first pad of a new day gets one small nudge; consumed when that pad is generated */
   dayBonusPending: boolean;
   /** gel colours of the last pads opened ("r,g,b", newest last) – no repeats */
@@ -108,7 +109,7 @@ const fresh = (): Save => ({
   nextHidden: undefined,
   currentHidden: undefined,
   nextCaught: false,
-  bonusPending: false,
+  bonusTreasure: null,
   dayBonusPending: false,
   recentColors: [],
 });
@@ -209,8 +210,8 @@ export class PadProgress {
   get nextCaught() {
     return this.s.nextCaught;
   }
-  get bonusPending() {
-    return this.s.bonusPending;
+  get bonusTreasure() {
+    return this.s.bonusTreasure;
   }
   get recentColors(): readonly string[] {
     return this.s.recentColors;
@@ -257,12 +258,12 @@ export class PadProgress {
     this.s.nextHidden = undefined;
     this.s.currentHidden = undefined;
     this.s.nextCaught = false;
-    this.s.bonusPending = false;
+    this.s.bonusTreasure = null;
     this.refreshMode();
     this.save();
     return { newPad, newVariant };
   }
-  /** what the freshly generated pad on the table buries */
+  /** what the pad on the table buries – null again once it has been dug up */
   setCurrentHidden(hidden: string | null) {
     this.s.currentHidden = hidden;
     this.save();
@@ -273,10 +274,10 @@ export class PadProgress {
     this.s.nextCaught = true;
     this.save();
   }
-  /** a bonus dig earned (true) or dug to the end (false) */
-  setBonusPending(pending: boolean) {
-    if (this.s.bonusPending === pending) return;
-    this.s.bonusPending = pending;
+  /** a bonus dig paid for (its treasure) or its treasure dug up (null) */
+  setBonusTreasure(id: string | null) {
+    if (this.s.bonusTreasure === id) return;
+    this.s.bonusTreasure = id;
     this.save();
   }
   /** the pad on the table was emptied */

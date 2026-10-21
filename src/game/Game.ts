@@ -177,11 +177,11 @@ export class Game extends Emitter<GameEvents> implements PadView, TactileHost {
     let pad = forced;
     if (!pad) {
       const prog = this.progressStore;
-      if (prog.currentDone && prog.bonusPending) {
-        // a bonus dig was paid for (its ad's reward event came) but not dug to the end: dig it now
+      if (prog.currentDone && prog.bonusTreasure) {
+        // a bonus dig was paid for (its ad's reward event came) and its treasure is still buried
         pad = prog.current;
         this.bonusRound = true;
-        this.startHidden = this.rollHidden(pad, false, true);
+        this.startHidden = prog.bonusTreasure;
       } else if (prog.currentDone) {
         // emptied last time but never walked through the door → continue at the next pad, not the same one
         pad = (prog.nextId ? resolvePad(prog.nextId) : undefined) ?? this.nextProvider.next(prog);
@@ -438,9 +438,9 @@ export class Game extends Emitter<GameEvents> implements PadView, TactileHost {
   catchNext() {
     this.progressStore.catchNext();
   }
-  /** "한 번 더 파기" paid out: a restart before the dig is over still digs it */
+  /** "한 번 더 파기" paid out: its treasure is decided now, so a restart digs the same one */
   earnBonus() {
-    this.progressStore.setBonusPending(true);
+    if (!this.progressStore.bonusTreasure) this.progressStore.setBonusTreasure(this.rollHidden(this.pad, false, true));
   }
 
   /** "광고 보고 심기": the next pad buries this treasure instead of whatever it rolled */
@@ -551,14 +551,14 @@ export class Game extends Emitter<GameEvents> implements PadView, TactileHost {
    * "광고 보고 한 번 더 파기": the same pad again, tiny, with one treasure for
    * sure. Progress is not touched – the pad stays "emptied", so this is neither
    * a completion (promotions, ad interval) nor a new pad (play counts, NEXT):
-   * the rolled next pad still waits behind it. Only `bonusPending` is kept, so
-   * a restart before the dig is over digs it again instead of losing it.
+   * the rolled next pad still waits behind it. Only `bonusTreasure` is kept, so
+   * a restart before its treasure is dug up digs the same one again.
    */
   openBonusPad() {
     this.collector.dismiss();
-    this.progressStore.setBonusPending(true);
+    this.earnBonus();
     this.bonusRound = true;
-    this.startHidden = this.rollHidden(this.pad, false, true);
+    this.startHidden = this.progressStore.bonusTreasure;
     this.gel.setShape(this.pad);
     this.newPad();
     this.glShadowR = -1;
@@ -589,7 +589,7 @@ export class Game extends Emitter<GameEvents> implements PadView, TactileHost {
     this.pulls.clear();
     this.tactile.clear();
     this.gel.markDirty();
-    if (this.bonusRound) this.progressStore.setBonusPending(false);
+    if (this.bonusRound) this.progressStore.setBonusTreasure(null);
     this.progressStore.complete();
     this.emitProgress();
     this.emit("padEmpty", undefined);
@@ -923,6 +923,10 @@ export class Game extends Emitter<GameEvents> implements PadView, TactileHost {
       const found = this.treasure.add(b.type.id, this.bonusRound ? "보너스" : this.pad.name);
       if (found.isNew) this.foundNewThisPad = true;
       this.creditedNew.set(b, found);
+      // dug up: a restart must not bury it again (one ad, one treasure)
+      const prog = this.progressStore;
+      if (b.hidden && this.bonusRound && b.type.id === prog.bonusTreasure) prog.setBonusTreasure(null);
+      else if (b.hidden && !this.bonusRound && b.type.id === prog.currentHidden) prog.setCurrentHidden(null);
     }
 
     this.tactile.onPop();
@@ -939,7 +943,7 @@ export class Game extends Emitter<GameEvents> implements PadView, TactileHost {
       // jar settle before the completion cue. Persist now even if the tab closes.
       this.finishing = true;
       this.finishQuiet = 0;
-      if (this.bonusRound) this.progressStore.setBonusPending(false);
+      if (this.bonusRound) this.progressStore.setBonusTreasure(null);
       else {
         // a pad with no first-time find nudges the missing treasures up a little (bonus digs do not count)
         if (!this.foundNewThisPad) this.treasure.noteDryPad();

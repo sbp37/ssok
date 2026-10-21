@@ -149,10 +149,11 @@ export class PromotionRewards {
   }
 
   /** each start (and each midnight the game stays open across) – a return visit is kept
-   * until it is paid, so a failure is retried the same day, not only on the next one */
+   * until it is paid, so a failure is retried the same day, not only on the next one.
+   * Pad milestones are rebuilt from the count: saves from before the pending list had none. */
   onVisit(isNewDay: boolean, totalCompleted: number) {
     if (isNewDay && totalCompleted > 0) this.reach("returnVisit");
-    this.retryPending();
+    this.onPadCompleted(totalCompleted);
   }
 
   /** TEST_ codes only: lets one mobile AIT link verify all three SDK calls. */
