@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 28" fill="none">
+  <title>연분홍 유리 선반</title>
+  <defs>
+    <linearGradient id="glass" x1="180" y1="6" x2="180" y2="17" gradientUnits="userSpaceOnUse"><stop stop-color="#fae5ee" stop-opacity=".8"/><stop offset="1" stop-color="#e9b8cc" stop-opacity=".5"/></linearGradient>
+    <radialGradient id="shadow"><stop stop-color="#c6aecb" stop-opacity=".22"/><stop offset="1" stop-color="#c6aecb" stop-opacity="0"/></radialGradient>
+  </defs>
+  <ellipse cx="180" cy="20" rx="174" ry="8" fill="url(#shadow)"/>
+  <rect x="5" y="6" width="350" height="11" rx="5.5" fill="url(#glass)" stroke="#e9b8cc" stroke-opacity=".55"/>
+  <path d="M12 8H348" stroke="#fff" stroke-opacity=".9" stroke-width="2" stroke-linecap="round"/>
+  <path d="M14 15H346" stroke="#e9b8cc" stroke-opacity=".4" stroke-linecap="round"/>
+</svg>

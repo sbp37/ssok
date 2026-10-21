@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" fill="none" stroke-linecap="round" stroke-linejoin="round" role="img" aria-labelledby="title desc">
+  <title id="title">빙글 돌리기</title>
+  <desc id="desc">비즈 끝을 잡은 검지 주위를 한 바퀴와 사분의 일 더 도는 나선 화살표.</desc>
+  <defs>
+    <linearGradient id="bead" x1="0" y1="0" x2="1" y2="1" gradientUnits="objectBoundingBox">
+      <stop stop-color="#fbd7e6"/><stop offset="1" stop-color="#d9c7ef"/>
+    </linearGradient>
+  </defs>
+  <g stroke="#d9779f" stroke-width="4.5">
+    <path d="M88 83A36 36 0 1 1 94 39C103 51 101 67 89 77C78 87 61 88 49 78"/>
+    <path d="m50 91-3-14 14 1"/>
+    <circle cx="60" cy="70" r="11" fill="url(#bead)" stroke="#d9779f" stroke-width="4"/>
+    <g transform="translate(60 8) rotate(0)" opacity="0.85" stroke="#2b2730" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M-12 0v43c0 10 5 17 12 17s12-7 12-17V0" fill="#ffffff"/>
+    <path d="M-6 39v7c0 5 12 5 12 0v-7c0-5-12-5-12 0Z" fill="none" stroke-width="2.5"/>
+  </g>
+  </g>
+</svg>
