@@ -17,7 +17,8 @@ import { drawFlying, drawThread, type PadView, type Thread } from "./render/Flig
 import { beadFit, drawEmbeddedBead, embeddedPosition, embeddedScale } from "./render/EmbeddedBead";
 import { drawFinishStar, drawJarFinale, drawPadFinale, FINALE_DURATION } from "./render/Finale";
 import { PADS, padById, resolvePad, type PadType } from "./pads/PadTypes";
-import { DiscoveryProvider, PadProgress, isRareVariant, type NextPadProvider } from "./pads/progress";
+import { DiscoveryProvider, PadProgress, isRareVariant, today, type NextPadProvider } from "./pads/progress";
+import { DailyStore, dailyPad } from "./rewards/daily";
 import { BONUS_BUDGET, roundBeadBudget } from "./pads/pacing";
 import { FIRST_TREASURE_GUARANTEE, HIDDEN_POOLS, NONE, ULTRA_SURFACE_CHANCE, VARIANT_PERKS, hiddenWeight, missingBoost } from "./rewards/rates";
 import { HIDDEN_TYPES, ULTRA_TYPES } from "./beads/BeadTypes";
@@ -36,7 +37,7 @@ export interface GameEvents {
   slipped: undefined;
   /** how much of the current pad has been emptied */
   progress: { emptied: number; remaining: number; total: number };
-  padChange: { pad: PadType; newPad: boolean; newVariant: boolean; bonus?: boolean };
+  padChange: { pad: PadType; newPad: boolean; newVariant: boolean; bonus?: boolean; daily?: boolean };
   /** the calendar day turned while the game stayed open (checked when a pad opens) */
   newDay: undefined;
   /** the round's one-line how-to for its featured material (null = hide) */
@@ -115,6 +116,8 @@ export class Game extends Emitter<GameEvents> implements PadView, TactileHost {
   treasure = new TreasureStore();
   /** every emptied pad's jar, for the collection's album */
   album = new JarAlbum();
+  /** today's gel, the stamp card and plant tickets */
+  daily = new DailyStore(today(), this.progressStore.totalCompleted === 0);
   /** the pad after this one – rolled once (and saved) so NEXT, the door and a restart all agree */
   private pendingNext: PadType | null = null;
   /** what that next pad hides (null = nothing), rolled together with it */
@@ -125,6 +128,8 @@ export class Game extends Emitter<GameEvents> implements PadView, TactileHost {
   private peekUntil = -1;
   /** the pad on the table is a small bonus dig: not a completion, not a progress step */
   private bonusRound = false;
+  /** the pad on the table is today's gel */
+  private dailyRound = false;
   private padTotal = 0;
   private lastSocketRefresh = 0;
   /** Completion follows every flight and the existing collector sleep, not a POP timer. */
@@ -191,7 +196,15 @@ export class Game extends Emitter<GameEvents> implements PadView, TactileHost {
         if (passing) pad = padById(pad.variantOf!) ?? pad;
         // the variant's guaranteed treasure stays with the variant: the plain pad rolls its own
         this.startHidden = prog.nextId && !passing ? prog.nextHidden : undefined;
+        // the first pad of a new day is today's gel (a caught variant goes first); a treasure
+        // already bound to the next pad – one planted through an ad – goes with it
+        if (!pad.variantOf && this.dailyDue()) {
+          pad = dailyPad(today());
+          this.startHidden = this.startHidden || this.rollHidden(pad, true, true);
+        }
         prog.open(pad);
+        if (pad.daily) this.daily.openedDaily(today());
+        this.dailyRound = !!pad.daily;
       } else {
         // mid-pad exit → same pad, fresh beads, the same buried treasure (a planted one included)
         pad = prog.current;
@@ -422,6 +435,14 @@ export class Game extends Emitter<GameEvents> implements PadView, TactileHost {
         this.pendingHidden = this.rollHidden(this.pendingNext);
         prog.setNext(this.pendingNext, this.pendingHidden);
       }
+      // the first pad of a new day is today's gel – a variant passing by goes first, and a
+      // treasure already bound to the next pad goes with it; otherwise it buries one for sure
+      if (!this.pendingNext.variantOf && !this.pendingNext.daily && this.dailyDue()) {
+        const pad = dailyPad(today());
+        this.pendingHidden = this.pendingHidden || this.rollHidden(pad, true, true);
+        this.pendingNext = pad;
+        prog.setNext(pad, this.pendingHidden);
+      }
     }
     return this.pendingNext;
   }
@@ -433,14 +454,25 @@ export class Game extends Emitter<GameEvents> implements PadView, TactileHost {
   get isBonus() {
     return this.bonusRound;
   }
+  get isDaily() {
+    return this.dailyRound;
+  }
+  /** today's gel waits: not opened yet today, and not a new player's first day or very first pad */
+  private dailyDue() {
+    return this.progressStore.totalCompleted >= 1 && this.daily.dailyDue(today());
+  }
+  /** the sure treasure a bonus dig would bury now – shown on the "한 번 더 파기" door before the ad */
+  rollBonusTreasure() {
+    return this.rollHidden(this.pad, false, true);
+  }
 
   /** "광고 보고 잡기" paid out: a restart before the door opens still lands on the variant */
   catchNext() {
     this.progressStore.catchNext();
   }
   /** "한 번 더 파기" paid out: its treasure is decided now, so a restart digs the same one */
-  earnBonus() {
-    if (!this.progressStore.bonusTreasure) this.progressStore.setBonusTreasure(this.rollHidden(this.pad, false, true));
+  earnBonus(id?: string | null) {
+    if (!this.progressStore.bonusTreasure) this.progressStore.setBonusTreasure(id || this.rollHidden(this.pad, false, true));
   }
 
   /** "광고 보고 심기": the next pad buries this treasure instead of whatever it rolled */
@@ -453,7 +485,8 @@ export class Game extends Emitter<GameEvents> implements PadView, TactileHost {
   /** roll the next pad's treasure again with the current state (see the completion in doPop) */
   private rerollNextHidden() {
     const pad = this.nextPad;
-    this.pendingHidden = this.rollHidden(pad);
+    // today's gel always buries something
+    this.pendingHidden = this.rollHidden(pad, !!pad.daily, !!pad.daily);
     this.progressStore.setNext(pad, this.pendingHidden);
   }
 
@@ -486,6 +519,8 @@ export class Game extends Emitter<GameEvents> implements PadView, TactileHost {
       // one of this month's limited pads
       theme: themeOfPad(pad.id)?.name,
       themeId: themeOfPad(pad.id)?.id,
+      // today's gel: a treasure for sure
+      daily: !!pad.daily,
     };
   }
 
@@ -538,12 +573,14 @@ export class Game extends Emitter<GameEvents> implements PadView, TactileHost {
     // the treasure rolled for NEXT travels with it; a different pad rolls fresh
     this.startHidden = this.pendingNext && this.pendingNext.id === pad.id ? this.pendingHidden : undefined;
     const { newPad, newVariant } = this.progressStore.open(pad);
+    if (pad.daily) this.daily.openedDaily(today());
+    this.dailyRound = !!pad.daily;
     this.gel.setShape(pad);
     this.newPad();
     this.glShadowR = -1; // silhouette-shaped shadow changes even at the same R
     this.pendingNext = null;
     this.pendingHidden = undefined;
-    this.emit("padChange", { pad, newPad, newVariant });
+    this.emit("padChange", { pad, newPad, newVariant, daily: !!pad.daily });
     this.emitProgress();
   }
 
@@ -558,6 +595,7 @@ export class Game extends Emitter<GameEvents> implements PadView, TactileHost {
     this.collector.dismiss();
     this.earnBonus();
     this.bonusRound = true;
+    this.dailyRound = false;
     this.startHidden = this.progressStore.bonusTreasure;
     this.gel.setShape(this.pad);
     this.newPad();

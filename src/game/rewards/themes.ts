@@ -52,6 +52,25 @@ export function themeOfPad(padId: string): Theme | undefined {
   return THEMES.find((t) => t.pads.includes(base));
 }
 
+/** days from `date` to the last day of the theme's current run (0 on its last day) */
+export function daysLeft(t: Theme, date = new Date()): number {
+  let y = date.getFullYear();
+  let m = date.getMonth() + 1;
+  // walk to the last month of this run (winter wraps into the next year)
+  for (let k = 0; k < 12; k++) {
+    const nm = m === 12 ? 1 : m + 1;
+    if (!t.months.includes(nm)) break;
+    if (nm === 1) y++;
+    m = nm;
+  }
+  const last = new Date(y, m, 0); // day 0 of the following month = the run's last day
+  const start = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  return Math.round((last.getTime() - start.getTime()) / 86_400_000);
+}
+
+/** "D-12", or "오늘까지" on the last day */
+export const dDay = (days: number) => (days > 0 ? `D-${days}` : "오늘까지");
+
 /** a theme's pads that actually exist in this build */
 export function themePads(t: Theme): PadType[] {
   return t.pads.map((id) => padById(id)).filter((p): p is PadType => !!p);

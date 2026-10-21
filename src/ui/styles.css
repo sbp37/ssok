@@ -456,58 +456,6 @@ body,
   opacity: 0.7;
 }
 
-/* "광고 보고 고르기": three pads in their real colours, pick one */
-.choices {
-  display: flex;
-  gap: 8px;
-  animation: btnIn 0.5s ease-out;
-}
-.choice {
-  font: inherit;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-  padding: 8px 10px 7px;
-  background: rgba(255, 255, 255, 0.9);
-  border: 1px solid rgba(43, 39, 48, 0.08);
-  border-radius: 16px;
-  box-shadow: 0 4px 14px rgba(43, 39, 48, 0.1);
-  cursor: pointer;
-  transition: transform 0.12s ease;
-}
-.choice:active {
-  transform: scale(0.95);
-}
-.choice span {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--ink);
-}
-
-/* "광고 보고 살짝 보기": one small pill under the glimmer line, mid-round */
-.peek {
-  position: absolute;
-  left: 50%;
-  top: 73%;
-  transform: translateX(-50%);
-  font: inherit;
-  font-size: 13px;
-  font-weight: 600;
-  color: #7a5aa8;
-  background: rgba(255, 255, 255, 0.86);
-  border: 1px solid rgba(122, 90, 168, 0.18);
-  border-radius: 999px;
-  padding: 7px 14px;
-  cursor: pointer;
-  box-shadow: 0 3px 12px rgba(117, 74, 93, 0.08);
-  backdrop-filter: blur(6px);
-  animation: btnIn 0.5s ease-out;
-}
-.peek:disabled {
-  opacity: 0.6;
-}
-
 /* "stuck?" gesture hint: the finger's bead sits on the item, fades in, mimes once or twice, fades out */
 .stuck-hint {
   position: absolute;
@@ -1242,6 +1190,164 @@ body,
 }
 @media (prefers-reduced-motion: reduce) {
   .done, .pad-title { animation: none; }
+}
+
+/* ── doors that show what they give ─────────────────────────────
+ * The ad door carries a picture of its prize in a small white disc: the treasure
+ * (a dark silhouette while it is new), or the passing pad. Still a quiet pill.
+ */
+.gate .btn.door {
+  flex-direction: row;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 13px 4px 4px;
+  text-align: left;
+}
+.door-icon {
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.94);
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+}
+.door-icon canvas {
+  display: block;
+}
+.door-q {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ink-soft);
+}
+.door-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+/* a plant ticket: no ad, so a warm "free" tone instead of the dark ad pill */
+.gate .btn.door.free {
+  color: #6b4a1f;
+  background: linear-gradient(135deg, #ffe9b8, #ffd9c2);
+  box-shadow: inset 0 0 0 1px rgba(160, 110, 40, 0.18);
+}
+.gate .btn.door.free small {
+  opacity: 0.8;
+}
+/* "광고 보고 다른 패드로": two pads, tap the one you want */
+.door-choose {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  animation: btnIn 0.35s ease-out;
+}
+.door-choose-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink-soft);
+  padding-left: 4px;
+}
+.door-chips {
+  display: flex;
+  gap: 6px;
+}
+.door-chip {
+  font: inherit;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 11px 3px 4px;
+  font-size: 12px;
+  font-weight: 650;
+  color: #fff;
+  background: var(--ink);
+  border: none;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: transform 0.12s ease;
+}
+.door-chip canvas {
+  display: block;
+  background: rgba(255, 255, 255, 0.94);
+  border-radius: 50%;
+}
+.door-chip:active {
+  transform: scale(0.95);
+}
+.door-chip:disabled {
+  opacity: 0.7;
+}
+.next-daily {
+  margin-top: 2px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #c26a2e;
+}
+
+/* ── the stamp card ─────────────────────────────────────────── */
+.stamps {
+  background: linear-gradient(135deg, #fff7fb, #f6f1ff);
+  border: 1px solid rgba(217, 119, 159, 0.16);
+  border-radius: 16px;
+  padding: 10px 12px 9px;
+  margin-bottom: 4px;
+}
+.stamps-head {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 13px;
+}
+.stamps-head strong {
+  font-weight: 700;
+  color: var(--ink);
+}
+.stamps-n {
+  font-weight: 650;
+  color: #b4577f;
+}
+.tickets {
+  margin-left: auto;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #8a5a1c;
+  background: linear-gradient(135deg, #ffe9b8, #ffd9c2);
+  border-radius: 999px;
+  padding: 2px 9px;
+}
+.stamp-row {
+  display: flex;
+  justify-content: space-between;
+  margin: 8px 0 6px;
+}
+.stamp {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 1.5px dashed rgba(180, 87, 127, 0.28);
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+  font-weight: 800;
+  color: rgba(180, 87, 127, 0.45);
+}
+.stamp.on {
+  border: none;
+  color: #fff;
+  background: radial-gradient(circle at 35% 30%, #f7a8c8, #d9779f 70%);
+  box-shadow: 0 2px 6px rgba(217, 119, 159, 0.35);
+  transform: rotate(-8deg);
+}
+.stamp.last:not(.on) {
+  border-color: rgba(200, 140, 40, 0.45);
+  color: #c8902a;
+}
+.stamps small {
+  display: block;
+  font-size: 11px;
+  color: var(--ink-soft);
 }
 
 /* ── jar album ──────────────────────────────────────────────── */

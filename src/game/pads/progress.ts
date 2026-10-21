@@ -21,7 +21,7 @@ export type Mode = "FIRST_DISCOVERY" | "COLLECTION";
 const KEY = "ssok.progress.v2";
 const LEGACY_KEY = "ssok.pads.v1";
 /** the player's own calendar day (a Korean player's day starts at midnight, not 9am UTC) */
-const today = () => {
+export const today = () => {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 };
