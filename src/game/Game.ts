@@ -120,7 +120,10 @@ export class Game extends Emitter<GameEvents> implements PadView, TactileHost {
   /** today's gel, the stamp card and plant tickets */
   daily = new DailyStore(today(), this.progressStore.totalCompleted === 0);
   /** the bead box and the bracelets strung from it (a first start is seeded from the jar album) */
-  bracelets = new BraceletStore(() => this.album.latest.flatMap((jar) => jar.beads));
+  bracelets = new BraceletStore(
+    () => this.album.latest.flatMap((jar) => jar.beads),
+    (id) => this.treasure.count(id),
+  );
   /** the pad after this one – rolled once (and saved) so NEXT, the door and a restart all agree */
   private pendingNext: PadType | null = null;
   /** what that next pad hides (null = nothing), rolled together with it */
@@ -632,7 +635,8 @@ export class Game extends Emitter<GameEvents> implements PadView, TactileHost {
   /** test/QA: empty the pad instantly (beads vanish, treasures are credited, completion logic runs) */
   debugFinishPad() {
     this.finishing = false;
-    const pulled: [string, string][] = [];
+    // what already landed in this pad's jar, plus everything emptied now
+    const pulled: [string, string][] = this.collector.dismissing ? [] : this.collector.items.map((it) => [it.bead.type.id, it.bead.color]);
     for (const b of this.beads)
       if (b.state === "embedded" || b.state === "held") {
         b.state = "collected";

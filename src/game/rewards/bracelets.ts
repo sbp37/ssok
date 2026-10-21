@@ -44,11 +44,20 @@ const isTreasure = (id: unknown): id is string => typeof id === "string" && TREA
 export class BraceletStore {
   private stock: Record<string, number> = {};
   private list: Bracelet[] = [];
+  /** a glitter cord paid for (its ad's reward came) and not strung yet – kept even if the maker closed */
+  private glitter = false;
   private listeners = new Set<() => void>();
 
-  /** `seed`: the beads already in the jar album – what a player from before bracelets starts with */
-  constructor(seed: () => readonly (readonly [string, string])[] = () => [], private storage: Pick<Storage, "getItem" | "setItem"> | undefined = undefined) {
-    let saved: { stock?: unknown; list?: unknown } | null = null;
+  /**
+   * `seed`: the beads already in the jar album – what a player from before bracelets starts with.
+   * `owned`: how many of a treasure the box holds, to check saved charms against.
+   */
+  constructor(
+    seed: () => readonly (readonly [string, string])[] = () => [],
+    owned: (id: string) => number = () => Infinity,
+    private storage: Pick<Storage, "getItem" | "setItem"> | undefined = undefined,
+  ) {
+    let saved: { stock?: unknown; list?: unknown; glitter?: unknown } | null = null;
     try {
       this.storage ??= localStorage;
       saved = JSON.parse(this.storage.getItem(KEY) || "null");
@@ -62,20 +71,32 @@ export class BraceletStore {
         }
       }
       if (Array.isArray(saved.list)) {
+        // a damaged save must not string more than was pulled, or hang more charms than were found:
+        // the bracelets that overdraw are dropped (their beads stay in the box), an overdrawn charm comes off
+        const strung = new Map<string, number>();
+        const hung = new Map<string, number>();
         for (const b of saved.list as Partial<Bracelet>[]) {
+          if (this.list.length >= MAX_BRACELETS) break;
           if (!b || typeof b.id !== "string" || !Array.isArray(b.beads)) continue;
           const beads = b.beads.filter((k): k is string => typeof k === "string" && stringable(k)).slice(0, MAX_BEADS);
           if (beads.length < MIN_BEADS) continue;
+          const need = new Map<string, number>();
+          for (const k of beads) need.set(k, (need.get(k) ?? 0) + 1);
+          if ([...need].some(([k, n]) => (strung.get(k) ?? 0) + n > (this.stock[k] ?? 0))) continue;
+          for (const [k, n] of need) strung.set(k, (strung.get(k) ?? 0) + n);
+          let charm = isTreasure(b.charm) ? b.charm : null;
+          if (charm && (hung.get(charm) ?? 0) + 1 > owned(charm)) charm = null;
+          if (charm) hung.set(charm, (hung.get(charm) ?? 0) + 1);
           this.list.push({
             id: b.id,
             at: Number.isFinite(b.at) ? (b.at as number) : 0,
             beads,
-            charm: isTreasure(b.charm) ? b.charm : null,
+            charm,
             cord: CORDS.includes(b.cord as Cord) ? (b.cord as Cord) : "clear",
           });
         }
-        this.list = this.list.slice(0, MAX_BRACELETS);
       }
+      this.glitter = saved.glitter === true;
     } else {
       try {
         this.addBeads(seed(), false);
@@ -88,7 +109,7 @@ export class BraceletStore {
 
   private save(notify = true) {
     try {
-      this.storage?.setItem(KEY, JSON.stringify({ stock: this.stock, list: this.list }));
+      this.storage?.setItem(KEY, JSON.stringify({ stock: this.stock, list: this.list, glitter: this.glitter }));
     } catch {
       /* private mode: kept for this session */
     }
@@ -145,6 +166,15 @@ export class BraceletStore {
   get bracelets(): readonly Bracelet[] {
     return this.list;
   }
+  /** a glitter cord is paid for and waiting */
+  get hasGlitter() {
+    return this.glitter;
+  }
+  /** the glitter cord's ad paid out (at the reward, not in the maker – a closed maker loses nothing) */
+  earnGlitter() {
+    this.glitter = true;
+    this.save();
+  }
   get full() {
     return this.list.length >= MAX_BRACELETS;
   }
@@ -152,12 +182,14 @@ export class BraceletStore {
   /** string a bracelet; null when something is not spare, the length is wrong or the box is full */
   make(beads: readonly string[], charm: string | null, cord: Cord, owned: (id: string) => number, now = Date.now()): Bracelet | null {
     if (this.full || beads.length < MIN_BEADS || beads.length > MAX_BEADS || !CORDS.includes(cord)) return null;
+    if (cord === AD_CORD && !this.glitter) return null;
     const need = new Map<string, number>();
     for (const k of beads) need.set(k, (need.get(k) ?? 0) + 1);
     for (const [k, n] of need) if (!stringable(k) || this.spare(k) < n) return null;
     if (charm !== null && (!isTreasure(charm) || this.charmFree(charm, owned(charm)) < 1)) return null;
     const b: Bracelet = { id: `${now.toString(36)}${Math.floor(Math.random() * 1e6).toString(36)}`, at: now, beads: [...beads], charm, cord };
     this.list.push(b);
+    if (cord === AD_CORD) this.glitter = false; // one ad, one glitter bracelet
     this.save();
     return b;
   }

@@ -649,8 +649,9 @@ export function App() {
       sfx.unlock();
       sfx.pause("ad");
       try {
-        const result = await policy.next("rewarded", g.progressStore.totalCompleted);
+        const result = await policy.next("rewarded", g.progressStore.totalCompleted, () => g.bracelets.earnGlitter());
         if (result === "rewarded") {
+          g.bracelets.earnGlitter();
           offerStats.current?.note("earned", "cord");
           track("door_cord_earn");
           return true;

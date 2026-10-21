@@ -222,14 +222,29 @@ export function BraceletMaker({ game, ads, onClose, onMade }: { game: Game; ads:
   const store = game.bracelets;
   const [beads, setBeads] = useState<string[]>([]);
   const [charm, setCharm] = useState<string | null>(null);
-  const [cord, setCord] = useState<Cord>("clear");
-  const [glitter, setGlitter] = useState(false);
+  const [cord, setCord] = useState<Cord>(store.hasGlitter ? AD_CORD : "clear");
   const [watching, setWatching] = useState(false);
   const [note, setNote] = useState("");
-  const tray = useMemo(() => store.spareBeads().sort((a, b) => trayOrder(a.key) - trayOrder(b.key) || a.key.localeCompare(b.key)), [store]);
+  // beads and treasures can still arrive while the maker is open (the last flights of a pad)
+  const [version, setVersion] = useState(0);
+  useEffect(() => {
+    const a = store.subscribe(() => setVersion((v) => v + 1));
+    const b = game.treasure.subscribe(() => setVersion((v) => v + 1));
+    return () => {
+      a();
+      b();
+    };
+  }, [store, game]);
+  const glitter = store.hasGlitter;
+  const tray = useMemo(
+    () => store.spareBeads().sort((a, b) => trayOrder(a.key) - trayOrder(b.key) || a.key.localeCompare(b.key)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [store, version],
+  );
   const charms = useMemo(
     () => TREASURE_TYPES.map((t) => ({ t, free: store.charmFree(t.id, game.treasure.count(t.id)) })).filter((c) => c.free > 0),
-    [store, game],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [store, game, version],
   );
   useEffect(() => track("bracelet_open"), []);
   const left = (key: string, spare: number) => spare - beads.filter((k) => k === key).length;
@@ -252,9 +267,8 @@ export function BraceletMaker({ game, ads, onClose, onMade }: { game: Game; ads:
     const ok = await ads.watch();
     setWatching(false);
     if (ok) {
-      setGlitter(true);
       setCord(c);
-      setNote("반짝이 줄 ✦ 이 팔찌에 쓸 수 있어");
+      setNote("반짝이 줄 ✦ 다음 팔찌 하나에 쓸 수 있어");
     } else setNote("광고를 끝까지 보면 반짝이 줄을 쓸 수 있어");
   };
   const finish = () => {

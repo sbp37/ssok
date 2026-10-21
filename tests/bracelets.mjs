@@ -9,14 +9,14 @@ assert.ok(STRINGABLE.every((t) => t.rarity !== 'rare'), 'rare beads are treasure
 
 // A new player starts with an empty box; beads pulled from pads drop in (treasures and junk do not).
 let mem = memory();
-let s = new BraceletStore(() => [], mem);
+let s = new BraceletStore(() => [], undefined, mem);
 assert.equal(s.spareTotal, 0);
 s.addBeads([['tiny', '#ff8fc4'], ['tiny', '#ff8fc4'], ['tiny', '#6fbfff'], ['duck', '#fff3c2'], ['rainbow', '#e4f2ff'], ['nope', '#ffffff'], ['tiny', 'red']]);
 assert.equal(s.spare(pink), 2);
 assert.equal(s.spareTotal, 3, 'only everyday beads count');
 
 // A player from before bracelets starts with the beads in the jar album.
-const seeded = new BraceletStore(() => [['pearl', '#fbf3ee'], ['pearl', '#fbf3ee'], ['duck', '#fff3c2']], memory());
+const seeded = new BraceletStore(() => [['pearl', '#fbf3ee'], ['pearl', '#fbf3ee'], ['duck', '#fff3c2']], undefined, memory());
 assert.equal(seeded.spare(pearl), 2);
 
 // Making a bracelet uses spare beads only, needs MIN..MAX beads and a free charm copy.
@@ -37,7 +37,7 @@ assert.ok(s.make(eight, 'key', 'gold', owned), 'a duplicate treasure can hang on
 assert.equal(s.charmFree('key', owned('key')), 1);
 
 // Kept across restarts; untying gives everything back.
-s = new BraceletStore(() => [['tiny', '#ff8fc4']], mem);
+s = new BraceletStore(() => [['tiny', '#ff8fc4']], owned, mem);
 assert.equal(s.bracelets.length, 2, 'a saved box is never re-seeded');
 assert.equal(s.spare(pink), 22 - 2 * MIN_BEADS);
 assert.equal(s.remove(a.id), true);
@@ -56,11 +56,47 @@ junk.setItem('ssok.bracelets.v1', JSON.stringify({
   stock: { [pink]: 10, 'tiny|red': 4, 'rainbow|#e4f2ff': 3, [blue]: -2 },
   list: [{ id: 'x', at: 1, beads: Array(MIN_BEADS).fill(pink), charm: 'zzz', cord: 'neon' }, { id: 'y', beads: [pink] }, null],
 }));
-const j = new BraceletStore(() => [], junk);
+const j = new BraceletStore(() => [], undefined, junk);
 assert.equal(j.bracelets.length, 1);
 assert.deepEqual([j.bracelets[0].charm, j.bracelets[0].cord], [null, 'clear']);
 assert.equal(j.spare(pink), 10 - MIN_BEADS);
 assert.equal(j.spare(blue), 0);
 const broken = { getItem: () => { throw Error('private'); }, setItem: () => { throw Error('private'); } };
-assert.doesNotThrow(() => new BraceletStore(() => [], broken).addBeads([['tiny', '#ff8fc4']]));
-console.log('PASS: pulled beads into the box (seeded from the album) / spare beads only / 8–16 beads / one charm per treasure copy / persistence / untie gives back / box of 12 / junk repaired');
+assert.doesNotThrow(() => new BraceletStore(() => [], undefined, broken).addBeads([['tiny', '#ff8fc4']]));
+// A damaged save cannot string more than was pulled, or hang more charms than were found.
+{
+  const bad = memory();
+  const eight = Array(MIN_BEADS).fill(pink);
+  bad.setItem('ssok.bracelets.v1', JSON.stringify({
+    stock: { [pink]: MIN_BEADS },
+    list: [
+      { id: 'a', at: 1, beads: eight, charm: 'duck', cord: 'clear' },
+      { id: 'b', at: 2, beads: eight, charm: null, cord: 'clear' },
+    ],
+  }));
+  const r = new BraceletStore(() => [], (id) => (id === 'duck' ? 1 : 0), bad);
+  assert.deepEqual(r.bracelets.map((b) => b.id), ['a'], 'the bracelet that overdraws the box is dropped');
+  const twice = memory();
+  twice.setItem('ssok.bracelets.v1', JSON.stringify({
+    stock: { [pink]: MIN_BEADS * 2 },
+    list: [{ id: 'a', beads: eight, charm: 'duck', cord: 'clear' }, { id: 'b', beads: eight, charm: 'duck', cord: 'clear' }],
+  }));
+  const t = new BraceletStore(() => [], (id) => (id === 'duck' ? 1 : 0), twice);
+  assert.deepEqual(t.bracelets.map((b) => b.charm), ['duck', null], 'one duck found → one duck charm');
+}
+
+// The glitter cord: its ad's reward is kept until a bracelet uses it, even if the maker closed.
+{
+  const g = memory();
+  const st = new BraceletStore(() => Array.from({ length: 30 }, () => ['tiny', '#ff8fc4']), undefined, g);
+  const eight = Array(MIN_BEADS).fill(pink);
+  assert.equal(st.make(eight, null, 'glitter', () => 0), null, 'no glitter without its ad');
+  st.earnGlitter();
+  assert.equal(new BraceletStore(() => [], undefined, g).hasGlitter, true, 'kept across a restart');
+  const again = new BraceletStore(() => [], undefined, g);
+  assert.ok(again.make(eight, null, 'glitter', () => 0));
+  assert.equal(again.hasGlitter, false, 'one ad, one glitter bracelet');
+  assert.equal(again.make(eight, null, 'glitter', () => 0), null);
+  assert.ok(again.make(eight, null, 'pink', () => 0), 'the free cords need nothing');
+}
+console.log('PASS: pulled beads into the box (seeded from the album) / spare beads only / 8–16 beads / one charm per treasure copy / persistence / untie gives back / box of 12 / junk repaired / damaged saves cannot overdraw beads or charms / glitter cord kept until used');
