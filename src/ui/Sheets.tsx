@@ -16,6 +16,8 @@ import { haptics } from "../game/haptics";
 import { sfx } from "../game/audio/Sfx";
 import { PadSilhouette } from "./NextPanel";
 import { useShare } from "./share";
+import { BraceletBox, BraceletMaker, BraceletView, type AdHook } from "./Bracelet";
+import type { Bracelet } from "../game/rewards/bracelets";
 
 /** which pad hides this treasure most often – a nudge for the empty card, never a promise */
 function hidesIn(typeId: string): string {
@@ -314,9 +316,11 @@ function Shelf({ game, onPick }: { game: Game; onPick: (id: string) => void }) {
  * when not yet found), then the treasure box. Nothing here is tappable into
  * play – NEXT decides what you get; this is for looking.
  */
-export function CollectionSheet({ game, onClose }: { game: Game; onClose: () => void }) {
+export function CollectionSheet({ game, onClose, ads }: { game: Game; onClose: () => void; ads: AdHook }) {
   const [, tick] = useState(0);
   const [detail, setDetail] = useState<string | null>(null);
+  const [making, setMaking] = useState(false);
+  const [viewing, setViewing] = useState<Bracelet | null>(null);
   const [shareNotice, setShareNotice] = useState("");
   const { busy: shareBusy, share } = useShare(setShareNotice, () => {
     track("share_done");
@@ -329,9 +333,11 @@ export function CollectionSheet({ game, onClose }: { game: Game; onClose: () => 
   useEffect(() => {
     const a = game.treasure.subscribe(() => tick((n) => n + 1));
     const b = game.progressStore.subscribe(() => tick((n) => n + 1));
+    const c = game.bracelets.subscribe(() => tick((n) => n + 1));
     return () => {
       a();
       b();
+      c();
     };
   }, [game]);
   const t = game.treasure;
@@ -347,6 +353,8 @@ export function CollectionSheet({ game, onClose }: { game: Game; onClose: () => 
       <ThemeSection game={game} onPick={setDetail} />
       <div className="section">진열장</div>
       <Shelf game={game} onPick={setDetail} />
+      <div className="section">팔찌{game.bracelets.bracelets.length ? ` · ${game.bracelets.bracelets.length}개` : ""}</div>
+      <BraceletBox game={game} onMake={() => setMaking(true)} onOpen={setViewing} />
       <div className="section">세트</div>
       <div className="sets">
         {TREASURE_SETS.filter((set) => !set.theme || set.theme === activeTheme()?.id).map((set) => {
@@ -433,6 +441,31 @@ export function CollectionSheet({ game, onClose }: { game: Game; onClose: () => 
       </button>
       {shareNotice && <div className="share-notice" role="status">{shareNotice}</div>}
       {detail && <TreasureDetail game={game} id={detail} onClose={() => setDetail(null)} />}
+      {making && (
+        <BraceletMaker
+          game={game}
+          ads={ads}
+          onClose={() => setMaking(false)}
+          onMade={(b) => {
+            setMaking(false);
+            setViewing(b);
+          }}
+        />
+      )}
+      {viewing && (
+        <BraceletView
+          bracelet={viewing}
+          onClose={() => setViewing(null)}
+          onUntie={() => {
+            game.bracelets.remove(viewing.id);
+            setViewing(null);
+          }}
+          onShare={() => {
+            track("bracelet_shared");
+            void share(undefined, "내가 만든 팔찌 ✦");
+          }}
+        />
+      )}
     </Sheet>
   );
 }

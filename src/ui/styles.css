@@ -1364,6 +1364,249 @@ body,
   color: var(--ink-soft);
 }
 
+/* ── bracelets ─────────────────────────────────────────────── */
+.bracelets {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+.bracelet-tile {
+  font: inherit;
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  background: #fff;
+  border: 1px solid rgba(43, 39, 48, 0.06);
+  border-radius: 14px;
+  cursor: pointer;
+  transition: transform 0.12s ease;
+}
+.bracelet-tile:active {
+  transform: scale(0.95);
+}
+.bracelet-tile.make {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  background: linear-gradient(135deg, #fff4f9, #f3eeff);
+  border: 1.5px dashed rgba(180, 87, 127, 0.3);
+  color: #b4577f;
+}
+.bracelet-tile.make:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+.bracelet-tile .plus {
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1;
+}
+.bracelet-tile .make-name {
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
+  word-break: keep-all;
+}
+.bracelet-tile small {
+  font-size: 10px;
+  color: var(--ink-soft);
+}
+
+.maker-wrap {
+  z-index: 31;
+  padding: 12px;
+}
+.maker {
+  width: min(380px, 100%);
+  max-height: calc(100% - 8px);
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px 16px 16px;
+  border-radius: 22px;
+  background: linear-gradient(180deg, #fffdfb, #fbf6fa);
+  box-shadow: 0 18px 50px rgba(43, 39, 48, 0.22);
+  animation: btnIn 0.28s ease-out;
+}
+/* a column that scrolls as a whole: its rows keep their height instead of shrinking into clipped strips */
+.maker > * {
+  flex-shrink: 0;
+}
+.maker-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 15px;
+}
+.maker-preview {
+  display: grid;
+  place-items: center;
+  margin: -2px auto 0;
+  width: 196px;
+  height: 196px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 50% 42%, #fff 0%, #fbf1f6 55%, rgba(251, 241, 246, 0) 72%);
+}
+.maker-count {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12.5px;
+  font-weight: 650;
+  color: #b4577f;
+}
+.maker-count span {
+  margin-right: auto;
+}
+.maker-count .link:disabled {
+  opacity: 0.4;
+}
+.maker-label {
+  margin-top: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--ink-faint);
+}
+.cords {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.cord {
+  font: inherit;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 9px 4px 6px;
+  font-size: 11.5px;
+  font-weight: 650;
+  color: var(--ink);
+  background: #fff;
+  border: 1px solid rgba(43, 39, 48, 0.1);
+  border-radius: 999px;
+  cursor: pointer;
+}
+.cord.on {
+  border-color: #d9779f;
+  box-shadow: inset 0 0 0 1px #d9779f;
+}
+.cord small {
+  font-size: 9.5px;
+  font-weight: 700;
+  color: #fff;
+  background: var(--ink);
+  border-radius: 999px;
+  padding: 1px 5px;
+}
+.cord-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  display: inline-block;
+}
+.cord-dot.clear {
+  background: #fff;
+  box-shadow: inset 0 0 0 1.5px rgba(43, 39, 48, 0.2);
+}
+.cord-dot.pink {
+  background: #f19ec2;
+}
+.cord-dot.gold {
+  background: linear-gradient(135deg, #f7df93, #d2a640);
+}
+.cord-dot.glitter {
+  background: radial-gradient(circle at 30% 30%, #fff 0 18%, transparent 20%), radial-gradient(circle at 70% 65%, #ffd678 0 14%, transparent 16%), #e6d3ff;
+}
+.charms {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding: 2px 1px 4px;
+}
+.charm {
+  position: relative;
+  flex: 0 0 auto;
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  background: #fff;
+  border: 1px solid rgba(43, 39, 48, 0.08);
+  border-radius: 12px;
+  cursor: pointer;
+}
+.charm.on {
+  border-color: #d9779f;
+  box-shadow: inset 0 0 0 1.5px #d9779f;
+  background: #fff4f9;
+}
+.charm small,
+.tray-bead small {
+  position: absolute;
+  right: 2px;
+  bottom: 1px;
+  font-size: 9.5px;
+  font-weight: 700;
+  color: var(--ink-soft);
+}
+.tray {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(42px, 1fr));
+  gap: 5px;
+  max-height: 150px;
+  overflow: auto;
+  padding: 1px;
+}
+.tray-bead {
+  position: relative;
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  background: #fff;
+  border: 1px solid rgba(43, 39, 48, 0.06);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: transform 0.1s ease;
+}
+.tray-bead:active {
+  transform: scale(0.92);
+}
+.tray-bead:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.maker-empty,
+.maker-note {
+  font-size: 11.5px;
+  color: var(--ink-soft);
+  text-align: center;
+}
+.maker-note {
+  color: #b4577f;
+  font-weight: 600;
+}
+.maker-done {
+  margin-top: 6px;
+  padding: 11px 18px;
+  font-size: 15px;
+}
+.maker-done:disabled {
+  opacity: 0.45;
+}
+.bracelet-detail .btn {
+  width: 100%;
+}
+.link.danger {
+  color: #c2263f;
+}
+
 /* ── jar album ──────────────────────────────────────────────── */
 .album {
   display: flex;
