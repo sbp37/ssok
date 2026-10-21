@@ -1,6 +1,6 @@
 import { Spring, Spring2, springParams } from "../physics/spring";
 import { Rng } from "../util/math";
-import { BEAD_TYPES, HIDDEN_TYPES, RARITY_WEIGHT, ULTRA_TYPES, type BeadType, type Rarity } from "./BeadTypes";
+import { BEAD_TYPES, HIDDEN_TYPES, RARITY_WEIGHT, THEME_TYPES, ULTRA_TYPES, type BeadType, type Rarity } from "./BeadTypes";
 import type { Fiber } from "../fibers/Fiber";
 
 export type BeadState = "embedded" | "held" | "flying" | "collected" | "gone";
@@ -322,7 +322,7 @@ export function generatePad(padR: number, rng: Rng, opts: PadOptions = {}): Bead
 
   // the hidden object: one big deep bead under a slot near the middle, replacing that slot's deeper bead
   if (opts.hiddenObject) {
-    const ht = HIDDEN_TYPES.find((t) => t.id === opts.hiddenObject) ?? ULTRA_TYPES.find((t) => t.id === opts.hiddenObject);
+    const ht = [...HIDDEN_TYPES, ...THEME_TYPES, ...ULTRA_TYPES].find((t) => t.id === opts.hiddenObject);
     if (ht) {
       const surface = beads.filter((b) => b.layer === 0);
       const near = surface
