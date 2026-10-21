@@ -7,7 +7,7 @@ import { haptics } from "../game/haptics";
 import { NextPanel, type NextView } from "./NextPanel";
 import { BeadIcon, CollectionSheet, SettingsSheet } from "./Sheets";
 import { AD_GROUP_IDS, AdPolicy, createAdProvider } from "../game/ads/AdPolicy";
-import { OfferStats, pickOffer, type Offer } from "../game/ads/Offers";
+import { OfferStats, pickOffer, seekTitle, type Offer } from "../game/ads/Offers";
 import { PromotionRewards } from "../game/rewards/PromotionRewards";
 import { PADS, type PadType } from "../game/pads/PadTypes";
 import { activeTheme } from "../game/rewards/themes";
@@ -178,6 +178,8 @@ export function App() {
   const transitioning = useRef(false);
   /** name of the treasure planted by "심기", announced when that pad opens */
   const planted = useRef<string | null>(null);
+  /** this pad already gave its free glimpse of a new treasure */
+  const glimpsed = useRef(false);
   const [phase, setPhase] = useState<Phase>("intro");
   const [hintHidden, setHintHidden] = useState(false);
   const [pulled, setPulled] = useState(0);
@@ -325,10 +327,12 @@ export function App() {
     return () => window.clearInterval(t);
   }, [padEmpty, flow]);
 
+  /** a seek door is free while a ticket is in hand – read live: a share can bring one mid-screen */
+  const isFree = (o: Offer | null) => o?.kind === "seek" && (gameRef.current?.daily.tickets ?? 0) > 0;
   /** the door on screen right now: a ticket needs no ad; every other door needs a loaded one */
   const doorShown =
-    !!offer && (offer.kind === "choose" ? rewardReady && !!offer.alternatives?.length : offer.free || rewardReady);
-  const statKind = (o: Offer) => (o.free ? "ticket" : o.kind);
+    !!offer && (offer.kind === "choose" ? rewardReady && !!offer.alternatives?.length : isFree(offer) || rewardReady);
+  const statKind = (o: Offer) => (isFree(o) ? "ticket" : o.kind);
   // a door counts as offered only once it is actually on screen (no loaded ad → no door)
   const offerSeen = useRef("");
   useEffect(() => {
@@ -370,6 +374,7 @@ export function App() {
     };
     label();
     track("app_open", { completed: game.progressStore.totalCompleted, newDay: game.progressStore.newDay });
+    if (game.bootOpenedDaily) track("daily_open");
     // a new day: today's gel is waiting (or already on the table)
     if (game.isDaily) later(() => pushToast({ tone: "hidden", text: "오늘의 젤 ✦", sub: "보물 하나 확정 · 오늘만" }), 900);
     else if (game.progressStore.newDay) later(() => pushToast({ tone: "soft", text: "새로운 하루 ✦", sub: "곧 오늘의 젤이 나와" }), 900);
@@ -476,22 +481,19 @@ export function App() {
         setEmptied(emptied);
         if (emptied >= 0.68) {
           setNext(game.nextInfo);
-          // a passive nudge, once, when something unseen is still buried in there
-          setGlimmer((g) => {
-            if (g) return g;
-            const info = game.hiddenInfo;
-            // a never-found treasure: a free, short glimpse of where it lies – a reason to dig on
-            if (info && info.isNew && game.progressStore.totalCompleted >= 2) {
-              later(() => setGlimmer(false), 2600);
-              game.peekHidden(1.8);
-              return true;
-            }
-            return g;
-          });
+          // a never-found treasure: once a pad, a free, short glimpse of where it lies – a reason to dig on
+          const info = game.hiddenInfo;
+          if (!glimpsed.current && info && info.isNew && game.progressStore.totalCompleted >= 2) {
+            glimpsed.current = true;
+            setGlimmer(true);
+            later(() => setGlimmer(false), 2600);
+            game.peekHidden(1.8);
+          }
         }
       }),
       game.on("padChange", ({ pad, newPad, newVariant, bonus, daily }) => {
         window.clearTimeout(completionTimer.current);
+        glimpsed.current = false;
         setEmptied(0);
         setPadEmpty(false);
         setFlow("");
@@ -560,12 +562,14 @@ export function App() {
     if (!g || !policy || !o || transitioning.current || flow !== "ready" || !padEmpty) return;
     if (o.kind === "choose" && !pick) return;
     const kind = statKind(o);
-    if (o.free) {
-      if (!o.seekId || !g.daily.useTicket()) return;
+    if (isFree(o)) {
+      // a second tap in the same frame still sees this screen's state: the game knows the pad already moved on
+      if (!o.seekId || !g.progressStore.currentDone || !g.daily.useTicket()) return;
       haptics.press();
       offerStats.current?.note("taken", kind);
       offerStats.current?.note("earned", kind);
       track("door_ticket_take");
+      track("door_ticket_earn");
       policy.waive(g.progressStore.totalCompleted);
       g.plantNext(o.seekId);
       planted.current = o.seekName ?? null;
@@ -733,7 +737,7 @@ export function App() {
                   </div>
                 )}
                 {offer && doorShown && offer.kind !== "choose" && (
-                  <button className={"btn door" + (offer.free ? " free" : "")} onClick={() => void takeOffer()} disabled={watching}>
+                  <button className={"btn door" + (isFree(offer) ? " free" : "")} onClick={() => void takeOffer()} disabled={watching}>
                     <span className="door-icon" aria-hidden="true">
                       {offer.kind === "rare" ? (
                         <PadSilhouette pad={next.pad} size={22} mode="color" glint={false} />
@@ -748,7 +752,7 @@ export function App() {
                       )}
                     </span>
                     <span className="door-text">
-                      <span>{watching ? "잠깐…" : offer.title}</span>
+                      <span>{watching ? "잠깐…" : offer.kind === "seek" && offer.seekName ? seekTitle(offer.seekName, !!offer.pinned, isFree(offer)) : offer.title}</span>
                       <small>{offer.sub}</small>
                     </span>
                   </button>

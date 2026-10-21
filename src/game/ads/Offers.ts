@@ -96,6 +96,11 @@ export function seekPick(c: Pick<OfferContext, "nextBase" | "found" | "pinned" |
   return from[Math.floor((c.rand ?? Math.random)() * from.length) % from.length];
 }
 
+/** the seek door's line – a ticket can arrive while the door is on screen (a share), so it is redrawn */
+export function seekTitle(name: string, pinned: boolean, free: boolean) {
+  return `${pinned ? "📍 " : ""}${free ? "심기권으로" : "광고 보고"} ${name} 심기`;
+}
+
 export function pickOffer(c: OfferContext): Offer {
   if (c.nextTier === "super") return { kind: "rare", title: "광고 보고 잡기", sub: "초희귀 패드 · 초희귀 보물 확정" };
   if (c.nextTier === "rare") return { kind: "rare", title: "광고 보고 잡기", sub: "희귀 패드 · 보물 확정 · 희귀 비즈 여럿" };
@@ -119,7 +124,7 @@ export function pickOffer(c: OfferContext): Offer {
     const free = tickets > 0;
     return {
       kind: "seek",
-      title: `${pinned ? "📍 " : ""}${free ? "심기권으로" : "광고 보고"} ${t.name} 심기`,
+      title: seekTitle(t.name, pinned, free),
       sub,
       seekId: t.id,
       seekName: t.name,

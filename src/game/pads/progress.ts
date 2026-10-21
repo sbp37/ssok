@@ -54,6 +54,7 @@ function sanitize(raw: unknown): Save {
   if (typeof o.currentHidden === "string" || o.currentHidden === null) s.currentHidden = o.currentHidden;
   s.nextCaught = o.nextCaught === true && s.nextId !== null;
   if (typeof o.bonusTreasure === "string") s.bonusTreasure = o.bonusTreasure;
+  if (typeof o.currentDaily === "string") s.currentDaily = o.currentDaily;
   s.dayBonusPending = o.dayBonusPending === true;
   s.recentColors = Array.isArray(o.recentColors)
     ? o.recentColors.filter((x): x is string => typeof x === "string" && /^\d+,\d+,\d+$/.test(x)).slice(-8)
@@ -88,6 +89,8 @@ interface Save {
   /** the sure treasure of a paid "한 번 더 파기" that is not dug up yet: a restart digs it
    * first – the same treasure, never a re-roll, and never again once it is found */
   bonusTreasure: string | null;
+  /** the pad on the table is the gel of this day ("" = an ordinary pad): a restart rebuilds it */
+  currentDaily: string;
   /** first pad of a new day gets one small nudge; consumed when that pad is generated */
   dayBonusPending: boolean;
   /** gel colours of the last pads opened ("r,g,b", newest last) – no repeats */
@@ -110,6 +113,7 @@ const fresh = (): Save => ({
   currentHidden: undefined,
   nextCaught: false,
   bonusTreasure: null,
+  currentDaily: "",
   dayBonusPending: false,
   recentColors: [],
 });
@@ -213,6 +217,9 @@ export class PadProgress {
   get bonusTreasure() {
     return this.s.bonusTreasure;
   }
+  get currentDaily() {
+    return this.s.currentDaily;
+  }
   get recentColors(): readonly string[] {
     return this.s.recentColors;
   }
@@ -259,6 +266,7 @@ export class PadProgress {
     this.s.currentHidden = undefined;
     this.s.nextCaught = false;
     this.s.bonusTreasure = null;
+    this.s.currentDaily = pad.daily ?? "";
     this.refreshMode();
     this.save();
     return { newPad, newVariant };

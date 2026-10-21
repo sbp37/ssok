@@ -53,6 +53,18 @@ p.setBonusTreasure('eye');
 p.open(PADS[3]);
 assert.equal(restart().bonusTreasure, null);
 
+// A gel of the day remembers its date, so a restart mid-pad rebuilds it (shape and colour).
+{
+  const { dailyPad } = await load('rewards/daily');
+  const gel = dailyPad('2026-10-21');
+  p = restart();
+  p.open(gel);
+  assert.equal(restart().currentDaily, '2026-10-21');
+  assert.equal(restart().current.id, gel.id);
+  p.open(PADS[2]);
+  assert.equal(restart().currentDaily, '', 'an ordinary pad is not a gel of the day');
+}
+
 // Junk in the new fields is repaired, not trusted.
 const saved = JSON.parse(data.get('ssok.progress.v2'));
 data.set('ssok.progress.v2', JSON.stringify({ ...saved, currentHidden: 5, nextCaught: 'yes', bonusTreasure: 7, nextId: null }));

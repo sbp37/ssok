@@ -142,5 +142,5 @@ function seedOf(day: string) {
 export function dailyPad(day: string): PadType {
   const rng = new Rng(seedOf("ssok-daily-" + day));
   const pad = rng.pick(PADS);
-  return { ...tinted(pad, [], () => rng.next()), daily: true };
+  return { ...tinted(pad, [], () => rng.next()), daily: day };
 }

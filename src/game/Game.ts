@@ -130,6 +130,8 @@ export class Game extends Emitter<GameEvents> implements PadView, TactileHost {
   private bonusRound = false;
   /** the pad on the table is today's gel */
   private dailyRound = false;
+  /** this start itself opened today's gel (for the "opened" count – a restart mid-pad is not an opening) */
+  bootOpenedDaily = false;
   private padTotal = 0;
   private lastSocketRefresh = 0;
   /** Completion follows every flight and the existing collector sleep, not a POP timer. */
@@ -203,11 +205,18 @@ export class Game extends Emitter<GameEvents> implements PadView, TactileHost {
           this.startHidden = this.startHidden || this.rollHidden(pad, true, true);
         }
         prog.open(pad);
-        if (pad.daily) this.daily.openedDaily(today());
-        this.dailyRound = !!pad.daily;
+        this.dailyRound = pad.daily === today();
+        if (this.dailyRound) {
+          this.daily.openedDaily(today());
+          this.bootOpenedDaily = true;
+        }
       } else {
-        // mid-pad exit → same pad, fresh beads, the same buried treasure (a planted one included)
+        // mid-pad exit → same pad, fresh beads, the same buried treasure (a planted one included);
+        // a gel of the day comes back with its own colour
         pad = prog.current;
+        const daily = prog.currentDaily ? dailyPad(prog.currentDaily) : undefined;
+        if (daily && daily.id === pad.id) pad = daily;
+        this.dailyRound = pad.daily === today();
         this.startHidden = prog.currentHidden;
         // very first start: the pad on the table counts as discovered too
         if (!prog.isDiscovered(pad.variantOf ?? pad.id)) prog.open(pad);
@@ -520,7 +529,7 @@ export class Game extends Emitter<GameEvents> implements PadView, TactileHost {
       theme: themeOfPad(pad.id)?.name,
       themeId: themeOfPad(pad.id)?.id,
       // today's gel: a treasure for sure
-      daily: !!pad.daily,
+      daily: pad.daily === today(),
     };
   }
 
@@ -573,14 +582,15 @@ export class Game extends Emitter<GameEvents> implements PadView, TactileHost {
     // the treasure rolled for NEXT travels with it; a different pad rolls fresh
     this.startHidden = this.pendingNext && this.pendingNext.id === pad.id ? this.pendingHidden : undefined;
     const { newPad, newVariant } = this.progressStore.open(pad);
-    if (pad.daily) this.daily.openedDaily(today());
-    this.dailyRound = !!pad.daily;
+    // yesterday's gel carried past midnight is just a pad: today's still waits
+    this.dailyRound = pad.daily === today();
+    if (this.dailyRound) this.daily.openedDaily(today());
     this.gel.setShape(pad);
     this.newPad();
     this.glShadowR = -1; // silhouette-shaped shadow changes even at the same R
     this.pendingNext = null;
     this.pendingHidden = undefined;
-    this.emit("padChange", { pad, newPad, newVariant, daily: !!pad.daily });
+    this.emit("padChange", { pad, newPad, newVariant, daily: this.dailyRound });
     this.emitProgress();
   }
 
