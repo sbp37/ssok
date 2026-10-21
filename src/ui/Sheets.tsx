@@ -7,7 +7,10 @@ import type { JarEntry } from "../game/rewards/album";
 import { PADS, variantCount } from "../game/pads/PadTypes";
 import { SHELF_SIZE, SPECIAL_TYPES, RARE_TYPES, TREASURE_TYPES } from "../game/rewards/treasure";
 import { TREASURE_SETS } from "../game/rewards/sets";
-import { activeTheme, themePads, upcomingTheme, type Theme } from "../game/rewards/themes";
+import { activeTheme, dDay, daysLeft, themePads, upcomingTheme, type Theme } from "../game/rewards/themes";
+import { CARD_SIZE } from "../game/rewards/daily";
+import { today } from "../game/pads/progress";
+import { track } from "../game/analytics";
 import { HIDDEN_POOLS } from "../game/rewards/rates";
 import { haptics } from "../game/haptics";
 import { sfx } from "../game/audio/Sfx";
@@ -223,7 +226,7 @@ function ThemeSection({ game, onPick }: { game: Game; onPick: (id: string) => vo
       <div className="theme-banner" style={{ backgroundImage: `url(${asset(`theme-${theme.id}.svg`)})` }}>
         <strong>{theme.name}</strong>
         <span>
-          {theme.until} 한정 · 보물 {have}/{theme.treasures.length}
+          {theme.until} 한정 · {dDay(daysLeft(theme))} · 보물 {have}/{theme.treasures.length}
         </span>
       </div>
       <div className="grid theme-grid">
@@ -252,6 +255,31 @@ function ThemeSection({ game, onPick }: { game: Game; onPick: (id: string) => vo
       </div>
       {next && <div className="theme-next">다음 테마 · {next.name} ({next.span})</div>}
     </>
+  );
+}
+
+/** the stamp card: one stamp a day for emptying a pad, seven make a plant ticket */
+function StampCard({ game }: { game: Game }) {
+  const d = game.daily;
+  const todayDone = d.stampedOn(today());
+  return (
+    <div className="stamps">
+      <div className="stamps-head">
+        <strong>도장판</strong>
+        <span className="stamps-n">
+          {d.stamps}/{CARD_SIZE}
+        </span>
+        {d.tickets > 0 && <span className="tickets">심기권 {d.tickets}장</span>}
+      </div>
+      <div className="stamp-row">
+        {Array.from({ length: CARD_SIZE }, (_, i) => (
+          <span key={i} className={"stamp" + (i < d.stamps ? " on" : "") + (i === CARD_SIZE - 1 ? " last" : "")}>
+            {i < d.stamps ? "쏙" : i === CARD_SIZE - 1 ? "✦" : ""}
+          </span>
+        ))}
+      </div>
+      <small>{todayDone ? "오늘 도장 받았어 · 내일 또 만나" : "오늘 한 판 비우면 도장 하나 · 7개면 심기권"}</small>
+    </div>
   );
 }
 
@@ -290,7 +318,14 @@ export function CollectionSheet({ game, onClose }: { game: Game; onClose: () => 
   const [, tick] = useState(0);
   const [detail, setDetail] = useState<string | null>(null);
   const [shareNotice, setShareNotice] = useState("");
-  const { busy: shareBusy, share } = useShare(setShareNotice);
+  const { busy: shareBusy, share } = useShare(setShareNotice, () => {
+    track("share_done");
+    // one plant ticket a day for a share (in-game only)
+    if (game.daily.shared(today())) {
+      track("ticket_from_share");
+      setShareNotice("공유 고마워 ✦ 심기권 1장을 받았어");
+    }
+  });
   useEffect(() => {
     const a = game.treasure.subscribe(() => tick((n) => n + 1));
     const b = game.progressStore.subscribe(() => tick((n) => n + 1));
@@ -308,6 +343,7 @@ export function CollectionSheet({ game, onClose }: { game: Game; onClose: () => 
   };
   return (
     <Sheet title="컬렉션" sub={`패드 ${foundPads}/${PADS.length} · 보물 ${t.found}/${t.total}`} onClose={onClose}>
+      <StampCard game={game} />
       <ThemeSection game={game} onPick={setDetail} />
       <div className="section">진열장</div>
       <Shelf game={game} onPick={setDetail} />
@@ -393,7 +429,7 @@ export function CollectionSheet({ game, onClose }: { game: Game; onClose: () => 
       <div className="sheet-foot">보물을 누르면 진열하거나 📍 찾을 보물로 정할 수 있어.</div>
       <button className="collection-share" disabled={shareBusy} onClick={onShare}>
         <span aria-hidden="true">↗</span>
-        {shareBusy ? "공유 준비 중…" : "친구에게 공유하기"}
+        {shareBusy ? "공유 준비 중…" : game.daily.sharedOn(today()) ? "친구에게 공유하기" : "공유하고 심기권 받기"}
       </button>
       {shareNotice && <div className="share-notice" role="status">{shareNotice}</div>}
       {detail && <TreasureDetail game={game} id={detail} onClose={() => setDetail(null)} />}

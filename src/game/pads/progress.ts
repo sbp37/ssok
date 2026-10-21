@@ -21,7 +21,7 @@ export type Mode = "FIRST_DISCOVERY" | "COLLECTION";
 const KEY = "ssok.progress.v2";
 const LEGACY_KEY = "ssok.pads.v1";
 /** the player's own calendar day (a Korean player's day starts at midnight, not 9am UTC) */
-const today = () => {
+export const today = () => {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 };
@@ -51,6 +51,10 @@ function sanitize(raw: unknown): Save {
     s.nextId = o.nextId;
     if (typeof o.nextHidden === "string" || o.nextHidden === null) s.nextHidden = o.nextHidden;
   }
+  if (typeof o.currentHidden === "string" || o.currentHidden === null) s.currentHidden = o.currentHidden;
+  s.nextCaught = o.nextCaught === true && s.nextId !== null;
+  if (typeof o.bonusTreasure === "string") s.bonusTreasure = o.bonusTreasure;
+  if (typeof o.currentDaily === "string") s.currentDaily = o.currentDaily;
   s.dayBonusPending = o.dayBonusPending === true;
   s.recentColors = Array.isArray(o.recentColors)
     ? o.recentColors.filter((x): x is string => typeof x === "string" && /^\d+,\d+,\d+$/.test(x)).slice(-8)
@@ -77,6 +81,16 @@ interface Save {
   nextId: string | null;
   /** the treasure pre-rolled for that next pad (null = rolled "none", undefined = not rolled) */
   nextHidden: string | null | undefined;
+  /** what the pad on the table buries (null = nothing, undefined = not known): a restart
+   * mid-pad buries the same thing, so a treasure planted through an ad is never lost */
+  currentHidden: string | null | undefined;
+  /** the passing variant's ad already paid out: a restart opens the variant, not the plain pad */
+  nextCaught: boolean;
+  /** the sure treasure of a paid "한 번 더 파기" that is not dug up yet: a restart digs it
+   * first – the same treasure, never a re-roll, and never again once it is found */
+  bonusTreasure: string | null;
+  /** the pad on the table is the gel of this day ("" = an ordinary pad): a restart rebuilds it */
+  currentDaily: string;
   /** first pad of a new day gets one small nudge; consumed when that pad is generated */
   dayBonusPending: boolean;
   /** gel colours of the last pads opened ("r,g,b", newest last) – no repeats */
@@ -96,6 +110,10 @@ const fresh = (): Save => ({
   recent: [],
   nextId: null,
   nextHidden: undefined,
+  currentHidden: undefined,
+  nextCaught: false,
+  bonusTreasure: null,
+  currentDaily: "",
   dayBonusPending: false,
   recentColors: [],
 });
@@ -190,6 +208,18 @@ export class PadProgress {
   get nextHidden() {
     return this.s.nextHidden;
   }
+  get currentHidden() {
+    return this.s.currentHidden;
+  }
+  get nextCaught() {
+    return this.s.nextCaught;
+  }
+  get bonusTreasure() {
+    return this.s.bonusTreasure;
+  }
+  get currentDaily() {
+    return this.s.currentDaily;
+  }
   get recentColors(): readonly string[] {
     return this.s.recentColors;
   }
@@ -201,6 +231,15 @@ export class PadProgress {
   /** 1-based index of the pad on the table (completion is counted at the last POP) */
   get padIndex() {
     return this.s.totalCompleted + (this.s.currentDone ? 0 : 1);
+  }
+  /** the calendar day turned while the game stayed open – the same as starting on a new day */
+  rollDay() {
+    const day = today();
+    if (this.s.lastPlayDate === day) return false;
+    this.s.lastPlayDate = day;
+    this.s.dayBonusPending = true;
+    this.save();
+    return true;
   }
   /** one small nudge for the first pad of a new day – true exactly once */
   takeDayBonus() {
@@ -224,9 +263,30 @@ export class PadProgress {
     this.s.recent = [...this.s.recent, base].slice(-10);
     this.s.nextId = null;
     this.s.nextHidden = undefined;
+    this.s.currentHidden = undefined;
+    this.s.nextCaught = false;
+    this.s.bonusTreasure = null;
+    this.s.currentDaily = pad.daily ?? "";
     this.refreshMode();
     this.save();
     return { newPad, newVariant };
+  }
+  /** what the pad on the table buries – null again once it has been dug up */
+  setCurrentHidden(hidden: string | null) {
+    this.s.currentHidden = hidden;
+    this.save();
+  }
+  /** the rewarded door for the passing variant paid out (set at the earned-reward event) */
+  catchNext() {
+    if (!this.s.nextId) return;
+    this.s.nextCaught = true;
+    this.save();
+  }
+  /** a bonus dig paid for (its treasure) or its treasure dug up (null) */
+  setBonusTreasure(id: string | null) {
+    if (this.s.bonusTreasure === id) return;
+    this.s.bonusTreasure = id;
+    this.save();
   }
   /** the pad on the table was emptied */
   complete() {
@@ -237,6 +297,7 @@ export class PadProgress {
   }
   /** remember what NEXT rolled (and what it hides) so a restart lands on the same pad */
   setNext(pad: PadType, hidden: string | null) {
+    if (this.s.nextId !== pad.id) this.s.nextCaught = false;
     this.s.nextId = pad.id;
     this.s.nextHidden = hidden;
     this.save();

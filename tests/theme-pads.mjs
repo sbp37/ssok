@@ -36,4 +36,16 @@ for (const pad of THEME_PADS) {
   rows.push({ pad: pad.id, minRadius: +Math.min(...samples).toFixed(3), target: pad.beads.surface, minPlaced: Math.min(...counts), average });
 }
 console.table(rows);
-console.log(`PASS: ${THEME_PADS.length} limited silhouettes / continuity + wrap / broad radii / ${THEME_PADS.length * 50} near-target bead layouts`);
+
+// Every treasure a hidden pool can roll – themed ones included – must really be buried.
+const { HIDDEN_POOLS } = await load('rewards/rates');
+const { THEME_TYPES } = await load('beads/BeadTypes');
+const rollable = new Set(Object.values(HIDDEN_POOLS).flat().map(e => e.id).filter(id => id && id !== 'none'));
+for (const t of THEME_TYPES) assert(rollable.has(t.id), `${t.id}: some theme pool can roll it`);
+for (const id of rollable) {
+  const beads = generatePad(170, new Rng(7), { hiddenObject: id });
+  const found = beads.filter(b => b.hidden && b.type.id === id);
+  assert.equal(found.length, 1, `${id}: rolled treasure is buried exactly once`);
+  assert.equal(found[0].layer, 1, `${id}: buried under the surface`);
+}
+console.log(`PASS: ${THEME_PADS.length} limited silhouettes / continuity + wrap / broad radii / ${THEME_PADS.length * 50} near-target bead layouts / ${rollable.size} rollable treasures buried`);

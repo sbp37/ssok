@@ -5,14 +5,21 @@ import { preloadBeadAssets } from "../game/beads/BeadAssets";
 import { sfx } from "../game/audio/Sfx";
 import { haptics } from "../game/haptics";
 import { NextPanel, type NextView } from "./NextPanel";
-import { CollectionSheet, SettingsSheet } from "./Sheets";
+import { BeadIcon, CollectionSheet, SettingsSheet } from "./Sheets";
 import { AD_GROUP_IDS, AdPolicy, createAdProvider } from "../game/ads/AdPolicy";
-import { OfferStats, pickOffer, type Offer } from "../game/ads/Offers";
+import { OfferStats, pickOffer, seekTitle, type Offer } from "../game/ads/Offers";
 import { PromotionRewards } from "../game/rewards/PromotionRewards";
 import { PADS, type PadType } from "../game/pads/PadTypes";
 import { activeTheme } from "../game/rewards/themes";
 import { PadSilhouette } from "./NextPanel";
 import { useShare } from "./share";
+import { RELEASE } from "../game/release";
+import { backupNow, backupSoon, restoreBackup } from "../game/backup";
+import { track } from "../game/analytics";
+import { today } from "../game/pads/progress";
+import { CARD_SIZE } from "../game/rewards/daily";
+import { TREASURE_TYPES } from "../game/rewards/treasure";
+import { daysLeft, dDay } from "../game/rewards/themes";
 
 interface Toast {
   id: number;
@@ -40,6 +47,25 @@ function takeThemeLine(): { name: string; until: string } | null {
   }
   return { name: t.name, until: t.until };
 }
+const SEASON_KEY = "ssok.season.v1";
+/** the last week of a theme with treasures still missing: one line a day */
+function takeSeasonLine(missing: number): { name: string; days: number } | null {
+  const t = activeTheme();
+  if (!t || missing <= 0) return null;
+  const days = daysLeft(t);
+  if (days > 7) return null;
+  try {
+    if (localStorage.getItem(SEASON_KEY) === today()) return null;
+    localStorage.setItem(SEASON_KEY, today());
+  } catch {
+    return null;
+  }
+  return { name: t.name, days };
+}
+const typeName = (id: string) => TREASURE_TYPES.find((t) => t.id === id)?.name ?? "보물";
+/** completions worth a funnel step of their own */
+const FUNNEL = new Set([1, 2, 3, 5, 10, 20]);
+
 /** pads emptied this session before the "come back tomorrow" line (once a day) */
 const TOMORROW_AFTER = 3;
 const localDay = () => {
@@ -59,41 +85,53 @@ function takeTomorrowLine() {
 /** how long a rewarded try that did not pay out keeps its line on screen */
 const AD_MISS_TOAST = { tone: "soft", text: "광고를 불러오지 못했어", sub: "잠시 뒤 다시 해 봐" } as const;
 
+/** banner SDK start-ups tried (one per pad, after a failure) before giving up for the session */
+const BANNER_INIT_TRIES = 3;
+
 /**
  * The bottom banner. Attached only while nothing covers it (loading card,
- * sheets). A no-fill folds the slot away; the next pad (`retryKey`) tries again
- * instead of giving the banner up for the whole session.
+ * sheets). Its slot keeps its height whatever happens – a no-fill or a failed
+ * start-up leaves it empty instead of folding it, because folding resizes the
+ * pad under the player's finger. The next pad (`retryKey`) tries again.
  */
 function BannerAd({ hidden, retryKey }: { hidden: boolean; retryKey: number }) {
   const targetRef = useRef<HTMLDivElement>(null);
   const qa = import.meta.env.DEV && new URLSearchParams(location.search).has("bannerQa");
   const [supported, setSupported] = useState(qa);
   const [initialized, setInitialized] = useState(false);
+  const [initFailures, setInitFailures] = useState(0);
+  const initAttempts = useRef({ n: 0, key: -1 });
   const [noFill, setNoFill] = useState(false);
 
   useEffect(() => {
     if (qa) return;
-    let available = false;
     try {
-      available = TossAds.initialize.isSupported();
+      setSupported(TossAds.initialize.isSupported());
     } catch {
       // A normal browser has no Toss ad host.
     }
-    setSupported(available);
-    if (!available) return;
+  }, [qa]);
+
+  // start the SDK; after a failure, once more on a later pad – one attempt at a time, a few in all
+  useEffect(() => {
+    if (qa || !supported || initialized) return;
+    const a = initAttempts.current;
+    if (a.n > initFailures || a.n >= BANNER_INIT_TRIES || a.key === retryKey) return;
+    a.n++;
+    a.key = retryKey;
     try {
       TossAds.initialize({
         callbacks: {
           onInitialized: () => setInitialized(true),
-          onInitializationFailed: () => setSupported(false),
+          onInitializationFailed: () => setInitFailures((n) => n + 1),
         },
       });
     } catch {
-      setSupported(false);
+      setInitFailures((n) => n + 1);
     }
-  }, [qa]);
+  }, [qa, supported, initialized, initFailures, retryKey]);
 
-  // a new pad: a folded banner may try again
+  // a new pad: a banner that found no ad may try again
   useEffect(() => setNoFill(false), [retryKey]);
 
   useEffect(() => {
@@ -115,7 +153,7 @@ function BannerAd({ hidden, retryKey }: { hidden: boolean; retryKey: number }) {
     return () => attached?.destroy();
   }, [hidden, initialized, noFill, qa, supported]);
 
-  if (!supported || noFill) return null;
+  if (!supported) return null;
   return (
     <div className={"ad-slot" + (hidden ? " hidden" : "")} aria-hidden="true">
       <div ref={targetRef} className="ad-slot-target" />
@@ -140,6 +178,8 @@ export function App() {
   const transitioning = useRef(false);
   /** name of the treasure planted by "심기", announced when that pad opens */
   const planted = useRef<string | null>(null);
+  /** this pad already gave its free glimpse of a new treasure */
+  const glimpsed = useRef(false);
   const [phase, setPhase] = useState<Phase>("intro");
   const [hintHidden, setHintHidden] = useState(false);
   const [pulled, setPulled] = useState(0);
@@ -152,10 +192,6 @@ export function App() {
   const [watching, setWatching] = useState(false);
   /** the one rewarded door for this completion */
   const [offer, setOffer] = useState<Offer | null>(null);
-  /** "고르기" earned: three pads to pick from */
-  const [choices, setChoices] = useState<PadType[] | null>(null);
-  /** "살짝 보기": offered once per pad when something never found is buried */
-  const [peek, setPeek] = useState<"" | "ready" | "used">("");
   /** is a rewarded ad loaded right now – a door is only shown when it can open */
   const [rewardReady, setRewardReady] = useState(false);
   /** bumps on every pad change (the banner retries after a no-fill) */
@@ -175,7 +211,17 @@ export function App() {
   /** last pop or touch; a long quiet spell mid-pad shows a gesture hint on something pullable */
   const lastActivity = useRef(performance.now());
   const [stuck, setStuck] = useState<{ x: number; y: number; kind: string; n: number } | null>(null);
-  const { busy: shareBusy, share } = useShare((text) => pushToast({ tone: "soft", text }));
+  const { busy: shareBusy, share } = useShare(
+    (text) => pushToast({ tone: "soft", text }),
+    () => {
+      track("share_done");
+      // one plant ticket a day for a share (in-game only)
+      if (gameRef.current?.daily.shared(today())) {
+        track("ticket_from_share");
+        pushToast({ tone: "hidden", text: "공유 고마워 ✦", sub: "심기권 1장 – 심기를 광고 없이" });
+      }
+    },
+  );
 
   const later = (fn: () => void, ms: number) => {
     const t = window.setTimeout(fn, ms);
@@ -188,7 +234,7 @@ export function App() {
   };
   const showPadTitle = (name: string) => {
     window.clearTimeout(padTitleTimer.current);
-    setPadTitle(`${name} 패드`);
+    setPadTitle(name === "오늘의 젤" ? name : `${name} 패드`);
     padTitleTimer.current = window.setTimeout(() => setPadTitle(""), 1900);
     timers.current.push(padTitleTimer.current);
   };
@@ -198,17 +244,22 @@ export function App() {
     const started = performance.now();
     later(() => setLoadingProgress(46), 90);
     later(() => setLoadingProgress(78), 220);
-    // give the photo beads up to 350ms to arrive so the first pad is drawn once, in its final look
+    // give the photo beads up to 350ms to arrive so the first pad is drawn once, in its final look;
+    // a wiped web view gets its save back from the native copy before anything reads it
     let game: Game | null = null;
     let cancelled = false;
     const offs: (() => void)[] = [];
-    void Promise.race([preloadBeadAssets(), new Promise<void>((r) => setTimeout(r, 350))]).then(() => {
+    void Promise.all([
+      Promise.race([preloadBeadAssets(), new Promise<void>((r) => setTimeout(r, 350))]),
+      // a copy that only answers after the game started: restore it and start again
+      restoreBackup(1500, () => location.reload()),
+    ]).then(() => {
       if (cancelled) return;
       game = new Game(canvas);
       ads.current = new AdPolicy(createAdProvider());
       promotions.current = new PromotionRewards();
       offerStats.current = new OfferStats();
-      (window as unknown as { __ssokAds?: OfferStats }).__ssokAds = offerStats.current;
+      if (!RELEASE) (window as unknown as { __ssokAds?: OfferStats }).__ssokAds = offerStats.current;
       gameRef.current = game;
       offs.push(...bind(game));
       // just long enough that the card never flashes; the game is already live underneath
@@ -216,7 +267,7 @@ export function App() {
       later(() => setLoadingProgress(100), wait);
       later(() => {
         setLoading(false);
-        if (game) showPadTitle(game.pad.name);
+        if (game) showPadTitle(game.isBonus ? "보너스" : game.isDaily ? "오늘의 젤" : game.pad.name);
       }, wait + 160);
     });
     return () => {
@@ -229,6 +280,15 @@ export function App() {
       game?.destroy();
       gameRef.current = null;
     };
+  }, []);
+
+  // leaving the app (home, another app, an ad's link): copy the save while we still can
+  useEffect(() => {
+    const onHide = () => {
+      if (document.visibilityState === "hidden") void backupNow();
+    };
+    document.addEventListener("visibilitychange", onHide);
+    return () => document.removeEventListener("visibilitychange", onHide);
   }, []);
 
   useEffect(() => {
@@ -260,12 +320,29 @@ export function App() {
 
   // a door is only offered while its ad is actually loaded; re-checked while one could be shown
   useEffect(() => {
-    if (!(padEmpty && flow === "ready") && peek !== "ready") return;
+    if (!(padEmpty && flow === "ready")) return;
     const tick = () => setRewardReady(ads.current?.ready("rewarded") ?? false);
     tick();
     const t = window.setInterval(tick, 1000);
     return () => window.clearInterval(t);
-  }, [padEmpty, flow, peek]);
+  }, [padEmpty, flow]);
+
+  /** a seek door is free while a ticket is in hand – read live: a share can bring one mid-screen */
+  const isFree = (o: Offer | null) => o?.kind === "seek" && (gameRef.current?.daily.tickets ?? 0) > 0;
+  /** the door on screen right now: a ticket needs no ad; every other door needs a loaded one */
+  const doorShown =
+    !!offer && (offer.kind === "choose" ? rewardReady && !!offer.alternatives?.length : isFree(offer) || rewardReady);
+  const statKind = (o: Offer) => (isFree(o) ? "ticket" : o.kind);
+  // a door counts as offered only once it is actually on screen (no loaded ad → no door)
+  const offerSeen = useRef("");
+  useEffect(() => {
+    if (!(padEmpty && flow === "ready" && offer && doorShown && !sheet && !loading)) return;
+    const tag = `${padSerial}:${offer.kind}`;
+    if (offerSeen.current === tag) return;
+    offerSeen.current = tag;
+    offerStats.current?.note("offered", statKind(offer));
+    track(`door_${statKind(offer)}_offer`);
+  }, [padEmpty, flow, offer, doorShown, sheet, loading, padSerial]);
 
   const openSheet = (next: Exclude<SheetName, "">) => {
     if (!sheet) {
@@ -283,7 +360,8 @@ export function App() {
 
   /** wire the game's events to the UI; returns the unsubscribers */
   const bind = (game: Game): (() => void)[] => {
-    (window as unknown as { __ssok?: Game }).__ssok = game;
+    // QA handle (`__ssok.debugFinishPad()` empties a pad) – never in a release bundle
+    if (!RELEASE) (window as unknown as { __ssok?: Game }).__ssok = game;
     // a returning player does not need "하나 뽑아봐." again
     if (game.progressStore.totalCompleted > 0) {
       setPhase("free");
@@ -295,8 +373,20 @@ export function App() {
       setCollLabel(n > 0 && n < PADS.length ? `컬렉션 ${n}/${PADS.length}` : "컬렉션");
     };
     label();
-    // a new day: one quiet line, and the first pad is a touch more generous. No streaks, no stamps.
-    if (game.progressStore.newDay) later(() => pushToast({ tone: "soft", text: "오늘은 뭔가 좀 다르다. ✦" }), 900);
+    track("app_open", { completed: game.progressStore.totalCompleted, newDay: game.progressStore.newDay });
+    if (game.bootOpenedDaily) track("daily_open");
+    // a new day: today's gel is waiting (or already on the table)
+    if (game.isDaily) later(() => pushToast({ tone: "hidden", text: "오늘의 젤 ✦", sub: "보물 하나 확정 · 오늘만" }), 900);
+    else if (game.progressStore.newDay) later(() => pushToast({ tone: "soft", text: "새로운 하루 ✦", sub: "곧 오늘의 젤이 나와" }), 900);
+    // a season's last week, treasures still missing: one line a day
+    {
+      const theme = activeTheme();
+      const season = theme ? takeSeasonLine(theme.treasures.filter((id) => !game.treasure.has(id)).length) : null;
+      if (season && theme) {
+        const left = theme.treasures.filter((id) => !game.treasure.has(id)).length;
+        later(() => pushToast({ tone: "hidden", text: `${season.name} ${dDay(season.days)} ✦`, sub: `한정 보물 ${left}개 남았어` }), 2600);
+      }
+    }
     // a new monthly theme: one line, after the opening pads (a first-time player has enough to read)
     if (game.progressStore.totalCompleted >= 3) {
       const theme = takeThemeLine();
@@ -325,30 +415,61 @@ export function App() {
         setPadEmpty(false);
       }),
       game.on("tactileHint", ({ text }) => setTactileHint(text)),
+      // midnight passed with the game open: the same as starting on a new day
+      game.on("newDay", () => {
+        later(() => pushToast({ tone: "soft", text: "새로운 하루 ✦", sub: "다음엔 오늘의 젤" }), 900);
+        promotions.current?.onVisit(true, game.progressStore.totalCompleted);
+      }),
       game.on("firstPop", () => {
         setHintHidden(true);
         setPhase("free");
       }),
       game.on("padEmpty", () => {
-        promotions.current?.onPadCompleted(game.progressStore.totalCompleted);
-        // a reason to come back, said once a day after a little play – and true:
-        // the first pad of a new day really is more likely to hide something
+        const done = game.progressStore.totalCompleted;
+        promotions.current?.onPadCompleted(done);
+        backupSoon();
+        track("pad_done", { completed: done, bonus: game.isBonus, daily: game.isDaily });
+        if (!game.isBonus && FUNNEL.has(done) && game.progressStore.currentDone) track(`pad_done_${done}`);
+        // a reason to come back, said once a day after a little play – and true: tomorrow's
+        // first pad is today's gel, with a treasure for sure
         if (!game.isBonus && ++sessionEmptied.current === TOMORROW_AFTER && takeTomorrowLine()) {
-          later(() => pushToast({ tone: "soft", text: "내일 오면 첫 판에 보물이 더 잘 묻혀 있어 ✦" }), 1500);
+          later(() => pushToast({ tone: "soft", text: "내일은 오늘의 젤 ✦", sub: "보물 하나 확정" }), 3200);
+        }
+        // the day's stamp, once a day; seven make a plant ticket
+        if (!game.isBonus) {
+          const st = game.daily.stamp(today());
+          if (st.stamped) {
+            track(st.full ? "stamp_card_full" : `stamp_${st.n}`);
+            later(
+              () =>
+                pushToast(
+                  st.full
+                    ? { tone: "ultra", text: "도장판 완성 ✦", sub: "심기권 1장 – 심기를 광고 없이" }
+                    : { tone: "soft", text: `오늘의 도장 ${st.n}/${CARD_SIZE} ✦` },
+                ),
+              1700,
+            );
+          }
         }
         setPadEmpty(true);
         const info = game.nextInfo;
         setNext(info);
-        const o = pickOffer({
+        // the dig names its sure treasure before the ad
+        const digId = !game.hadTreasure && !game.isBonus ? game.rollBonusTreasure() : null;
+        const o: Offer = pickOffer({
           nextTier: info.tier,
           hadTreasure: game.hadTreasure,
           bonus: game.isBonus,
           nextBase: info.pad.variantOf ?? info.pad.id,
           found: (id) => game.treasure.has(id),
-          totalCompleted: game.progressStore.totalCompleted,
+          totalCompleted: done,
+          pinned: game.treasure.target,
+          tickets: game.daily.tickets,
+          dig: digId ? { id: digId, name: typeName(digId) } : null,
         });
+        // "다른 패드로": the alternatives are rolled once and shown before the ad
+        if (o.kind === "choose") o.alternatives = game.nextChoices().slice(1);
         setOffer(o);
-        offerStats.current?.note("offered", o.kind);
         // hold the empty pad (and the full jar) for a beat, say it quietly, then offer the door
         setFlow("done");
         window.clearTimeout(completionTimer.current);
@@ -360,33 +481,31 @@ export function App() {
         setEmptied(emptied);
         if (emptied >= 0.68) {
           setNext(game.nextInfo);
-          // a passive nudge, once, when something unseen is still buried in there
-          setGlimmer((g) => {
-            if (g) return g;
-            const info = game.hiddenInfo;
-            // the opening pads stay ad-free; later, a never-found treasure gets the one in-round door
-            if (info && info.isNew && game.progressStore.totalCompleted >= 2) {
-              later(() => setGlimmer(false), 2600);
-              // the one in-round door: show it clearly for a moment, for an ad
-              setPeek((p) => (p === "" ? "ready" : p));
-              return true;
-            }
-            return g;
-          });
+          // a never-found treasure: once a pad, a free, short glimpse of where it lies – a reason to dig on
+          const info = game.hiddenInfo;
+          if (!glimpsed.current && info && info.isNew && game.progressStore.totalCompleted >= 2) {
+            glimpsed.current = true;
+            setGlimmer(true);
+            later(() => setGlimmer(false), 2600);
+            game.peekHidden(1.8);
+          }
         }
       }),
-      game.on("padChange", ({ pad, newPad, newVariant, bonus }) => {
+      game.on("padChange", ({ pad, newPad, newVariant, bonus, daily }) => {
         window.clearTimeout(completionTimer.current);
+        glimpsed.current = false;
         setEmptied(0);
         setPadEmpty(false);
         setFlow("");
         setNext(null);
         setOffer(null);
-        setChoices(null);
-        setPeek("");
         setGlimmer(false);
         setPadSerial((n) => n + 1);
-        showPadTitle(bonus ? "보너스" : pad.name);
+        showPadTitle(bonus ? "보너스" : daily ? "오늘의 젤" : pad.name);
+        if (daily) {
+          track("daily_open");
+          later(() => pushToast({ tone: "hidden", text: "오늘의 젤 ✦", sub: "보물 하나 확정 · 오늘만" }), newPad ? 2100 : 450);
+        }
         // first time on this pad (or this variant): a small line after it appears. Seen before: nothing.
         if (newPad || newVariant) later(() => pushToast({ tone: "soft", text: "NEW ✦", sub: pad.name }), 450);
         else if (bonus) later(() => pushToast({ tone: "soft", text: "보물 하나, 어딘가에" }), 450);
@@ -422,6 +541,7 @@ export function App() {
     try {
       const result = await policy.next("interstitial", g.progressStore.totalCompleted);
       if (result === null || gameRef.current !== g || g.pad !== current) return;
+      if (result === "closed") track("ad_interstitial_shown");
       g.openNextPlain();
     } finally {
       sfx.unpause("ad");
@@ -430,22 +550,52 @@ export function App() {
     }
   };
 
-  /** the rewarded door: only the SDK's earned-reward event opens anything beyond the plain next pad */
-  const takeOffer = async () => {
+  /**
+   * The door. A rewarded ad: only the SDK's earned-reward event opens anything beyond the plain
+   * next pad. A plant ticket: no ad at all – the ticket is the price, and this transition's
+   * interstitial is waived too, so "free" means free. `pick`: the pad chosen on "다른 패드로".
+   */
+  const takeOffer = async (pick?: PadType) => {
     const g = gameRef.current;
     const policy = ads.current;
     const o = offer;
     if (!g || !policy || !o || transitioning.current || flow !== "ready" || !padEmpty) return;
+    if (o.kind === "choose" && !pick) return;
+    const kind = statKind(o);
+    if (isFree(o)) {
+      // a second tap in the same frame still sees this screen's state: the game knows the pad already moved on
+      if (!o.seekId || !g.progressStore.currentDone || !g.daily.useTicket()) return;
+      haptics.press();
+      offerStats.current?.note("taken", kind);
+      offerStats.current?.note("earned", kind);
+      track("door_ticket_take");
+      track("door_ticket_earn");
+      policy.waive(g.progressStore.totalCompleted);
+      g.plantNext(o.seekId);
+      planted.current = o.seekName ?? null;
+      g.openPad(g.nextPad);
+      return;
+    }
     transitioning.current = true;
     setWatching(true);
     sfx.unlock();
-    offerStats.current?.note("taken", o.kind);
+    offerStats.current?.note("taken", kind);
+    track(`door_${kind}_take`);
     const current = g.pad;
+    // The reward is the player's at the SDK's earned event, before the ad closes: keep what a
+    // restart can keep, so an ad that never closes (the app killed under it) loses nothing.
+    const onEarned = () => {
+      if (gameRef.current !== g || g.pad !== current) return;
+      if (o.kind === "seek" && o.seekId) g.plantNext(o.seekId);
+      else if (o.kind === "rare") g.catchNext();
+      else if (o.kind === "dig") g.earnBonus(o.digId);
+    };
     sfx.pause("ad");
     try {
-      const result = await policy.next("rewarded", g.progressStore.totalCompleted);
+      const result = await policy.next("rewarded", g.progressStore.totalCompleted, onEarned);
       if (result === null || gameRef.current !== g || g.pad !== current) return;
       if (result !== "rewarded") {
+        track(`door_${kind}_${result}`);
         // no reward: stay on this screen – the player chose a door, never swap it for another silently
         if (result === "unavailable") {
           pushToast(AD_MISS_TOAST);
@@ -455,52 +605,15 @@ export function App() {
         setRewardReady(policy.ready("rewarded"));
         return;
       }
-      offerStats.current?.note("earned", o.kind);
+      offerStats.current?.note("earned", kind);
+      track(`door_${kind}_earn`);
       if (o.kind === "rare") g.openPad(g.nextPad);
       else if (o.kind === "dig") g.openBonusPad();
       else if (o.kind === "seek" && o.seekId) {
         g.plantNext(o.seekId);
         planted.current = o.seekName ?? null;
         g.openPad(g.nextPad);
-      } else setChoices(g.nextChoices());
-    } finally {
-      sfx.unpause("ad");
-      transitioning.current = false;
-      if (gameRef.current === g) setWatching(false);
-    }
-  };
-  const choosePad = (pad: PadType) => {
-    const g = gameRef.current;
-    if (!g || !choices) return;
-    haptics.press();
-    setChoices(null);
-    g.openPad(pad);
-  };
-
-  /** mid-round: an ad for a clear look at what is buried. Never replaces the NEXT ad. */
-  const takePeek = async () => {
-    const g = gameRef.current;
-    const policy = ads.current;
-    if (!g || !policy || peek !== "ready" || transitioning.current || padEmpty) return;
-    transitioning.current = true;
-    setWatching(true);
-    sfx.unlock();
-    offerStats.current?.note("taken", "peek");
-    const current = g.pad;
-    sfx.pause("ad");
-    try {
-      const result = await policy.next("rewarded", g.progressStore.totalCompleted);
-      if (result === null || gameRef.current !== g || g.pad !== current) return;
-      if (result === "rewarded") {
-        offerStats.current?.note("earned", "peek");
-        setPeek("used");
-        // worth an ad: it stays visible until this pad is done, not for a blink
-        g.peekHidden(Infinity);
-        pushToast({ tone: "hidden", text: "여기 있다 ✦", sub: "이 판이 끝날 때까지 보여 줄게" });
-      } else if (result === "unavailable") {
-        setPeek("used"); // no fill: do not leave a dead button
-        pushToast(AD_MISS_TOAST);
-      }
+      } else if (pick) g.openPad(pick);
     } finally {
       sfx.unpause("ad");
       transitioning.current = false;
@@ -577,17 +690,12 @@ export function App() {
                     void share(gameRef.current?.pad.name);
                   }}
                 >
-                  {shareBusy ? "잠깐…" : "자랑하기 ↗"}
+                  {shareBusy ? "잠깐…" : gameRef.current?.daily.sharedOn(today()) ? "자랑하기 ↗" : "자랑하고 심기권 받기 ↗"}
                 </button>
               )}
             </div>
           )}
           {phase === "free" && glimmer && !padEmpty && <div className="glimmer">안쪽에서 뭔가 반짝인다…</div>}
-          {phase === "free" && peek === "ready" && rewardReady && !padEmpty && (
-            <button className="peek" onClick={takePeek} disabled={watching}>
-              {watching ? "잠깐…" : "광고 보고 살짝 보기"}
-            </button>
-          )}
           {tactileHint && !padEmpty && !glimmer && <div className="tactile-hint" role="status">{tactileHint}</div>}
 
           {stuck && !padEmpty && (
@@ -601,7 +709,7 @@ export function App() {
             />
           )}
           {toasts.length > 0 && (
-            <div className="toasts">
+            <div className={"toasts" + (phase === "free" && padEmpty && flow !== "" ? " over-done" : "")}>
               {toasts.map((t) => (
                 <div key={t.id} className={"toast " + t.tone}>
                   <div>{t.text}</div>
@@ -613,26 +721,44 @@ export function App() {
 
           <div className="bottom">
             {phase === "free" && next && (emptied >= 0.68 || padEmpty) && <NextPanel info={next} emphasis={padEmpty ? 1 : 0} reveal={padEmpty ? 1 : Math.max(0, Math.min(1, (emptied - 0.5) / 0.4))} />}
-            {phase === "free" && padEmpty && flow === "ready" && next && choices && (
-              <div className="choices" role="group" aria-label="다음 패드 고르기">
-                {choices.map((p) => (
-                  <button key={p.id} className="choice" onClick={() => choosePad(p)}>
-                    <PadSilhouette pad={p} size={52} mode="color" glint={false} />
-                    <span>{p.name}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-            {phase === "free" && padEmpty && flow === "ready" && next && !choices && (
+            {phase === "free" && padEmpty && flow === "ready" && next && (
               <div className="gate">
-                {offer && rewardReady && (
-                  <button className="btn" onClick={takeOffer} disabled={watching}>
-                    {watching ? "잠깐…" : offer.title}
-                    <small>{offer.sub}</small>
+                {offer && doorShown && offer.kind === "choose" && (
+                  <div className="door-choose" role="group" aria-label={offer.title}>
+                    <span className="door-choose-label">{watching ? "잠깐…" : offer.title}</span>
+                    <div className="door-chips">
+                      {offer.alternatives!.map((p) => (
+                        <button key={p.id} className="door-chip" onClick={() => void takeOffer(p)} disabled={watching}>
+                          <PadSilhouette pad={p} size={22} mode="color" glint={false} />
+                          <span>{p.name}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {offer && doorShown && offer.kind !== "choose" && (
+                  <button className={"btn door" + (isFree(offer) ? " free" : "")} onClick={() => void takeOffer()} disabled={watching}>
+                    <span className="door-icon" aria-hidden="true">
+                      {offer.kind === "rare" ? (
+                        <PadSilhouette pad={next.pad} size={22} mode="color" glint={false} />
+                      ) : (offer.seekId ?? offer.digId) && TREASURE_TYPES.find((t) => t.id === (offer.seekId ?? offer.digId)) ? (
+                        <BeadIcon
+                          type={TREASURE_TYPES.find((t) => t.id === (offer.seekId ?? offer.digId))!}
+                          size={24}
+                          found={offer.kind === "dig" ? !offer.digNew : false}
+                        />
+                      ) : (
+                        <span className="door-q">?</span>
+                      )}
+                    </span>
+                    <span className="door-text">
+                      <span>{watching ? "잠깐…" : offer.kind === "seek" && offer.seekName ? seekTitle(offer.seekName, !!offer.pinned, isFree(offer)) : offer.title}</span>
+                      <small>{offer.sub}</small>
+                    </span>
                   </button>
                 )}
-                <button className={offer && rewardReady ? "btn ghost" : "btn"} onClick={openNext} disabled={watching}>
-                  {watching && !(offer && rewardReady) ? "잠깐…" : offer?.kind === "rare" && rewardReady ? "그냥 다음" : "다음 패드 열기"}
+                <button className={doorShown ? "btn ghost" : "btn"} onClick={openNext} disabled={watching}>
+                  {watching && !doorShown ? "잠깐…" : offer?.kind === "rare" && doorShown ? "그냥 다음" : "다음 패드 열기"}
                 </button>
               </div>
             )}

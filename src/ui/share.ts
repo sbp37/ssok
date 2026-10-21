@@ -47,8 +47,9 @@ async function shareGame(padName?: string): Promise<"shared" | "copied"> {
 /**
  * One share flow for every button: ignores double taps, treats a user
  * cancelling the share sheet as nothing, and reports only what they need to know.
+ * `onShared` runs after a share sheet (or a copied link) went through.
  */
-export function useShare(onNotice: (text: string) => void) {
+export function useShare(onNotice: (text: string) => void, onShared?: () => void) {
   const sharing = useRef(false);
   const [busy, setBusy] = useState(false);
   const share = async (padName?: string) => {
@@ -58,6 +59,7 @@ export function useShare(onNotice: (text: string) => void) {
     try {
       const result = await shareGame(padName);
       if (result === "copied") onNotice("링크를 복사했어.");
+      onShared?.();
     } catch (error) {
       if (!(error instanceof Error && error.name === "AbortError")) {
         onNotice("공유를 열지 못했어. 잠시 후 다시 눌러 줘.");

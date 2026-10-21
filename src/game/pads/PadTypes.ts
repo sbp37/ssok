@@ -76,6 +76,9 @@ export interface PadType {
   hiddenVisibility?: number;
   /** gelColor was picked for this opening (pads/colors.ts) and is the final silicone colour */
   tinted?: boolean;
+  /** a gel of the day (rewards/daily.ts): the date it belongs to ("2026-10-21"); its own pad and
+   * colour, a treasure for sure. Opened on another day it is just a pad. */
+  daily?: string;
 }
 
 /**

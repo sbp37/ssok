@@ -90,4 +90,77 @@ for (const value of ['LIVE', 'true', '1', 'production', '']) {
   const m = await load('rewards/PromotionRewards', { VITE_PROMOTION_MODE: value });
   assert.equal(new m.PromotionRewards(memory()).mode, 'test', `VITE_PROMOTION_MODE=${JSON.stringify(value)}`);
 }
-console.log('PASS: 1/3/5/10/return thresholds / exact TEST codes / dedup / in-flight lock / failures / live only when explicit');
+// A milestone that failed is remembered and asked again on the next start – the 10th pad
+// may be the last one ever played, and a failed return visit is retried the same day.
+const tick = () => new Promise((r) => setTimeout(r, 0));
+const failWith = (code) => async () => { const e = new Error('x'); e.code = code; throw e; };
+console.warn = () => {};
+const saved = memory();
+calls.length = 0;
+globalThis.__sdk = { grantReward: failWith('4112') }; // out of promotion money: surely not paid
+const p1 = new test.PromotionRewards(saved);
+p1.onPadCompleted(10);
+p1.onVisit(true, 10);
+await tick();
+globalThis.__sdk = { grantReward: async (o) => (calls.push(o), { key: 'later' }) };
+const p2 = new test.PromotionRewards(saved);
+p2.onVisit(false, 10); // same day, a later start: not a new day, still owed
+await tick();
+assert.deepEqual(calls.map((c) => c.amount).sort((a, b) => a - b), [1, 2, 3, 5, 10], 'every owed milestone is paid on the next start');
+calls.length = 0;
+const p3 = new test.PromotionRewards(saved);
+p3.onVisit(true, 11);
+p3.onPadCompleted(11);
+await tick();
+assert.equal(calls.length, 0, 'paid milestones are never asked again');
+
+// After a failure the same session does not ask again at every pad – the next start does.
+let asked = 0;
+globalThis.__sdk = { grantReward: async () => { asked++; throw Object.assign(new Error('empty'), { code: '4112' }); } };
+const busy = new test.PromotionRewards(memory());
+for (let n = 1; n <= 12; n++) { busy.onPadCompleted(n); await tick(); }
+assert.equal(asked, 4, 'one try per milestone per session (1, 3, 5, 10)');
+
+// "Not paid" answers can be retried freely; unknown failures (which may have paid) only MAX_UNSURE times.
+const capped = memory();
+let attempts = 0;
+globalThis.__sdk = { grantReward: async () => { attempts++; throw Object.assign(new Error('?'), { code: 'UNKNOWN_ERROR' }); } };
+for (let i = 0; i < test.MAX_UNSURE + 3; i++) {
+  assert.equal(await new test.PromotionRewards(capped).grant('firstPad'), false);
+}
+assert.equal(attempts, test.MAX_UNSURE, 'an ambiguous failure is not retried forever');
+attempts = 0;
+const definite = memory();
+globalThis.__sdk = { grantReward: async () => { attempts++; throw Object.assign(new Error('paused'), { code: '4109' }); } };
+for (let i = 0; i < test.MAX_UNSURE + 3; i++) await new test.PromotionRewards(definite).grant('firstPad');
+assert.equal(attempts, test.MAX_UNSURE + 3, 'a paused promotion is asked again once it may run');
+// a reply without a key counts as unsure too
+attempts = 0;
+globalThis.__sdk = { grantReward: async () => (attempts++, {}) };
+const odd = memory();
+for (let i = 0; i < test.MAX_UNSURE + 1; i++) await new test.PromotionRewards(odd).grant('thirdPad');
+assert.equal(attempts, test.MAX_UNSURE);
+// A request the app never heard back from (closed mid-request) counts as unsure too.
+attempts = 0;
+globalThis.__sdk = { grantReward: () => { attempts++; return new Promise(() => {}); } };
+const hung = memory();
+for (let i = 0; i < test.MAX_UNSURE + 3; i++) { new test.PromotionRewards(hung).onPadCompleted(1); await tick(); }
+assert.equal(attempts, test.MAX_UNSURE, 'restarts during unanswered requests cannot pay out again and again');
+// A save from before this version (no pending list) still gets its unpaid milestones on the next start.
+calls.length = 0;
+globalThis.__sdk = { grantReward: async (o) => (calls.push(o), { key: 'k' }) };
+const legacy = memory();
+legacy.setItem('ssok.promotions.v1', JSON.stringify({ granted: ['TEST_01M2G7DZXEHF60PHHQ6ZA5342T'] }));
+new test.PromotionRewards(legacy).onVisit(false, 10);
+await tick();
+assert.deepEqual(calls.map((c) => c.amount).sort((a, b) => a - b), [3, 5, 10]);
+console.warn = warn;
+// malformed saved state is repaired, not trusted
+const junk = memory();
+junk.setItem('ssok.promotions.v1', JSON.stringify({ granted: ['TEST_01M2G7DZXEHF60PHHQ6ZA5342T', 5], pending: ['bogus', 'thirdPad'], unsure: { a: 'x', b: -1 } }));
+calls.length = 0;
+globalThis.__sdk = { grantReward: async (o) => (calls.push(o), { key: 'k' }) };
+new test.PromotionRewards(junk).retryPending();
+await tick();
+assert.deepEqual(calls, [{ promotionCode: 'TEST_01M2G7F5WHW5HD8KWP1JRSFYYS', amount: 3 }]);
+console.log('PASS: 1/3/5/10/return thresholds / exact TEST codes / dedup / in-flight lock / failures / live only when explicit / owed milestones retried next start / ambiguous failures capped / saved state repaired');

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { load } from './load.mjs';
 // The one rewarded door per completion, the first-variant guarantee and the variant perks –
 // all pure data rules; no canvas, no SDK.
-const { pickOffer, seekCandidates, OfferStats } = await load('ads/Offers');
+const { pickOffer, seekCandidates, seekPick, setProgress, OfferStats } = await load('ads/Offers');
 const { PadProgress, DiscoveryProvider } = await load('pads/progress');
 const { PADS, VARIANTS, applyVariant } = await load('pads/PadTypes');
 const { FIRST_VARIANT_PAD, VARIANT_PERKS, hiddenWeight, NONE, HIDDEN_POOLS } = await load('rewards/rates');
@@ -20,6 +20,33 @@ assert.equal(seek.kind, 'seek');
 assert.ok(HIDDEN_POOLS.cloud.some((e) => e.id === seek.seekId), 'seek prefers a treasure of the next pad');
 assert.ok(seek.title.includes(seek.seekName));
 assert.equal(pickOffer({ ...base, totalCompleted: 3, found: () => true }).kind, 'choose', 'nothing missing → choose');
+
+// The door says what it gives: the pin first, else the treasure that finishes a set.
+const pinnedSeek = pickOffer({ ...base, totalCompleted: 2, pinned: 'gummybear' });
+assert.equal(pinnedSeek.kind, 'seek', 'a pin always gets its door, even on an even pad');
+assert.equal(pinnedSeek.seekId, 'gummybear');
+assert.ok(pinnedSeek.title.startsWith('📍') && pinnedSeek.pinned);
+const cozyFound = (id) => ['cloudcharm', 'pawcharm', 'ribboncharm'].includes(id);
+const finishing = pickOffer({ ...base, totalCompleted: 3, found: cozyFound });
+assert.equal(finishing.seekId, 'gummybear', 'the treasure that completes a set comes first');
+assert.equal(finishing.sub, '포근 세트 완성!');
+const halfSea = (id) => id === 'smallshell';
+const seaSeek = pickOffer({ ...base, totalCompleted: 3, found: halfSea, nextBase: 'shell' });
+assert.match(seaSeek.sub, /^바다 세트 1\/3 → 2\/3$/);
+assert.deepEqual(setProgress('gummybear', cozyFound), { name: '포근', have: 3, total: 4 });
+assert.equal(seekPick({ nextBase: 'cloud', found: () => true }), undefined);
+assert.equal(seekPick({ nextBase: 'cloud', found: () => false, pinned: 'crown' })?.id !== 'crown', true, 'an ultra pin is not plantable');
+// a plant ticket: the seek door is free and always offered (after a variant or a dig)
+const ticket = pickOffer({ ...base, totalCompleted: 2, tickets: 1 });
+assert.equal(ticket.kind, 'seek');
+assert.ok(ticket.free && ticket.title.includes('심기권으로'));
+assert.equal(pickOffer({ ...base, nextTier: 'rare', tickets: 1 }).kind, 'rare');
+// the dig names its sure treasure before the ad – a silhouette while it is new
+const dig = pickOffer({ ...base, hadTreasure: false, dig: { id: 'key', name: '열쇠' } });
+assert.deepEqual([dig.kind, dig.digId, dig.digNew, dig.sub], ['dig', 'key', true, '처음 보는 보물 하나 확정']);
+const digAgain = pickOffer({ ...base, hadTreasure: false, found: (id) => id === 'key', dig: { id: 'key', name: '열쇠' } });
+assert.deepEqual([digAgain.digNew, digAgain.sub], [false, '열쇠 하나 확정']);
+assert.equal(pickOffer({ ...base, hadTreasure: false }).sub, '보물 하나 묻힌 작은 패드');
 assert.ok(seekCandidates('cloud', () => false).every((t) => !ULTRA_TYPES.includes(t)), 'ultras are never planted');
 const notInPool = seekCandidates('cloud', (id) => HIDDEN_POOLS.cloud.some((e) => e.id === id));
 assert.ok(notInPool.length > 0 && notInPool.every((t) => HIDDEN_TYPES.includes(t)), 'falls back to any missing treasure');

@@ -72,4 +72,16 @@ const oct = run(10, 12);
 assert.ok(oct.theme > 0.12 && oct.theme < 0.3, `in season ~20% (got ${oct.theme})`);
 assert.equal(oct.twice, 0, 'the same theme pad never twice in a row');
 assert.ok(run(12, 12).theme > 0.12, 'winter pads in December');
+// countdown to a season's last day (0 on the day itself), across the new year for winter
+{
+  const { daysLeft, dDay, THEMES } = await load('rewards/themes');
+  const th = (id) => THEMES.find((t) => t.id === id);
+  assert.equal(daysLeft(th('autumn'), new Date(2026, 9, 21)), 40);
+  assert.equal(daysLeft(th('autumn'), new Date(2026, 10, 30)), 0);
+  assert.equal(daysLeft(th('winter'), new Date(2026, 11, 1)), 89, 'Dec 1 → Feb 28 next year');
+  assert.equal(daysLeft(th('winter'), new Date(2028, 0, 31)), 29, 'leap February');
+  assert.equal(daysLeft(th('summer'), new Date(2026, 5, 1)), 121);
+  assert.equal(dDay(40), 'D-40');
+  assert.equal(dDay(0), '오늘까지');
+}
 console.log('PASS: theme calendar, theme pads/pools/treasures wiring, seasonal draw (season only, after opening, ~20%, no repeats)');
