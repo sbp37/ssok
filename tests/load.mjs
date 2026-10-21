@@ -36,8 +36,9 @@ const toUrl = (code) => 'data:text/javascript;base64,' + Buffer.from(code).toStr
 export const stubs = {
   '@apps-in-toss/web-framework': `
     const unsupported = (fn) => Object.assign(fn, { isSupported: () => false });
-    export const loadFullScreenAd = unsupported(() => () => {});
-    export const showFullScreenAd = unsupported(() => () => {});
+    // tests install a fake ad bridge with globalThis.__ads = { load, show }
+    export const loadFullScreenAd = Object.assign((o) => globalThis.__ads.load(o), { isSupported: () => !!globalThis.__ads });
+    export const showFullScreenAd = Object.assign((o) => globalThis.__ads.show(o), { isSupported: () => !!globalThis.__ads });
     // tests install a fake bridge with globalThis.__sdk = { grantReward }
     export const Promotion = {
       grantReward: Object.assign((o) => globalThis.__sdk.grantReward(o), { isSupported: () => !!globalThis.__sdk?.grantReward }),
@@ -46,6 +47,10 @@ export const stubs = {
     export const Device = { triggerHaptic: async () => {} };
     export const Environment = { environment: 'web' };
     export const Share = {};
+    // native storage: tests install globalThis.__native = { getItem, setItem }; without it the
+    // bridge throws at once, like outside the Toss web view
+    const native = () => { if (!globalThis.__native) throw new Error('not in a Toss web view'); return globalThis.__native; };
+    export const Storage = { getItem: (k) => native().getItem(k), setItem: (k, v) => native().setItem(k, v) };
   `,
 };
 
