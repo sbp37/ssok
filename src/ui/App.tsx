@@ -7,6 +7,7 @@ import { haptics } from "../game/haptics";
 import { NextPanel, type NextView } from "./NextPanel";
 import { BeadIcon, CollectionSheet, SettingsSheet } from "./Sheets";
 import { AD_GROUP_IDS, AdPolicy, createAdProvider } from "../game/ads/AdPolicy";
+import { MAGNET_LEFT } from "../game/pads/magnet";
 import { OfferStats, pickOffer, seekTitle, type Offer } from "../game/ads/Offers";
 import { PromotionRewards } from "../game/rewards/PromotionRewards";
 import { PADS, type PadType } from "../game/pads/PadTypes";
@@ -18,7 +19,7 @@ import { RELEASE } from "../game/release";
 import { backupNow, backupSoon, restoreBackup } from "../game/backup";
 import { track } from "../game/analytics";
 import { today } from "../game/pads/progress";
-import { CARD_SIZE } from "../game/rewards/daily";
+import { CARD_SIZE, STREAK_GOAL } from "../game/rewards/daily";
 import { TREASURE_TYPES } from "../game/rewards/treasure";
 import { daysLeft, dDay } from "../game/rewards/themes";
 
@@ -93,6 +94,23 @@ function takeTomorrowLine() {
     return false;
   }
 }
+/** the attendance streak's line: on a new day in a row, and when its stamps are tapped */
+function streakLine(n: number): { tone: "soft" | "hidden"; text: string; sub: string } {
+  const left = STREAK_GOAL - (n % STREAK_GOAL);
+  return left === STREAK_GOAL
+    ? { tone: "hidden", text: `${n}일 연속 출석 ✦`, sub: "오늘의 젤은 무지개 젤" }
+    : { tone: "soft", text: `연속 출석 ${n}일 ✦`, sub: `${left}일 더 오면 무지개 젤` };
+}
+/** today's gel on the table: a rainbow one says it is a streak's reward */
+function dailyLine(rainbow: boolean, isNew: boolean) {
+  return rainbow
+    ? ({ tone: "ultra", text: "무지개 젤 ✦", sub: `${STREAK_GOAL}일 연속 출석 보상 · ${isNew ? "새 보물" : "보물"} 확정` } as const)
+    : ({ tone: "hidden", text: "오늘의 젤 ✦", sub: "보물 하나 확정 · 오늘만" } as const);
+}
+const dayTitle = (rainbow: boolean) => (rainbow ? "무지개 젤" : "오늘의 젤");
+/** a wrapped button title never splits "한 번" across two lines */
+const keepTogether = (s: string) => s.replace(/한 번/g, "한\u00a0번");
+
 /** how long a rewarded try that did not pay out keeps its line on screen */
 const AD_MISS_TOAST = { tone: "soft", text: "광고를 불러오지 못했어", sub: "잠시 뒤 다시 해 봐" } as const;
 
@@ -207,6 +225,12 @@ export function App() {
   const [rewardReady, setRewardReady] = useState(false);
   /** bumps on every pad change (the banner retries after a no-fill) */
   const [padSerial, setPadSerial] = useState(0);
+  /** beads still in the pad, and the magnet: its ad loaded, already used on this pad */
+  const [remaining, setRemaining] = useState(Infinity);
+  const [magnetReady, setMagnetReady] = useState(false);
+  const [magnetUsed, setMagnetUsed] = useState(false);
+  /** days in a row with a visit (the HUD's attendance stamps) */
+  const [streak, setStreak] = useState(0);
   // finds
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [boxPulse, setBoxPulse] = useState<{ n: number; strong: boolean }>({ n: 0, strong: false });
@@ -245,7 +269,7 @@ export function App() {
   };
   const showPadTitle = (name: string) => {
     window.clearTimeout(padTitleTimer.current);
-    setPadTitle(name === "오늘의 젤" ? name : `${name} 패드`);
+    setPadTitle(name === "오늘의 젤" || name === "무지개 젤" ? name : `${name} 패드`);
     padTitleTimer.current = window.setTimeout(() => setPadTitle(""), 1900);
     timers.current.push(padTitleTimer.current);
   };
@@ -278,7 +302,7 @@ export function App() {
       later(() => setLoadingProgress(100), wait);
       later(() => {
         setLoading(false);
-        if (game) showPadTitle(game.isBonus ? "보너스" : game.isDaily ? "오늘의 젤" : game.pad.name);
+        if (game) showPadTitle(game.isBonus ? "보너스" : game.isDaily ? dayTitle(game.isRainbow) : game.pad.name);
       }, wait + 160);
     });
     return () => {
@@ -355,6 +379,27 @@ export function App() {
     track(`door_${statKind(offer)}_offer`);
   }, [padEmpty, flow, offer, doorShown, sheet, loading, padSerial]);
 
+  // the magnet: the last few beads of a real pad (pads/magnet.ts), once a pad, while its ad is loaded
+  const magnetZone = phase === "free" && !padEmpty && !magnetUsed && remaining > 0 && remaining <= MAGNET_LEFT;
+  useEffect(() => {
+    if (!magnetZone) return;
+    const tick = () => setMagnetReady(ads.current?.ready("rewarded") ?? false);
+    tick();
+    const t = window.setInterval(tick, 1000);
+    return () => window.clearInterval(t);
+  }, [magnetZone]);
+  const g0 = gameRef.current;
+  /** a magnet paid for before a restart: this pad's one is free */
+  const magnetFree = !!g0?.magnetOwed;
+  const magnetShown = magnetZone && (magnetReady || magnetFree) && !loading && !sheet && !!g0 && g0.canMagnet();
+  const magnetSeen = useRef(-1);
+  useEffect(() => {
+    if (!magnetShown || magnetSeen.current === padSerial) return;
+    magnetSeen.current = padSerial;
+    offerStats.current?.note("offered", magnetFree ? "magnet_owed" : "magnet");
+    track(magnetFree ? "magnet_owed_offer" : "magnet_offer", { left: remaining });
+  }, [magnetShown, padSerial, remaining, magnetFree]);
+
   const openSheet = (next: Exclude<SheetName, "">) => {
     if (!sheet) {
       window.history.pushState({ ...window.history.state, [SHEET_HISTORY_KEY]: next }, "");
@@ -384,11 +429,18 @@ export function App() {
       setCollLabel(n > 0 && n < PADS.length ? `컬렉션 ${n}/${PADS.length}` : "컬렉션");
     };
     label();
-    track("app_open", { completed: game.progressStore.totalCompleted, newDay: game.progressStore.newDay });
-    if (game.bootOpenedDaily) track("daily_open");
-    // a new day: today's gel is waiting (or already on the table)
-    if (game.isDaily) later(() => pushToast({ tone: "hidden", text: "오늘의 젤 ✦", sub: "보물 하나 확정 · 오늘만" }), 900);
-    else if (game.progressStore.newDay) later(() => pushToast({ tone: "soft", text: "새로운 하루 ✦", sub: "곧 오늘의 젤이 나와" }), 900);
+    track("app_open", { completed: game.progressStore.totalCompleted, newDay: game.progressStore.newDay, streak: game.daily.streak });
+    if (game.bootOpenedDaily) track(game.isRainbow ? "rainbow_open" : "daily_open");
+    setStreak(game.daily.streak);
+    const visit = game.bootVisit;
+    const rainbowDay = game.daily.rainbowOn(today());
+    if (visit.first) track(`streak_${Math.min(visit.streak, 7)}`);
+    // a new day: today's gel is waiting (or already on the table) – on a streak's third day, a rainbow one
+    if (game.isDaily) later(() => pushToast(dailyLine(game.isRainbow, !!game.hiddenInfo?.isNew)), 900);
+    else if (game.progressStore.newDay)
+      later(() => pushToast(rainbowDay ? streakLine(visit.streak) : { tone: "soft", text: "새로운 하루 ✦", sub: "곧 오늘의 젤이 나와" }), 900);
+    // another day in a row: one line for the streak (a rainbow day's own lines say it already)
+    if (visit.first && visit.streak >= 2 && !rainbowDay) later(() => pushToast(streakLine(visit.streak)), 1800);
     // a season's last week, treasures still missing: one line a day
     {
       const theme = activeTheme();
@@ -428,7 +480,14 @@ export function App() {
       game.on("tactileHint", ({ text }) => setTactileHint(text)),
       // midnight passed with the game open: the same as starting on a new day
       game.on("newDay", () => {
-        later(() => pushToast({ tone: "soft", text: "새로운 하루 ✦", sub: "다음엔 오늘의 젤" }), 900);
+        const n = game.daily.streak;
+        setStreak(n);
+        track(`streak_${Math.min(n, 7)}`);
+        // (sent while the new pad opens: today's gel opening right now announces itself)
+        later(() => {
+          if (game.isDaily) return;
+          pushToast({ tone: "soft", text: "새로운 하루 ✦", sub: n % STREAK_GOAL === 0 ? `연속 출석 ${n}일 · 다음엔 무지개 젤` : "다음엔 오늘의 젤" });
+        }, 900);
         promotions.current?.onVisit(true, game.progressStore.totalCompleted);
       }),
       game.on("firstPop", () => {
@@ -469,6 +528,8 @@ export function App() {
         setPadEmpty(true);
         const info = game.nextInfo;
         setNext(info);
+        // deciding the next pad may have counted a new day's visit (past midnight with the game open)
+        setStreak(game.daily.streak);
         // the dig names its sure treasure before the ad
         const digId = !game.hadTreasure && !game.isBonus ? game.rollBonusTreasure() : null;
         const o: Offer = pickOffer({
@@ -492,8 +553,9 @@ export function App() {
         completionTimer.current = window.setTimeout(() => setFlow("ready"), 1200);
         timers.current.push(completionTimer.current);
       }),
-      game.on("progress", ({ emptied }) => {
+      game.on("progress", ({ emptied, remaining }) => {
         setEmptied(emptied);
+        setRemaining(remaining);
         if (emptied >= 0.68) {
           setNext(game.nextInfo);
           // a never-found treasure: once a pad, a free, short glimpse of where it lies – a reason to dig on
@@ -515,11 +577,12 @@ export function App() {
         setNext(null);
         setOffer(null);
         setGlimmer(false);
+        setMagnetUsed(false);
         setPadSerial((n) => n + 1);
-        showPadTitle(bonus ? "보너스" : daily ? "오늘의 젤" : pad.name);
+        showPadTitle(bonus ? "보너스" : daily ? dayTitle(!!pad.rainbow) : pad.name);
         if (daily) {
-          track("daily_open");
-          later(() => pushToast({ tone: "hidden", text: "오늘의 젤 ✦", sub: "보물 하나 확정 · 오늘만" }), newPad ? 2100 : 450);
+          track(pad.rainbow ? "rainbow_open" : "daily_open");
+          later(() => pushToast(dailyLine(!!pad.rainbow, !!game.hiddenInfo?.isNew)), newPad ? 2100 : 450);
         }
         // first time on this pad (or this variant): a small line after it appears. Seen before: nothing.
         if (newPad || newVariant) later(() => pushToast({ tone: "soft", text: "NEW ✦", sub: pad.name }), 450);
@@ -636,6 +699,57 @@ export function App() {
     }
   };
 
+  /**
+   * "남은 비즈 한 번에 쏙!": a rewarded ad, then every bead left flies to the jar by itself. The
+   * reward is the player's at the SDK's earned event; the sweep itself waits until the ad is gone.
+   */
+  const takeMagnet = async () => {
+    const g = gameRef.current;
+    const policy = ads.current;
+    if (!g || !policy || transitioning.current || padEmpty || !g.canMagnet()) return;
+    if (g.magnetOwed) {
+      // already paid for on this pad (the app closed before it was emptied): no second ad
+      haptics.press();
+      sfx.unlock();
+      track("magnet_owed_take");
+      setMagnetUsed(true);
+      g.magnetSweep();
+      return;
+    }
+    transitioning.current = true;
+    setWatching(true);
+    sfx.unlock();
+    offerStats.current?.note("taken", "magnet");
+    track("magnet_take", { left: remaining });
+    const current = g.pad;
+    let earned = false;
+    sfx.pause("ad");
+    try {
+      const result = await policy.next("rewarded", g.progressStore.totalCompleted, () => {
+        earned = true;
+        // the reward is the player's from here: an app closed under the ad still owes it on this pad
+        if (gameRef.current === g && g.pad === current) g.earnMagnet();
+      });
+      if (result === null || gameRef.current !== g || g.pad !== current) return;
+      if (result !== "rewarded" && !earned) {
+        track(`magnet_${result}`);
+        if (result === "unavailable") pushToast(AD_MISS_TOAST);
+        else pushToast({ tone: "soft", text: "끝까지 보면 받을 수 있어" });
+        setMagnetReady(policy.ready("rewarded"));
+        return;
+      }
+      offerStats.current?.note("earned", "magnet");
+      track("magnet_earn");
+      g.earnMagnet();
+      setMagnetUsed(true);
+      g.magnetSweep();
+    } finally {
+      sfx.unpause("ad");
+      transitioning.current = false;
+      if (gameRef.current === g) setWatching(false);
+    }
+  };
+
   /** the glitter cord's rewarded ad: the same pacing, sound pause and counting as the doors */
   const braceletAds: AdHook = {
     ready: () => ads.current?.ready("rewarded") ?? false,
@@ -683,6 +797,26 @@ export function App() {
                   {pulled}
                   <small>개</small>
                 </span>
+              )}
+              {phase !== "intro" && streak > 0 && (
+                <button
+                  className={"streak" + (streak % STREAK_GOAL === 0 ? " full" : "")}
+                  aria-label={`연속 출석 ${streak}일`}
+                  onClick={() => {
+                    haptics.press();
+                    track("streak_tap");
+                    pushToast(streakLine(streak));
+                  }}
+                >
+                  <span className="streak-stamps" aria-hidden="true">
+                    {Array.from({ length: STREAK_GOAL }, (_, i) => {
+                      const on = i < ((streak - 1) % STREAK_GOAL) + 1;
+                      const goal = i === STREAK_GOAL - 1;
+                      return <i key={i} className={(on ? "on" : "") + (goal ? " goal" : "")}>{goal && !on ? "✦" : ""}</i>;
+                    })}
+                  </span>
+                  <span className="streak-n">{streak >= 2 ? `연속 ${streak}일` : "출석 1일"}</span>
+                </button>
               )}
             </div>
             <div className="right">
@@ -765,6 +899,22 @@ export function App() {
 
           <div className="bottom">
             {phase === "free" && next && (emptied >= 0.68 || padEmpty) && <NextPanel info={next} emphasis={padEmpty ? 1 : 0} reveal={padEmpty ? 1 : Math.max(0, Math.min(1, (emptied - 0.5) / 0.4))} />}
+            {magnetShown && (
+              <button className="magnet" onClick={() => void takeMagnet()} disabled={watching}>
+                <span className="magnet-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" width="19" height="19">
+                    <g transform="rotate(45 12 12)">
+                      <path d="M5.5 3.5V11a6.5 6.5 0 0 0 13 0V3.5h-4.2V11a2.3 2.3 0 0 1-4.6 0V3.5Z" fill="#e5484d" />
+                      <path d="M5.5 3.5h4.2v3.2H5.5zM14.3 3.5h4.2v3.2h-4.2z" fill="#cfd6df" />
+                    </g>
+                  </svg>
+                </span>
+                <span className="magnet-text">
+                  <span>{watching ? "잠깐…" : keepTogether("남은 비즈 한 번에 쏙!")}</span>
+                  <small>{magnetFree ? "이미 받은 자석 · 광고 없이" : "광고 보기"}</small>
+                </span>
+              </button>
+            )}
             {phase === "free" && padEmpty && flow === "ready" && next && (
               <div className="gate">
                 {offer && doorShown && offer.kind === "choose" && (
@@ -796,9 +946,11 @@ export function App() {
                       )}
                     </span>
                     <span className="door-text">
-                      <span>{watching ? "잠깐…" : offer.kind === "seek" && offer.seekName ? seekTitle(offer.seekName, !!offer.pinned, isFree(offer)) : offer.title}</span>
+                      <span>{watching ? "잠깐…" : keepTogether(offer.kind === "seek" && offer.seekName ? seekTitle(offer.seekName, !!offer.pinned, isFree(offer)) : offer.title)}</span>
                       <small>{offer.sub}</small>
                     </span>
+                    <i className="door-spark one" aria-hidden="true">✦</i>
+                    <i className="door-spark two" aria-hidden="true">✦</i>
                   </button>
                 )}
                 <button className={doorShown ? "btn ghost" : "btn"} onClick={openNext} disabled={watching}>

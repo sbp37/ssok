@@ -236,9 +236,63 @@ body,
 }
 .hud-left {
   display: flex;
-  align-items: baseline;
-  gap: 10px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
   font-variant-numeric: tabular-nums;
+}
+/* attendance stamps under the count: one a day in a row, the third one brings the rainbow gel */
+.streak {
+  font: inherit;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px 3px 5px;
+  border: none;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.74);
+  box-shadow: 0 2px 8px rgba(99, 65, 80, 0.1), inset 0 0 0 1px rgba(217, 119, 159, 0.2);
+  cursor: pointer;
+  transition: transform 0.1s ease;
+}
+.streak:active {
+  transform: scale(0.95);
+}
+.streak-stamps {
+  display: inline-flex;
+  gap: 3px;
+}
+.streak-stamps i {
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  border: 1.2px dashed rgba(180, 87, 127, 0.36);
+  display: grid;
+  place-items: center;
+  font-size: 7px;
+  font-style: normal;
+  line-height: 1;
+  color: #a37be0;
+}
+.streak-stamps i.on {
+  border: none;
+  background: radial-gradient(circle at 35% 30%, #f7a8c8, #d9779f 70%);
+  box-shadow: 0 1px 3px rgba(217, 119, 159, 0.4);
+  transform: rotate(-8deg);
+}
+.streak-stamps i.goal:not(.on) {
+  border-color: rgba(163, 123, 224, 0.5);
+}
+/* the rainbow day: its stamp is a rainbow */
+.streak.full .streak-stamps i.goal.on {
+  background: linear-gradient(135deg, #ff96aa, #ffc48c 30%, #a0e8aa 55%, #96ccff 78%, #c4a6ff);
+  box-shadow: 0 1px 4px rgba(163, 123, 224, 0.45);
+}
+.streak-n {
+  font-size: 11px;
+  font-weight: 700;
+  color: #b4577f;
+  letter-spacing: -0.01em;
 }
 .hud .count {
   font-size: 36px;
@@ -1298,6 +1352,232 @@ body,
   font-size: 12px;
   font-weight: 700;
   color: #c26a2e;
+}
+
+/* a rainbow gel on the NEXT line */
+.next-daily.rainbow {
+  background: linear-gradient(90deg, #e0577a, #e0903c, #4fa866, #4f8fe0, #8a5ae0);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.stamps .streak-line {
+  margin-top: 3px;
+  color: #8a5ab0;
+  font-weight: 600;
+}
+
+/* ── the rewarded door stands out ──────────────────────────────
+ * Bigger than the plain way on, in a jewel gradient with a slow shine and two twinkles, so the
+ * prize reads as the better way on. "다음 패드 열기" stays a real button, just a quieter one.
+ */
+.gate .btn.door {
+  position: relative;
+  overflow: hidden;
+  gap: 9px;
+  padding: 6px 16px 6px 6px;
+  font-size: 13.5px;
+  font-weight: 700;
+  animation: doorIn 0.5s ease-out;
+}
+.gate .btn.door:not(.free) {
+  background: linear-gradient(135deg, #4f2a66 0%, #a63d7c 60%, #dc7499 100%);
+  box-shadow: 0 6px 18px rgba(166, 61, 124, 0.34), inset 0 1px 0 rgba(255, 255, 255, 0.22);
+}
+.gate .btn.door small {
+  font-size: 10px;
+  opacity: 0.85;
+}
+.gate .btn.door .door-icon {
+  width: 38px;
+  height: 38px;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.3), 0 0 14px rgba(255, 214, 120, 0.6);
+}
+/* a slow shine across the door (and the "다른 패드로" chips) */
+.gate .btn.door::after,
+.door-chip::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(110deg, transparent 30%, rgba(255, 255, 255, 0.4) 48%, transparent 66%);
+  background-size: 260% 100%;
+  background-position: 130% 0;
+  animation: doorShine 2.8s ease-in-out 0.7s infinite;
+  pointer-events: none;
+}
+.door-spark {
+  position: absolute;
+  font-style: normal;
+  line-height: 1;
+  color: #ffe08a;
+  pointer-events: none;
+  opacity: 0;
+  animation: doorTwinkle 2.4s ease-in-out infinite;
+}
+.door-spark.one {
+  left: 37px;
+  top: 2px;
+  font-size: 10px;
+}
+.door-spark.two {
+  left: 4px;
+  bottom: 2px;
+  font-size: 8px;
+  animation-delay: 1.2s;
+}
+.gate .btn.door.free .door-spark {
+  color: #fff;
+}
+.door-chip {
+  position: relative;
+  overflow: hidden;
+  padding: 4px 12px 4px 4px;
+  font-size: 12.5px;
+  background: linear-gradient(135deg, #4f2a66 0%, #a63d7c 60%, #dc7499 100%);
+  box-shadow: 0 4px 12px rgba(166, 61, 124, 0.28);
+}
+.door-choose-label {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #a63d7c;
+}
+/* the plain way on, next to a door: still a real button, just quieter */
+.gate .btn.door ~ .btn.ghost,
+.door-choose ~ .btn.ghost {
+  padding: 4px 12px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: rgba(43, 39, 48, 0.62);
+  background: rgba(255, 255, 255, 0.5);
+}
+@keyframes doorIn {
+  0% { opacity: 0; transform: translateY(8px) scale(0.94); }
+  65% { opacity: 1; transform: translateY(0) scale(1.03); }
+  100% { transform: none; }
+}
+@keyframes doorShine {
+  0% { background-position: 130% 0; }
+  55%, 100% { background-position: -130% 0; }
+}
+@keyframes doorTwinkle {
+  0%, 100% { opacity: 0; transform: scale(0.5) rotate(0deg); }
+  20% { opacity: 1; transform: scale(1.15) rotate(20deg); }
+  40% { opacity: 0; transform: scale(0.6) rotate(45deg); }
+}
+
+/* ── "자석 싹쓸이" ─────────────────────────────────────────────
+ * Under the NEXT tease while the last few beads are left: a soft pill, not a banner – a slow
+ * shine and a magnet that tugs now and then, nothing that jumps.
+ */
+.magnet {
+  font: inherit;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: calc(100vw - clamp(112px, 31vw, 136px) - 40px);
+  padding: 4px 14px 4px 4px;
+  border: none;
+  border-radius: 999px;
+  color: #6a2f55;
+  background: linear-gradient(135deg, #fff3f9, #f2eaff);
+  box-shadow: 0 4px 14px rgba(180, 87, 127, 0.18), inset 0 0 0 1px rgba(180, 87, 127, 0.24);
+  text-align: left;
+  cursor: pointer;
+  animation: btnIn 0.45s ease-out;
+  transition: transform 0.12s ease;
+}
+.magnet:active {
+  transform: scale(0.96);
+}
+.magnet:disabled {
+  opacity: 0.7;
+}
+.magnet::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(110deg, transparent 30%, rgba(255, 255, 255, 0.85) 48%, transparent 66%);
+  background-size: 260% 100%;
+  background-position: 130% 0;
+  animation: doorShine 3.2s ease-in-out 1s infinite;
+  pointer-events: none;
+}
+.magnet-icon {
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: #fff;
+  box-shadow: 0 1px 4px rgba(180, 87, 127, 0.22);
+}
+.magnet-icon svg {
+  display: block;
+  animation: magnetTug 3.2s ease-in-out 1s infinite;
+}
+.magnet-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.magnet-text > span {
+  font-size: 12.5px;
+  font-weight: 700;
+  line-height: 1.25;
+  white-space: normal;
+  word-break: keep-all;
+  text-wrap: balance;
+}
+.magnet-text small {
+  font-size: 9.5px;
+  font-weight: 600;
+  line-height: 1.2;
+  color: rgba(106, 47, 85, 0.6);
+}
+/* narrow phones (360px Android and below): a little smaller, so the short titles stay on one line */
+@media (max-width: 380px) {
+  .gate .btn.door {
+    gap: 8px;
+    padding: 5px 13px 5px 5px;
+    font-size: 13px;
+  }
+  .gate .btn.door .door-icon {
+    width: 34px;
+    height: 34px;
+  }
+  .door-spark.one {
+    left: 33px;
+  }
+  .magnet {
+    gap: 6px;
+    padding-right: 11px;
+  }
+  .magnet-text > span {
+    font-size: 12px;
+  }
+}
+@keyframes magnetTug {
+  0%, 70%, 100% { transform: rotate(0deg); }
+  76% { transform: rotate(-16deg); }
+  84% { transform: rotate(11deg); }
+  92% { transform: rotate(-4deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .gate .btn.door,
+  .gate .btn.door::after,
+  .door-chip::after,
+  .door-spark,
+  .magnet,
+  .magnet::after,
+  .magnet-icon svg {
+    animation: none;
+  }
 }
 
 /* ── the stamp card ─────────────────────────────────────────── */

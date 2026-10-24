@@ -4,7 +4,7 @@ export const AD_INTERVAL_PADS = 1;
 /** completed pads before the first interstitial: the opening pads are ad-free */
 export const FREE_PADS = 2;
 /** at least this long since the last full-screen ad (interstitial OR rewarded) before an interstitial */
-export const MIN_GAP_MS = 75_000;
+export const MIN_GAP_MS = 50_000;
 /** a load that neither fills nor fails by then is given up and retried – never waited on all session */
 export const LOAD_TIMEOUT_MS = 30_000;
 /** waits before reloading after a failed load: no-fill backs off instead of being re-requested every second */
