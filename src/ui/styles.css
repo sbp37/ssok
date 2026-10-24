@@ -253,10 +253,14 @@ body,
   background: rgba(255, 255, 255, 0.74);
   box-shadow: 0 2px 8px rgba(99, 65, 80, 0.1), inset 0 0 0 1px rgba(217, 119, 159, 0.2);
   cursor: pointer;
-  transition: transform 0.1s ease;
+  transition: transform 0.1s ease, opacity 0.3s ease;
 }
 .streak:active {
   transform: scale(0.95);
+}
+.streak.away {
+  opacity: 0;
+  pointer-events: none;
 }
 .streak-stamps {
   display: inline-flex;

@@ -78,8 +78,9 @@ function takeOnce(key: string) {
 /** completions worth a funnel step of their own */
 const FUNNEL = new Set([1, 2, 3, 5, 10, 20]);
 
-/** pads emptied this session before the "come back tomorrow" line (once a day) */
-const TOMORROW_AFTER = 3;
+/** pads emptied this session before the "come back tomorrow" line (once a day): the first one –
+ * most players leave within a couple of pads, so a line after the third was mostly never seen */
+const TOMORROW_AFTER = 1;
 const localDay = () => {
   const d = new Date();
   return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
@@ -500,8 +501,8 @@ export function App() {
         backupSoon();
         track("pad_done", { completed: done, bonus: game.isBonus, daily: game.isDaily });
         if (!game.isBonus && FUNNEL.has(done) && game.progressStore.currentDone) track(`pad_done_${done}`);
-        // a reason to come back, said once a day after a little play – and true: tomorrow's
-        // first pad is today's gel, with a treasure for sure
+        // a reason to come back, said once a day after the session's first pad – and true:
+        // tomorrow's first pad is today's gel, with a treasure for sure
         if (!game.isBonus && ++sessionEmptied.current === TOMORROW_AFTER && takeTomorrowLine()) {
           later(() => pushToast({ tone: "soft", text: "내일은 오늘의 젤 ✦", sub: "보물 하나 확정" }), 3200);
         }
@@ -800,7 +801,8 @@ export function App() {
               )}
               {phase !== "intro" && streak > 0 && (
                 <button
-                  className={"streak" + (streak % STREAK_GOAL === 0 ? " full" : "")}
+                  // the completion card's lines go right under the HUD: the stamps make room for them
+                  className={"streak" + (streak % STREAK_GOAL === 0 ? " full" : "") + (padEmpty && flow !== "" ? " away" : "")}
                   aria-label={`연속 출석 ${streak}일`}
                   onClick={() => {
                     haptics.press();
