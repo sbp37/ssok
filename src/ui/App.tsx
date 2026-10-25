@@ -318,13 +318,16 @@ export function App() {
     };
   }, []);
 
-  // leaving the app (home, another app, an ad's link): copy the save while we still can
+  // leaving the app (home, another app, an ad's link): copy the save while we still can;
+  // coming back: today's visit
   useEffect(() => {
-    const onHide = () => {
+    const onVisibility = () => {
       if (document.visibilityState === "hidden") void backupNow();
+      // back in front, maybe on another day: that is a visit, counted now rather than at the next pad
+      else gameRef.current?.noteVisit();
     };
-    document.addEventListener("visibilitychange", onHide);
-    return () => document.removeEventListener("visibilitychange", onHide);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => document.removeEventListener("visibilitychange", onVisibility);
   }, []);
 
   useEffect(() => {
@@ -480,10 +483,13 @@ export function App() {
       }),
       game.on("tactileHint", ({ text }) => setTactileHint(text)),
       // midnight passed with the game open: the same as starting on a new day
+      // a new day's visit counted while the game runs (past midnight): the stamps follow at once
+      game.on("visit", ({ streak }) => {
+        setStreak(streak);
+        track(`streak_${Math.min(streak, 7)}`);
+      }),
       game.on("newDay", () => {
         const n = game.daily.streak;
-        setStreak(n);
-        track(`streak_${Math.min(n, 7)}`);
         // (sent while the new pad opens: today's gel opening right now announces itself)
         later(() => {
           if (game.isDaily) return;
@@ -529,8 +535,6 @@ export function App() {
         setPadEmpty(true);
         const info = game.nextInfo;
         setNext(info);
-        // deciding the next pad may have counted a new day's visit (past midnight with the game open)
-        setStreak(game.daily.streak);
         // the dig names its sure treasure before the ad
         const digId = !game.hadTreasure && !game.isBonus ? game.rollBonusTreasure() : null;
         const o: Offer = pickOffer({

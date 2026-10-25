@@ -262,6 +262,12 @@ body,
   opacity: 0;
   pointer-events: none;
 }
+/* narrow phones: the stamps reach the pad title's line, so the title sits a little lower */
+@media (max-width: 380px) {
+  .pad-title {
+    top: calc(env(safe-area-inset-top, 0px) + 80px);
+  }
+}
 .streak-stamps {
   display: inline-flex;
   gap: 3px;

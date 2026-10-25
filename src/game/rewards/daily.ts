@@ -45,6 +45,8 @@ interface Save {
 
 const count = (v: unknown, max = 9999) => (Number.isFinite(v) && (v as number) >= 0 ? Math.min(max, Math.floor(v as number)) : 0);
 const text = (v: unknown) => (typeof v === "string" ? v : "");
+/** a well-formed day ("2026-10-25" – compares as text in calendar order), else "" */
+const dayText = (v: unknown) => (typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : "");
 
 export class DailyStore {
   private s: Save;
@@ -68,8 +70,8 @@ export class DailyStore {
           dailyDay: text(saved.dailyDay),
           firstDay: text(saved.firstDay),
           streak: count(saved.streak),
-          visitDay: text(saved.visitDay),
-          rainbowDay: text(saved.rainbowDay),
+          visitDay: dayText(saved.visitDay),
+          rainbowDay: dayText(saved.rainbowDay),
         }
       : {
           stamps: 0, cards: 0, stampDay: "", tickets: 0, shareDay: "", dailyDay: "", firstDay: newPlayer ? day : "",
@@ -146,8 +148,12 @@ export class DailyStore {
    */
   visit(day: string): { streak: number; first: boolean } {
     if (this.s.visitDay === day) return { streak: this.s.streak, first: false };
+    // the clock went back a day (a time zone, an auto-corrected clock around midnight): nothing changes.
+    // Further back, the saved day was wrong – the count starts again, and a rainbow day ahead is gone.
+    if (this.s.visitDay > day && dayBefore(this.s.visitDay) === day) return { streak: this.s.streak, first: false };
     this.s.streak = this.s.visitDay === dayBefore(day) ? this.s.streak + 1 : 1;
     this.s.visitDay = day;
+    if (this.s.rainbowDay > day) this.s.rainbowDay = "";
     if (this.s.streak % STREAK_GOAL === 0) this.s.rainbowDay = day;
     this.save();
     return { streak: this.s.streak, first: true };

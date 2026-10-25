@@ -42,6 +42,8 @@ export interface GameEvents {
   padChange: { pad: PadType; newPad: boolean; newVariant: boolean; bonus?: boolean; daily?: boolean };
   /** the calendar day turned while the game stayed open (checked when a pad opens) */
   newDay: undefined;
+  /** a new day's visit was counted while the game runs (past midnight): the attendance streak now */
+  visit: { streak: number };
   /** the round's one-line how-to for its featured material (null = hide) */
   tactileHint: { text: string | null };
   /** a rare bead / hidden object / ultra landed in the treasure box */
@@ -141,6 +143,8 @@ export class Game extends Emitter<GameEvents> implements PadView, TactileHost {
   bootOpenedDaily = false;
   /** this start counted as today's visit: the attendance streak, and whether it was the day's first */
   bootVisit = { streak: 0, first: false };
+  /** game time of the next look at the calendar (a session can run past midnight without a pad opening) */
+  private dayCheckAt = 0;
   private padTotal = 0;
   private lastSocketRefresh = 0;
   /** Completion follows every flight and the existing collector sleep, not a POP timer. */
@@ -512,8 +516,17 @@ export class Game extends Emitter<GameEvents> implements PadView, TactileHost {
   private dailyDue() {
     // past midnight with the game still open, today is a visit before its gel is decided: a streak's
     // third day must not be handed yesterday's plain gel just because no pad has opened yet
-    this.daily.visit(today());
+    this.noteVisit();
     return this.progressStore.totalCompleted >= 1 && this.daily.dailyDue(today());
+  }
+  /**
+   * Today counts as a visit (once a day). Checked while the game runs and when it comes back to the
+   * front – not only when a pad opens: a player who plays past midnight and leaves before the next
+   * pad was there that day, and their streak must not break over it.
+   */
+  noteVisit() {
+    const v = this.daily.visit(today());
+    if (v.first) this.emit("visit", { streak: v.streak });
   }
   /** the sure treasure a bonus dig would bury now – shown on the "한 번 더 파기" door before the ad */
   rollBonusTreasure() {
@@ -622,7 +635,7 @@ export class Game extends Emitter<GameEvents> implements PadView, TactileHost {
     // past midnight with the game still open: this pad is the new day's first, with its nudge,
     // and the new day counts as a visit
     if (this.progressStore.rollDay()) {
-      this.daily.visit(today());
+      this.noteVisit();
       this.emit("newDay", undefined);
     }
     pad = this.tint(pad);
@@ -1153,6 +1166,10 @@ export class Game extends Emitter<GameEvents> implements PadView, TactileHost {
 
   private update(dt: number) {
     this.time += dt;
+    if (this.time >= this.dayCheckAt) {
+      this.dayCheckAt = this.time + 15;
+      this.noteVisit();
+    }
     if (this.scheduled.length) {
       // compact in place; only allocate on the rare frames where something is due
       const list = this.scheduled;
