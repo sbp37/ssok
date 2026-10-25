@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" fill="none" stroke-linecap="round" stroke-linejoin="round" role="img" aria-labelledby="title desc">
+  <title id="title">실 길게 당기기</title>
+  <desc id="desc">구불구불한 실 끝의 비즈를 검지로 잡고 길게 오른쪽으로 당기는 모습.</desc>
+  <defs>
+    <linearGradient id="bead" x1="0" y1="0" x2="1" y2="1" gradientUnits="objectBoundingBox">
+      <stop stop-color="#fbd7e6"/><stop offset="1" stop-color="#d9c7ef"/>
+    </linearGradient>
+  </defs>
+  <g stroke="#d9779f" stroke-width="4.5">
+    <path d="M12 100c-4-20 24-23 26-8s-21 13-17-1 22-15 31-9 10-4 12-12"/>
+    <circle cx="64" cy="68" r="10" fill="url(#bead)" stroke="#d9779f" stroke-width="4"/>
+    <g transform="translate(64 7) rotate(0)" opacity="0.85" stroke="#2b2730" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M-12 0v43c0 10 5 17 12 17s12-7 12-17V0" fill="#ffffff"/>
+    <path d="M-6 39v7c0 5 12 5 12 0v-7c0-5-12-5-12 0Z" fill="none" stroke-width="2.5"/>
+  </g>
+    <path d="M76 93h30" stroke-dasharray="3 7"/>
+    <path d="m97 83 10 10-10 10"/>
+  </g>
+</svg>
