@@ -250,6 +250,12 @@ export const VARIANT_PERKS = {
  * (a new player's first pads, a rare variant, a bonus dig); `ultraOnly` keeps
  * just the ultra entries (a super variant); `dayBonus` halves "none".
  */
+/** a rainbow gel's pool: the treasures not found yet (ultras stay legendary), the whole pool once every one is */
+export function rainbowPool<E extends { id: string }>(pool: E[], found: (id: string) => boolean, ultraIds: readonly string[]): E[] {
+  const fresh = pool.filter((e) => e.id !== NONE && !ultraIds.includes(e.id) && !found(e.id));
+  return fresh.length ? fresh : pool;
+}
+
 export function hiddenWeight(
   e: { id: string; w: number },
   o: { guarantee?: boolean; ultraOnly?: boolean; dayBonus?: boolean; ultraIds: readonly string[] },

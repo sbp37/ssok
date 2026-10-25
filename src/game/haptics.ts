@@ -81,6 +81,14 @@ class Haptics {
   slipped() {
     this.buzz(8);
   }
+  /** "자석 싹쓸이" takes hold of the last beads */
+  magnet() {
+    this.buzz([8, 30, 8, 30, 12], "wiggle");
+  }
+  /** …and the last of them landed in the jar */
+  magnetDone() {
+    this.buzz([14, 40, 24, 40, 30], "confetti");
+  }
 }
 
 export const haptics = new Haptics();

@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { load } from './load.mjs';
 // Today's gel, the stamp card and plant tickets – in-game only, never points.
-const { DailyStore, dailyPad, CARD_SIZE } = await load('rewards/daily');
+const { DailyStore, dailyPad, dayBefore, CARD_SIZE, STREAK_GOAL, RAINBOW_BASE } = await load('rewards/daily');
+const { rainbowPool, NONE } = await load('rewards/rates');
 const { PADS } = await load('pads/PadTypes');
 const memory = () => { const m = new Map(); return { getItem: (k) => m.get(k) ?? null, setItem: (k, v) => m.set(k, v) }; };
 const day = (n) => `2026-11-${String(n).padStart(2, '0')}`;
@@ -62,4 +63,69 @@ assert.ok(a.daily && a.tinted && PADS.some((p) => p.id === a.id) && !a.variantOf
 const month = Array.from({ length: 30 }, (_, i) => dailyPad(`2026-12-${String(i + 1).padStart(2, '0')}`));
 assert.ok(new Set(month.map((p) => p.id)).size >= 6, 'a month of days shows many pads');
 assert.ok(new Set(month.map((p) => JSON.stringify(p.gelColor))).size >= 8, 'and many colours');
-console.log('PASS: stamp a day / missed days free / 7 → ticket + new card / tickets / share ticket once a day / gel of the day once a day, not on day one / same pad for everyone / junk repaired');
+// Attendance streak: days in a row with a visit; every third day in a row, the gel of the day is a rainbow gel.
+assert.equal(STREAK_GOAL, 3);
+assert.equal(dayBefore('2026-11-01'), '2026-10-31');
+assert.equal(dayBefore('2027-01-01'), '2026-12-31');
+assert.equal(dayBefore('2028-03-01'), '2028-02-29', 'leap day');
+mem = memory();
+let st = new DailyStore(day(1), true, mem);
+assert.equal(st.streak, 0);
+assert.deepEqual(st.visit(day(1)), { streak: 1, first: true });
+assert.deepEqual(st.visit(day(1)), { streak: 1, first: false }, 'one visit a day');
+assert.deepEqual(st.visit(day(2)), { streak: 2, first: true });
+assert.equal(st.rainbowOn(day(2)), false);
+st = new DailyStore(day(3), false, mem);
+assert.equal(st.streak, 2, 'kept across restarts');
+assert.deepEqual(st.visit(day(3)), { streak: 3, first: true });
+assert.equal(st.rainbowOn(day(3)), true, 'the third day in a row: a rainbow gel');
+assert.equal(new DailyStore(day(3), false, mem).rainbowOn(day(3)), true, 'a restart on that day keeps it');
+st.visit(day(4));
+st.visit(day(5));
+assert.equal(st.rainbowOn(day(4)) || st.rainbowOn(day(5)), false);
+assert.equal(st.visit(day(6)).streak, 6);
+assert.equal(st.rainbowOn(day(6)), true, 'every third day in a row');
+assert.equal(st.visit(day(8)).streak, 1, 'a missed day starts the count again');
+assert.equal(st.rainbowOn(day(8)), false);
+st = new DailyStore('2026-12-30', false, memory());
+st.visit('2026-12-30');
+st.visit('2026-12-31');
+assert.equal(st.visit('2027-01-01').streak, 3, 'across a month and a year');
+assert.equal(st.rainbowOn('2027-01-01'), true);
+// The clock goes back: a day (a time zone, a clock corrected around midnight) changes nothing…
+st = new DailyStore(day(23), false, memory());
+for (const n of [23, 24, 25]) st.visit(day(n));
+assert.equal(st.streak, 3);
+assert.equal(st.rainbowOn(day(25)), true);
+assert.deepEqual(st.visit(day(24)), { streak: 3, first: false }, 'a day back: the streak stays');
+assert.deepEqual(st.visit(day(25)), { streak: 3, first: false }, 'and today is still today');
+assert.equal(st.rainbowOn(day(25)), true, 'with its rainbow gel');
+assert.equal(st.visit(day(26)).streak, 4, 'the next day goes on');
+// …further back, the saved day was wrong: the count starts again and a rainbow day ahead is gone
+const ahead = memory();
+ahead.setItem('ssok.daily.v1', JSON.stringify({ streak: 5, visitDay: '2027-01-02', rainbowDay: '2027-01-01' }));
+st = new DailyStore(day(25), false, ahead);
+assert.deepEqual(st.visit(day(25)), { streak: 1, first: true });
+assert.equal(st.rainbowOn('2027-01-01'), false);
+assert.equal(st.visit(day(26)).streak, 2, 'and counts on normally');
+const junkStreak = memory();
+junkStreak.setItem('ssok.daily.v1', JSON.stringify({ streak: -4, visitDay: 7, rainbowDay: [] }));
+st = new DailyStore(day(1), false, junkStreak);
+assert.equal(st.streak, 0);
+assert.equal(st.visit(day(1)).streak, 1);
+const junkDay = memory();
+junkDay.setItem('ssok.daily.v1', JSON.stringify({ streak: 2, visitDay: 'zzz', rainbowDay: 'zzz' }));
+st = new DailyStore(day(1), false, junkDay);
+assert.deepEqual(st.visit(day(1)), { streak: 1, first: true }, 'a malformed day never blocks a visit');
+
+// The rainbow gel: the same pad of the day, in rainbow silicone – and a treasure never found before.
+const plain = dailyPad(day(21)), rainbow = dailyPad(day(21), true);
+assert.equal(rainbow.id, plain.id);
+assert.equal(rainbow.daily, day(21));
+assert.equal(rainbow.rainbow, true);
+assert.deepEqual(rainbow.gelColor, RAINBOW_BASE);
+assert.equal(plain.rainbow, undefined);
+const pool = [{ id: NONE, w: 30 }, { id: 'a', w: 50 }, { id: 'b', w: 10 }, { id: 'ultra', w: 1 }];
+assert.deepEqual(rainbowPool(pool, (id) => id === 'a', ['ultra']).map((e) => e.id), ['b'], 'only what is still missing, never "nothing"');
+assert.deepEqual(rainbowPool(pool, (id) => id !== 'ultra', ['ultra']), pool, 'all found (an ultra stays legendary): the usual pool');
+console.log('PASS: stamp a day / missed days free / 7 → ticket + new card / tickets / share ticket once a day / gel of the day once a day, not on day one / same pad for everyone / junk repaired / streak of days in a row, rainbow gel every third day, new treasure first, clock going back');

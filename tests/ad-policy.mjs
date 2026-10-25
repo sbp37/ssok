@@ -10,6 +10,7 @@ const p = new AdPolicy(provider,()=>clock,storage,20);
 
 // The opening pads are free.
 assert.equal(FREE_PADS, 2);
+assert.equal(MIN_GAP_MS, 50_000, '50s between full-screen ads: a 30–60s pad no longer skips every other interstitial');
 assert.equal(await p.next('interstitial',1),'unavailable', 'first NEXT is ad-free');
 assert.equal(calls, 0);
 // From then on every transition is a candidate, at least MIN_GAP_MS apart.
@@ -227,4 +228,4 @@ globalThis.setTimeout = realTimers.set;
 globalThis.clearTimeout = realTimers.clear;
 Object.defineProperty(globalThis, 'performance', realPerf);
 delete globalThis.__ads;
-console.log('PASS: opening pads free, 75s gap incl. rewarded, persistence, no fill, errors, watchdog only before open, double tap, recovery, test/live ad groups, mock, release without ads, private storage, load back-off + timeout, earned reward kept on error / lost dismissal');
+console.log('PASS: opening pads free, 50s gap incl. rewarded, persistence, no fill, errors, watchdog only before open, double tap, recovery, test/live ad groups, mock, release without ads, private storage, load back-off + timeout, earned reward kept on error / lost dismissal');

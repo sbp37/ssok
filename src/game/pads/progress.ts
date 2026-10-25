@@ -55,6 +55,8 @@ function sanitize(raw: unknown): Save {
   s.nextCaught = o.nextCaught === true && s.nextId !== null;
   if (typeof o.bonusTreasure === "string") s.bonusTreasure = o.bonusTreasure;
   if (typeof o.currentDaily === "string") s.currentDaily = o.currentDaily;
+  s.currentRainbow = o.currentRainbow === true && s.currentDaily !== "";
+  s.magnetOwed = o.magnetOwed === true && !s.currentDone;
   s.dayBonusPending = o.dayBonusPending === true;
   s.recentColors = Array.isArray(o.recentColors)
     ? o.recentColors.filter((x): x is string => typeof x === "string" && /^\d+,\d+,\d+$/.test(x)).slice(-8)
@@ -91,6 +93,11 @@ interface Save {
   bonusTreasure: string | null;
   /** the pad on the table is the gel of this day ("" = an ordinary pad): a restart rebuilds it */
   currentDaily: string;
+  /** …in rainbow silicone (a streak's reward): a restart rebuilds it as one, whatever day it is */
+  currentRainbow: boolean;
+  /** a "자석 싹쓸이" ad paid out on the pad on the table and the pad is not emptied yet: a restart
+   * (fresh beads) owes one magnet without an ad on this pad */
+  magnetOwed: boolean;
   /** first pad of a new day gets one small nudge; consumed when that pad is generated */
   dayBonusPending: boolean;
   /** gel colours of the last pads opened ("r,g,b", newest last) – no repeats */
@@ -114,6 +121,8 @@ const fresh = (): Save => ({
   nextCaught: false,
   bonusTreasure: null,
   currentDaily: "",
+  currentRainbow: false,
+  magnetOwed: false,
   dayBonusPending: false,
   recentColors: [],
 });
@@ -220,6 +229,12 @@ export class PadProgress {
   get currentDaily() {
     return this.s.currentDaily;
   }
+  get currentRainbow() {
+    return this.s.currentRainbow;
+  }
+  get magnetOwed() {
+    return this.s.magnetOwed;
+  }
   get recentColors(): readonly string[] {
     return this.s.recentColors;
   }
@@ -267,6 +282,8 @@ export class PadProgress {
     this.s.nextCaught = false;
     this.s.bonusTreasure = null;
     this.s.currentDaily = pad.daily ?? "";
+    this.s.currentRainbow = !!pad.daily && !!pad.rainbow;
+    this.s.magnetOwed = false;
     this.refreshMode();
     this.save();
     return { newPad, newVariant };
@@ -288,11 +305,18 @@ export class PadProgress {
     this.s.bonusTreasure = id;
     this.save();
   }
+  /** a magnet's ad paid out on the pad on the table (set at the earned-reward event) */
+  oweMagnet() {
+    if (this.s.currentDone || this.s.magnetOwed) return;
+    this.s.magnetOwed = true;
+    this.save();
+  }
   /** the pad on the table was emptied */
   complete() {
     if (this.s.currentDone) return;
     this.s.currentDone = true;
     this.s.totalCompleted++;
+    this.s.magnetOwed = false;
     this.save();
   }
   /** remember what NEXT rolled (and what it hides) so a restart lands on the same pad */

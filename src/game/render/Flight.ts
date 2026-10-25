@@ -30,21 +30,22 @@ export interface Thread {
 
 const tmp = { x: 0, y: 0 };
 
-/** screen position of a flying bead: kick → hang near the socket → arc to the cup */
-export function flyPos(b: Bead, v: PadView) {
+/** screen position of a flying bead: kick → hang near the socket → arc to the cup
+ * (`at`: another moment of the same flight, e.g. for a trail) */
+export function flyPos(b: Bead, v: PadView, at = b.fly!.t) {
   const f = b.fly!;
-  const KICK = 0.09;
-  if (f.t < KICK) {
-    const k = easeOutCubic(f.t / KICK);
+  const KICK = Math.min(0.09, f.hang);
+  if (at < KICK) {
+    const k = easeOutCubic(at / KICK);
     return v.toCanvas(f.px + f.kx * k, f.py + f.ky * k);
   }
-  if (f.t < f.hang) {
+  if (at < f.hang) {
     // hangs where it landed, drifting back a hair and bobbing once – time to feel the pop
-    const u = (f.t - KICK) / (f.hang - KICK);
+    const u = (at - KICK) / (f.hang - KICK);
     const back = -0.14 * Math.sin(u * Math.PI);
     return v.toCanvas(f.px + f.kx * (1 + back), f.py + f.ky * (1 + back) - Math.sin(u * Math.PI) * 3 * v.s);
   }
-  const t = clamp((f.t - f.hang) / f.dur, 0, 1);
+  const t = clamp((at - f.hang) / f.dur, 0, 1);
   const e = t * t * (2 - t) * 0.5 + t * 0.5;
   const mt = 1 - e;
   return {

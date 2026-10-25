@@ -63,15 +63,39 @@ assert.equal(restart().bonusTreasure, null);
   assert.equal(restart().current.id, gel.id);
   p.open(PADS[2]);
   assert.equal(restart().currentDaily, '', 'an ordinary pad is not a gel of the day');
+  // a rainbow gel stays one after a restart on any later day, whatever that day's streak says
+  p.open(dailyPad('2026-10-21', true));
+  assert.equal(restart().currentRainbow, true);
+  p.open(gel);
+  assert.equal(restart().currentRainbow, false);
+  p.open(PADS[2]);
+  assert.equal(restart().currentRainbow, false);
 }
+
+// A magnet's ad paid out: owed on that pad until it is emptied (a restart gives fresh beads, not the sweep).
+p = restart();
+p.open(PADS[1]);
+p.oweMagnet();
+assert.equal(restart().magnetOwed, true, 'kept across a restart');
+p = restart();
+p.complete();
+assert.equal(restart().magnetOwed, false, 'used up once the pad is emptied');
+p.oweMagnet();
+assert.equal(restart().magnetOwed, false, 'an emptied pad owes nothing');
+p.open(PADS[2]);
+p.oweMagnet();
+p.open(PADS[3]);
+assert.equal(restart().magnetOwed, false, 'a new pad starts without one');
 
 // Junk in the new fields is repaired, not trusted.
 const saved = JSON.parse(data.get('ssok.progress.v2'));
-data.set('ssok.progress.v2', JSON.stringify({ ...saved, currentHidden: 5, nextCaught: 'yes', bonusTreasure: 7, nextId: null }));
+data.set('ssok.progress.v2', JSON.stringify({ ...saved, currentHidden: 5, nextCaught: 'yes', bonusTreasure: 7, nextId: null, currentRainbow: 'yes', magnetOwed: 1 }));
 p = restart();
 assert.equal(p.currentHidden, undefined);
 assert.equal(p.nextCaught, false);
 assert.equal(p.bonusTreasure, null);
+assert.equal(p.currentRainbow, false);
+assert.equal(p.magnetOwed, false);
 
 // Midnight with the game open: the day turns once, and the next pad gets the new-day nudge.
 p = restart();
@@ -83,4 +107,4 @@ assert.equal(p.takeDayBonus(), true, 'the next pad gets the nudge');
 assert.equal(p.rollDay(), false, 'only once');
 assert.equal(p.takeDayBonus(), false);
 assert.notEqual(JSON.parse(data.get('ssok.progress.v2')).lastPlayDate, '2000-01-01', 'the new day is saved');
-console.log('PASS: buried treasure kept across a mid-pad restart / caught variant + paid bonus treasure survive a restart, never re-rolled / junk repaired / midnight rolls the day once');
+console.log('PASS: buried treasure kept across a mid-pad restart / caught variant + paid bonus treasure survive a restart, never re-rolled / rainbow gel and paid magnet kept with their pad / junk repaired / midnight rolls the day once');

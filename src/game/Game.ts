@@ -8,12 +8,12 @@ import { PointerInput, type PointerSample } from "./input/Pointer";
 import { Pull, pullSizeStrength, type PullEvent } from "./physics/pull";
 import { sfx } from "./audio/Sfx";
 import { haptics } from "./haptics";
-import { clamp, rng } from "./util/math";
+import { clamp, easeOutCubic, rng } from "./util/math";
 import { Emitter } from "./util/Emitter";
 import { PerfProbe } from "./util/PerfProbe";
 import { RELEASE } from "./release";
 import { PullNeckRenderer } from "./render/PullNeck";
-import { drawFlying, drawThread, type PadView, type Thread } from "./render/Flight";
+import { drawFlying, drawThread, flyPos, type PadView, type Thread } from "./render/Flight";
 import { beadFit, drawEmbeddedBead, embeddedPosition, embeddedScale } from "./render/EmbeddedBead";
 import { drawFinishStar, drawJarFinale, drawPadFinale, FINALE_DURATION } from "./render/Finale";
 import { PADS, padById, resolvePad, type PadType } from "./pads/PadTypes";
@@ -21,7 +21,8 @@ import { DiscoveryProvider, PadProgress, isRareVariant, today, type NextPadProvi
 import { DailyStore, dailyPad } from "./rewards/daily";
 import { BraceletStore } from "./rewards/bracelets";
 import { BONUS_BUDGET, roundBeadBudget } from "./pads/pacing";
-import { FIRST_TREASURE_GUARANTEE, HIDDEN_POOLS, NONE, ULTRA_SURFACE_CHANCE, VARIANT_PERKS, hiddenWeight, missingBoost } from "./rewards/rates";
+import { MAGNET_CHARGE, magnetAllowed, magnetOrder } from "./pads/magnet";
+import { FIRST_TREASURE_GUARANTEE, HIDDEN_POOLS, NONE, ULTRA_SURFACE_CHANCE, VARIANT_PERKS, hiddenWeight, missingBoost, rainbowPool } from "./rewards/rates";
 import { HIDDEN_TYPES, ULTRA_TYPES } from "./beads/BeadTypes";
 import { TreasureStore, treasureKind, type FindResult, type TreasureKind } from "./rewards/treasure";
 import { JarAlbum } from "./rewards/album";
@@ -41,6 +42,8 @@ export interface GameEvents {
   padChange: { pad: PadType; newPad: boolean; newVariant: boolean; bonus?: boolean; daily?: boolean };
   /** the calendar day turned while the game stayed open (checked when a pad opens) */
   newDay: undefined;
+  /** a new day's visit was counted while the game runs (past midnight): the attendance streak now */
+  visit: { streak: number };
   /** the round's one-line how-to for its featured material (null = hide) */
   tactileHint: { text: string | null };
   /** a rare bead / hidden object / ultra landed in the treasure box */
@@ -138,6 +141,10 @@ export class Game extends Emitter<GameEvents> implements PadView, TactileHost {
   private dailyRound = false;
   /** this start itself opened today's gel (for the "opened" count – a restart mid-pad is not an opening) */
   bootOpenedDaily = false;
+  /** this start counted as today's visit: the attendance streak, and whether it was the day's first */
+  bootVisit = { streak: 0, first: false };
+  /** game time of the next look at the calendar (a session can run past midnight without a pad opening) */
+  private dayCheckAt = 0;
   private padTotal = 0;
   private lastSocketRefresh = 0;
   /** Completion follows every flight and the existing collector sleep, not a POP timer. */
@@ -148,6 +155,15 @@ export class Game extends Emitter<GameEvents> implements PadView, TactileHost {
   private finaleCharge = 0;
   private finalePull: Pull | null = null;
   private finaleNote = 0;
+  /** "자석 싹쓸이" is taking the rest of this pad: no new grabs until it is done */
+  private sweeping = false;
+  /** when the magnet took hold, and when its last bead landed (game time; -1 = not yet) */
+  private magnetAt = -1;
+  private magnetEnd = -1;
+  /** beads the magnet is carrying – a glitter trail follows each */
+  private magnetized = new Set<Bead>();
+  /** small star bursts where the magnet freed a bead (canvas px) */
+  private bursts: { x: number; y: number; t: number; turn: number }[] = [];
   private readonly reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   private ro: ResizeObserver;
   /** `?perf=1` frame timing overlay (off otherwise) */
@@ -161,6 +177,8 @@ export class Game extends Emitter<GameEvents> implements PadView, TactileHost {
 
   constructor(private canvas: HTMLCanvasElement) {
     super();
+    // today's attendance first: a streak's rainbow day decides what today's gel looks like
+    this.bootVisit = this.daily.visit(today());
     this.ctx = canvas.getContext("2d", { alpha: true })!;
     // gel layer: a WebGL canvas slipped under the 2D one (same size, pointer-events off)
     const glc = document.createElement("canvas");
@@ -207,8 +225,8 @@ export class Game extends Emitter<GameEvents> implements PadView, TactileHost {
         // the first pad of a new day is today's gel (a caught variant goes first); a treasure
         // already bound to the next pad – one planted through an ad – goes with it
         if (!pad.variantOf && this.dailyDue()) {
-          pad = dailyPad(today());
-          this.startHidden = this.startHidden || this.rollHidden(pad, true, true);
+          pad = this.dayGel(today());
+          this.startHidden = this.dayGelHidden(pad, this.startHidden);
         }
         prog.open(pad);
         this.dailyRound = pad.daily === today();
@@ -220,7 +238,7 @@ export class Game extends Emitter<GameEvents> implements PadView, TactileHost {
         // mid-pad exit → same pad, fresh beads, the same buried treasure (a planted one included);
         // a gel of the day comes back with its own colour
         pad = prog.current;
-        const daily = prog.currentDaily ? dailyPad(prog.currentDaily) : undefined;
+        const daily = prog.currentDaily ? dailyPad(prog.currentDaily, prog.currentRainbow) : undefined;
         if (daily && daily.id === pad.id) pad = daily;
         this.dailyRound = pad.daily === today();
         this.startHidden = prog.currentHidden;
@@ -342,6 +360,11 @@ export class Game extends Emitter<GameEvents> implements PadView, TactileHost {
     this.finaleCharge = 0;
     this.finalePull = null;
     this.finaleNote = 0;
+    this.sweeping = false;
+    this.magnetAt = -1;
+    this.magnetEnd = -1;
+    this.magnetized.clear();
+    this.bursts = [];
     this.scheduled = [];
     for (const p of this.pulls.values()) this.releaseBead(p.bead);
     this.pulls.clear();
@@ -412,15 +435,28 @@ export class Game extends Emitter<GameEvents> implements PadView, TactileHost {
    * outcome, except for a new player's first pads; the first pad of a new day
    * makes "none" half as likely – that is the only daily difference.
    */
-  private rollHidden(pad: PadType, dayBonus = false, forceTreasure = false): string | null {
+  private rollHidden(pad: PadType, dayBonus = false, forceTreasure = false, newFirst = false): string | null {
     const pool = HIDDEN_POOLS[pad.variantOf ?? pad.id];
     if (!pool?.length) return null;
     const perk = pad.tier ? VARIANT_PERKS[pad.tier].treasure : undefined;
     const guarantee = forceTreasure || perk !== undefined || this.progressStore.totalCompleted < FIRST_TREASURE_GUARANTEE;
     const ultraIds = ULTRA_TYPES.map((t) => t.id);
     const boost = (id: string) => missingBoost(id, { found: this.treasure.has(id), dry: this.treasure.dry, target: this.treasure.target, ultraIds });
-    const picked = rng.weighted(pool, (e) => hiddenWeight(e, { guarantee, ultraOnly: perk === "ultra", dayBonus, ultraIds }) * boost(e.id));
+    // a rainbow gel buries one never found before while its pad still hides one
+    const from = newFirst ? rainbowPool(pool, (id) => this.treasure.has(id), ultraIds) : pool;
+    const picked = rng.weighted(from, (e) => hiddenWeight(e, { guarantee, ultraOnly: perk === "ultra", dayBonus, ultraIds }) * boost(e.id));
     return picked.id === NONE ? null : picked.id;
+  }
+
+  /** the gel of `day`: a rainbow gel when that day is a streak's rainbow day */
+  private dayGel(day: string) {
+    return dailyPad(day, this.daily.rainbowOn(day));
+  }
+  /** what today's gel buries: a treasure already bound to the next pad goes with it (one planted
+   * through an ad), except that a rainbow gel trades one already found for one never found */
+  private dayGelHidden(pad: PadType, carried: string | null | undefined) {
+    if (carried && !(pad.rainbow && this.treasure.has(carried))) return carried;
+    return this.rollHidden(pad, true, true, !!pad.rainbow);
   }
 
   /** treasure for the pad being generated: the pre-rolled one if there is one, else a fresh roll */
@@ -453,8 +489,8 @@ export class Game extends Emitter<GameEvents> implements PadView, TactileHost {
       // the first pad of a new day is today's gel – a variant passing by goes first, and a
       // treasure already bound to the next pad goes with it; otherwise it buries one for sure
       if (!this.pendingNext.variantOf && !this.pendingNext.daily && this.dailyDue()) {
-        const pad = dailyPad(today());
-        this.pendingHidden = this.pendingHidden || this.rollHidden(pad, true, true);
+        const pad = this.dayGel(today());
+        this.pendingHidden = this.dayGelHidden(pad, this.pendingHidden);
         this.pendingNext = pad;
         prog.setNext(pad, this.pendingHidden);
       }
@@ -472,9 +508,25 @@ export class Game extends Emitter<GameEvents> implements PadView, TactileHost {
   get isDaily() {
     return this.dailyRound;
   }
+  /** the pad on the table is today's gel in rainbow silicone */
+  get isRainbow() {
+    return this.dailyRound && !!this.pad.rainbow;
+  }
   /** today's gel waits: not opened yet today, and not a new player's first day or very first pad */
   private dailyDue() {
+    // past midnight with the game still open, today is a visit before its gel is decided: a streak's
+    // third day must not be handed yesterday's plain gel just because no pad has opened yet
+    this.noteVisit();
     return this.progressStore.totalCompleted >= 1 && this.daily.dailyDue(today());
+  }
+  /**
+   * Today counts as a visit (once a day). Checked while the game runs and when it comes back to the
+   * front – not only when a pad opens: a player who plays past midnight and leaves before the next
+   * pad was there that day, and their streak must not break over it.
+   */
+  noteVisit() {
+    const v = this.daily.visit(today());
+    if (v.first) this.emit("visit", { streak: v.streak });
   }
   /** the sure treasure a bonus dig would bury now – shown on the "한 번 더 파기" door before the ad */
   rollBonusTreasure() {
@@ -500,8 +552,8 @@ export class Game extends Emitter<GameEvents> implements PadView, TactileHost {
   /** roll the next pad's treasure again with the current state (see the completion in doPop) */
   private rerollNextHidden() {
     const pad = this.nextPad;
-    // today's gel always buries something
-    this.pendingHidden = this.rollHidden(pad, !!pad.daily, !!pad.daily);
+    // today's gel always buries something (a rainbow gel something new, while there is anything new)
+    this.pendingHidden = this.rollHidden(pad, !!pad.daily, !!pad.daily, !!pad.rainbow);
     this.progressStore.setNext(pad, this.pendingHidden);
   }
 
@@ -534,8 +586,9 @@ export class Game extends Emitter<GameEvents> implements PadView, TactileHost {
       // one of this month's limited pads
       theme: themeOfPad(pad.id)?.name,
       themeId: themeOfPad(pad.id)?.id,
-      // today's gel: a treasure for sure
+      // today's gel: a treasure for sure (a rainbow gel: a streak's reward)
       daily: pad.daily === today(),
+      rainbow: pad.daily === today() && !!pad.rainbow,
     };
   }
 
@@ -579,8 +632,12 @@ export class Game extends Emitter<GameEvents> implements PadView, TactileHost {
    * beads, so it is tidied away now – briefly, not wiped in one frame.
    */
   openPad(pad: PadType) {
-    // past midnight with the game still open: this pad is the new day's first, with its nudge
-    if (this.progressStore.rollDay()) this.emit("newDay", undefined);
+    // past midnight with the game still open: this pad is the new day's first, with its nudge,
+    // and the new day counts as a visit
+    if (this.progressStore.rollDay()) {
+      this.noteVisit();
+      this.emit("newDay", undefined);
+    }
     pad = this.tint(pad);
     this.progressStore.noteColor(colorKey(pad.gelColor));
     this.collector.dismiss();
@@ -625,6 +682,80 @@ export class Game extends Emitter<GameEvents> implements PadView, TactileHost {
     const next = this.nextPad;
     // a plain next pad keeps the colour NEXT already showed; a passing variant's base gets its own
     this.openPad(next.variantOf ? padById(next.id)! : next);
+  }
+
+  /** a magnet already paid for on this pad (its ad's reward came, then the app closed before the pad emptied) */
+  get magnetOwed() {
+    return this.progressStore.magnetOwed;
+  }
+  /** the magnet's ad paid out: kept until this pad is emptied, so a restart owes it */
+  earnMagnet() {
+    this.progressStore.oweMagnet();
+  }
+
+  /** the magnet could take the rest of this pad now (pads/magnet.ts), and nothing else is already taking it */
+  canMagnet() {
+    if (this.testBeads || this.sweeping || this.finishing) return false;
+    return magnetAllowed({ left: this.remainingCount(), completed: this.progressStore.totalCompleted, bonus: this.bonusRound });
+  }
+
+  /**
+   * "자석 싹쓸이" (paid by a rewarded ad): every bead still in the pad lets go by itself and flies
+   * to the jar – a treasure to its box – one after another, each through the ordinary POP, so finds
+   * are credited and the last one completes the pad as usual. First a beat of charge (the ad has
+   * just closed and the sound is coming back), then the beads on top, then the ones under them.
+   */
+  magnetSweep() {
+    const left = this.beads.filter((b) => b.state === "embedded" || b.state === "held");
+    if (this.sweeping || this.finishing || !left.length) return false;
+    this.sweeping = true;
+    // whatever a finger held lets go: the magnet has it now
+    for (const id of this.tactile.cancelAll()) this.fingers.delete(id);
+    for (const [id, p] of this.pulls) {
+      p.bead.state = "embedded";
+      p.bead.off.setTarget(0, 0);
+      this.gel.reanchor(id);
+    }
+    this.pulls.clear();
+    this.gel.markDirty();
+    const toward = (b: Bead) => {
+      const c = this.toCanvas(b.rx, b.ry);
+      const end = treasureKind(b.type) ? this.treasureEntry : this.collector.entry;
+      const d = Math.hypot(end.x - c.x, end.y - c.y) || 1;
+      return { x: (end.x - c.x) / d, y: (end.y - c.y) / d, d };
+    };
+    this.schedule(0.12, () => {
+      this.magnetAt = this.time;
+      sfx.magnet();
+      haptics.magnet();
+    });
+    // the charge: three tugs toward the jar, the gel shivering under every bead left
+    for (const at of [0.16, 0.27, 0.38].filter((t) => t < MAGNET_CHARGE)) {
+      this.schedule(at, () => {
+        for (const b of left) {
+          if (b.state !== "embedded") continue;
+          const dir = toward(b);
+          b.off.impulse(dir.x * 90 * this.s, (dir.y / this.gel.tilt) * 90 * this.s);
+          b.lift = Math.max(b.lift, 0.5);
+          this.gel.shock(b.rx, b.ry, b.radius, 1.2 * this.s);
+        }
+      });
+    }
+    // one at a time, each a note higher
+    magnetOrder(left, (b) => toward(b).d).forEach(({ bead, at }, i) => this.schedule(at, () => this.magnetPop(bead, i)));
+    return true;
+  }
+
+  private magnetPop(b: Bead, i: number) {
+    if (b.state !== "embedded" && b.state !== "held") return;
+    const pos = embeddedPosition(b, this.gel, this.s);
+    const from = this.toCanvas(pos.x, pos.y);
+    const end = treasureKind(b.type) ? this.treasureEntry : this.collector.entry;
+    const d = Math.hypot(end.x - from.x, end.y - from.y) || 1;
+    this.magnetized.add(b);
+    this.bursts.push({ x: from.x, y: from.y, t: 0, turn: Math.random() * Math.PI });
+    sfx.magnetNote(i);
+    this.doPop(b, -1, (end.x - from.x) / d, (end.y - from.y) / d, 700, true);
   }
 
   /** the pad with this opening's gel colour, never one of the last few on the table */
@@ -750,7 +881,8 @@ export class Game extends Emitter<GameEvents> implements PadView, TactileHost {
   private onDown = (p: PointerSample) => {
     sfx.beginGesture(p.id);
     const l = this.toLocal(p.x, p.y);
-    const b = this.topBeadAt(l.x, l.y);
+    // while the magnet takes the last beads the gel still answers a touch, but nothing can be grabbed
+    const b = this.sweeping ? null : this.topBeadAt(l.x, l.y);
     if (!this.gel.inside(l.x, l.y) && !b) return;
     this.fingers.set(p.id, { sample: p, lastMove: performance.now(), downAt: performance.now(), x0: p.x, y0: p.y, moved: 0, lastRub: 0, bareGel: !b });
     if (!b?.fiber || this.tactile.dimples(b)) this.gel.fingerDown(p.id, l.x, l.y);
@@ -886,7 +1018,7 @@ export class Game extends Emitter<GameEvents> implements PadView, TactileHost {
   }
 
   // ─── the moment ───────────────────────────────────────────────
-  private doPop(b: Bead, fingerId: number, dx: number, dy: number, speed: number) {
+  private doPop(b: Bead, fingerId: number, dx: number, dy: number, speed: number, magnet = false) {
     const s = this.s;
     const sizeStrength = pullSizeStrength(b, this.gel.R);
     const king = b.type.id === "king";
@@ -918,9 +1050,11 @@ export class Game extends Emitter<GameEvents> implements PadView, TactileHost {
     const kind = treasureKind(b.type);
     const end = kind ? this.treasureEntry : this.collector.entry;
     const mx = (start.x + end.x) / 2 + dx * 30 * s;
-    const my = Math.max(b.radius * 1.25, Math.min(start.y, end.y) - (70 + 60 * Math.random() + (king ? 40 : 0)) * s);
-    const dur = (king ? 0.48 : 0.46 + b.type.mass * 0.11) * (0.92 + Math.random() * 0.16);
-    const hang = t ? t.hang : king ? 0.15 : 0.12 + b.type.mass * 0.03;
+    // the magnet draws its beads straight in: a low arc, no hang, quicker
+    const rise = magnet ? 26 + 30 * Math.random() : 70 + 60 * Math.random() + (king ? 40 : 0);
+    const my = Math.max(b.radius * 1.25, Math.min(start.y, end.y) - rise * s);
+    const dur = (magnet ? 0.36 + b.type.mass * 0.05 : king ? 0.48 : 0.46 + b.type.mass * 0.11) * (0.92 + Math.random() * 0.16);
+    const hang = magnet ? 0.08 : t ? t.hang : king ? 0.15 : 0.12 + b.type.mass * 0.03;
     b.fly = {
       hang,
       x0: start.x,
@@ -1032,6 +1166,10 @@ export class Game extends Emitter<GameEvents> implements PadView, TactileHost {
 
   private update(dt: number) {
     this.time += dt;
+    if (this.time >= this.dayCheckAt) {
+      this.dayCheckAt = this.time + 15;
+      this.noteVisit();
+    }
     if (this.scheduled.length) {
       // compact in place; only allocate on the rare frames where something is due
       const list = this.scheduled;
@@ -1129,6 +1267,11 @@ export class Game extends Emitter<GameEvents> implements PadView, TactileHost {
             if (!b.fiber || this.tactile.popStyle(b).landSound) sfx.land(b.type.id === "king" ? "glass" : b.type.material, b.type.mass);
           }
           b.fly = undefined;
+          // the magnet's last bead is in: a burst of confetti under the fingers
+          if (this.magnetized.delete(b) && !this.magnetized.size && this.remainingCount() === 0) {
+            this.magnetEnd = this.time;
+            haptics.magnetDone();
+          }
         }
       }
     }
@@ -1170,6 +1313,10 @@ export class Game extends Emitter<GameEvents> implements PadView, TactileHost {
     for (let i = this.flashes.length - 1; i >= 0; i--) {
       this.flashes[i].t += dt;
       if (this.flashes[i].t > 0.55) this.flashes.splice(i, 1);
+    }
+    for (let i = this.bursts.length - 1; i >= 0; i--) {
+      this.bursts[i].t += dt;
+      if (this.bursts[i].t > 0.45) this.bursts.splice(i, 1);
     }
   }
 
@@ -1269,13 +1416,73 @@ export class Game extends Emitter<GameEvents> implements PadView, TactileHost {
     drawPadFinale(ctx, this.finaleT, gel.R, this.s, this.reducedMotion);
     ctx.restore();
 
+    this.drawMagnetPull(ctx);
     for (const b of this.beads) if (b.state === "flying" && b.fly) drawFlying(ctx, b, this, this.reducedMotion);
+    this.drawMagnetGlitter(ctx);
     this.collector.draw(ctx, dpr);
     drawJarFinale(ctx, this.finaleT, this.collector, this.reducedMotion);
     const hint = this.tactile.hintText();
     if (hint !== this.hint) {
       this.hint = hint;
       this.emit("tactileHint", { text: hint });
+    }
+  }
+
+  /** the jar drawing the last beads in: a soft halo behind it and rings closing on its mouth */
+  private drawMagnetPull(ctx: CanvasRenderingContext2D) {
+    if (this.magnetAt < 0) return;
+    const t = this.time - this.magnetAt;
+    const out = this.magnetEnd < 0 ? 1 : clamp(1 - (this.time - this.magnetEnd) / 0.5, 0, 1);
+    const k = Math.min(1, t / 0.25) * out;
+    if (k <= 0) return;
+    const c = this.collector;
+    const x = c.x + c.w / 2;
+    const y = c.y + c.h * 0.3;
+    const R = c.w * 0.98;
+    const pulse = this.reducedMotion ? 1 : 0.82 + 0.18 * Math.sin(t * 12);
+    const g = ctx.createRadialGradient(x, y, 0, x, y, R);
+    g.addColorStop(0, `rgba(255, 228, 244, ${0.85 * k * pulse})`);
+    g.addColorStop(0.55, `rgba(236, 150, 200, ${0.3 * k * pulse})`);
+    g.addColorStop(1, "rgba(236, 150, 200, 0)");
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(x, y, R, 0, Math.PI * 2);
+    ctx.fill();
+    if (this.reducedMotion) return;
+    ctx.save();
+    ctx.strokeStyle = "#e07fb2";
+    for (let i = 0; i < 3; i++) {
+      const p = (t * 1.6 + i / 3) % 1;
+      const r = R * (1.2 - p);
+      ctx.globalAlpha = k * Math.sin(p * Math.PI) * 0.75;
+      ctx.lineWidth = 1 + 2 * (1 - p);
+      ctx.beginPath();
+      ctx.ellipse(x, c.entry.y + 10, r, r * 0.36, 0, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  /** glitter behind every bead the magnet carries, and a small star burst where each let go */
+  private drawMagnetGlitter(ctx: CanvasRenderingContext2D) {
+    for (const b of this.magnetized) {
+      const f = b.fly;
+      if (!f) continue;
+      for (let j = 1; j <= 4; j++) {
+        const at = f.t - j * 0.04;
+        if (at <= 0) break;
+        const p = flyPos(b, this, at);
+        const wob = this.reducedMotion ? 0 : Math.sin(f.t * 23 + j * 1.7 + b.id) * 3;
+        drawFinishStar(ctx, p.x + wob, p.y - wob, (5.4 - j) * 1.15, (1 - j / 5) * 0.95, j % 2 ? "#ffcf5a" : "#ff93c9");
+      }
+    }
+    for (const u of this.bursts) {
+      const k = u.t / 0.45;
+      const r = (10 + 26 * easeOutCubic(k)) * this.s;
+      for (let i = 0; i < 6; i++) {
+        const a = u.turn + (i / 6) * Math.PI * 2;
+        drawFinishStar(ctx, u.x + Math.cos(a) * r, u.y + Math.sin(a) * r * 0.8, (i % 2 ? 4 : 5.5) * (1 - k * 0.5) * this.s, 1 - k, i % 2 ? "#ffcf5a" : "#ff93c9");
+      }
     }
   }
 

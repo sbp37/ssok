@@ -55,6 +55,7 @@ export function PadSilhouette({
       const { r, g, b } = pad.gelColor;
       ctx.fillStyle = `rgba(${r},${g},${b},0.92)`;
       ctx.fill("evenodd");
+      if (pad.rainbow) paintRainbow(ctx, R, 0.75);
       // a little of the real thing: pale centre, sheen
       const gr = ctx.createRadialGradient(-R * 0.2, -R * 0.3, 0, 0, 0, R);
       gr.addColorStop(0, "rgba(255,255,255,0.45)");
@@ -72,6 +73,7 @@ export function PadSilhouette({
       const ve = 1 - (1 - v) * (1 - v);
       ctx.fillStyle = `rgba(${mix(43, r)},${mix(39, g)},${mix(48, b)},${0.62 + 0.3 * ve})`;
       ctx.fill("evenodd");
+      if (pad.rainbow && ve > 0) paintRainbow(ctx, R, 0.75 * ve);
       if (v > 0.3) {
         const gr = ctx.createRadialGradient(-R * 0.2, -R * 0.3, 0, 0, 0, R);
         gr.addColorStop(0, `rgba(255,255,255,${0.45 * (v - 0.3) / 0.7})`);
@@ -102,6 +104,18 @@ export function PadSilhouette({
   );
 }
 
+/** a rainbow gel's soft bands, as on the table (gel/Gel.ts), over the current path */
+function paintRainbow(ctx: CanvasRenderingContext2D, R: number, alpha: number) {
+  const bands = ctx.createLinearGradient(-R, -R * 0.75, R, R * 0.75);
+  RAINBOW_BANDS.forEach((c, i) => bands.addColorStop(i / (RAINBOW_BANDS.length - 1), c));
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.fillStyle = bands;
+  ctx.fill("evenodd");
+  ctx.restore();
+}
+const RAINBOW_BANDS = ["#ff96aa", "#ffc48c", "#ffec8c", "#a0e8aa", "#96ccff", "#c4a6ff"];
+
 export interface NextView {
   pad: PadType;
   rare: boolean;
@@ -120,6 +134,8 @@ export interface NextView {
   themeId?: string;
   /** the next pad is today's gel */
   daily?: boolean;
+  /** …in rainbow silicone: a streak's reward */
+  rainbow?: boolean;
 }
 
 /**
@@ -128,7 +144,7 @@ export interface NextView {
  * glimpse. Never the pad itself.
  */
 export function NextPanel({ info, emphasis, reveal = 0 }: { info: NextView; emphasis: number; reveal?: number }) {
-  const { pad, rare, tier, rareNew, ultra, hidden, tactile, target, theme, themeId, daily } = info;
+  const { pad, rare, tier, rareNew, ultra, hidden, tactile, target, theme, themeId, daily, rainbow } = info;
   let line = "???";
   if (tier === "super") line = "초희귀 패드가 지나가고 있어 ✦";
   else if (rare) line = rareNew ? "처음 보는 질감이다 ✦" : "희귀 패드가 지나가고 있어 ✦";
@@ -139,7 +155,7 @@ export function NextPanel({ info, emphasis, reveal = 0 }: { info: NextView; emph
       <div className="next-label">NEXT</div>
       <PadSilhouette pad={pad} size={64} mode={ultra ? "partial" : "dark"} shimmer={rare} glint={!ultra} reveal={ultra ? 0 : reveal} />
       <div className={"next-q" + (rare ? " rare" : "")}>{line}</div>
-      {daily && <div className="next-daily">오늘의 젤 ✦ 보물 확정</div>}
+      {daily && (rainbow ? <div className="next-daily rainbow">무지개 젤 ✦ {hidden ? "새 보물" : "보물"} 확정</div> : <div className="next-daily">오늘의 젤 ✦ 보물 확정</div>)}
       {theme && (
         <div className="next-theme">
           {themeId && <img src={`${import.meta.env.BASE_URL}collection/theme-badge-${themeId}.svg`} alt="" width={16} height={16} />}

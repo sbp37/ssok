@@ -11,10 +11,10 @@ const JAR_GLINTS: readonly (readonly [number, number])[] = [
 ];
 
 /** a soft four-pointed glint */
-export function drawFinishStar(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, alpha: number) {
+export function drawFinishStar(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, alpha: number, color = "#fff9e8") {
   ctx.save();
   ctx.globalAlpha = clamp(alpha, 0, 1);
-  ctx.fillStyle = "#fff9e8";
+  ctx.fillStyle = color;
   ctx.beginPath();
   ctx.moveTo(x, y - r);
   ctx.quadraticCurveTo(x + r * 0.2, y - r * 0.2, x + r, y);

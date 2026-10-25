@@ -500,6 +500,25 @@ class Sfx {
     const f = up ? [880, 1320] : [660, 440];
     f.forEach((x, i) => this.tone("sine", x, x * 0.99, 0.35, 0.12, { delay: i * 0.09, attack: 0.005 }));
   }
+
+  /** "자석 싹쓸이" takes hold: a rising, glittery pull before the beads let go */
+  magnet() {
+    if (!this.ready) return;
+    this.tone("sine", 260, 1040, 0.42, 0.07, { attack: 0.06 });
+    this.tone("triangle", 390, 1560, 0.42, 0.025, { attack: 0.08, filter: 2400 });
+    this.burst(0.4, 0.05, { type: "bandpass", freq: 600, freq1: 3200, q: 1.4, attack: 0.12 });
+  }
+
+  /** one bell note per bead the magnet takes, each a step higher */
+  magnetNote(i: number) {
+    if (!this.ready) return;
+    const f = MAGNET_SCALE[Math.min(i, MAGNET_SCALE.length - 1)] * this.j(0.004);
+    this.tone("sine", f, f * 0.995, 0.24, 0.06, { attack: 0.004 });
+    this.tone("sine", f * 2, f * 1.99, 0.12, 0.018, { attack: 0.003 });
+  }
 }
+
+/** the magnet's arpeggio: a major scale from G5 up */
+const MAGNET_SCALE = [784, 880, 988, 1175, 1319, 1568, 1760, 1976];
 
 export const sfx = new Sfx();

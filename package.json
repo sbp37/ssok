@@ -13,7 +13,7 @@
     "ait:build": "ait build",
     "preview": "vite preview --host",
     "typecheck": "tsc --noEmit",
-    "test": "node tests/ad-policy.mjs && node tests/offers.mjs && node tests/promotion.mjs && node tests/round-pacing.mjs && node tests/sprite-cache.mjs && node tests/fibers.mjs && node tests/audio-unlock.mjs && node tests/share.mjs && node tests/save-repair.mjs && node tests/collection.mjs && node tests/theme-pads.mjs && node tests/themes.mjs && node tests/colors.mjs && node tests/restart.mjs && node tests/backup.mjs && node tests/daily.mjs && node tests/bracelets.mjs",
+    "test": "node tests/ad-policy.mjs && node tests/offers.mjs && node tests/promotion.mjs && node tests/round-pacing.mjs && node tests/sprite-cache.mjs && node tests/fibers.mjs && node tests/audio-unlock.mjs && node tests/share.mjs && node tests/save-repair.mjs && node tests/collection.mjs && node tests/theme-pads.mjs && node tests/themes.mjs && node tests/colors.mjs && node tests/restart.mjs && node tests/backup.mjs && node tests/daily.mjs && node tests/bracelets.mjs && node tests/magnet.mjs",
     "check": "pnpm typecheck && pnpm test",
     "toss:build": "pnpm build && ait build",
     "toss:build:live": "VITE_PROMOTION_MODE=live pnpm build && ait build",

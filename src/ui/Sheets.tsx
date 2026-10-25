@@ -8,7 +8,7 @@ import { PADS, variantCount } from "../game/pads/PadTypes";
 import { SHELF_SIZE, SPECIAL_TYPES, RARE_TYPES, TREASURE_TYPES } from "../game/rewards/treasure";
 import { TREASURE_SETS } from "../game/rewards/sets";
 import { activeTheme, dDay, daysLeft, themePads, upcomingTheme, type Theme } from "../game/rewards/themes";
-import { CARD_SIZE } from "../game/rewards/daily";
+import { CARD_SIZE, STREAK_GOAL } from "../game/rewards/daily";
 import { today } from "../game/pads/progress";
 import { track } from "../game/analytics";
 import { HIDDEN_POOLS } from "../game/rewards/rates";
@@ -281,6 +281,11 @@ function StampCard({ game }: { game: Game }) {
         ))}
       </div>
       <small>{todayDone ? "오늘 도장 받았어 · 내일 또 만나" : "오늘 한 판 비우면 도장 하나 · 7개면 심기권"}</small>
+      {d.streak > 0 && (
+        <small className="streak-line">
+          연속 출석 {d.streak}일 · {STREAK_GOAL}일 연속마다 오늘의 젤이 무지개 젤
+        </small>
+      )}
     </div>
   );
 }

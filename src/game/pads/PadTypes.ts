@@ -79,6 +79,8 @@ export interface PadType {
   /** a gel of the day (rewards/daily.ts): the date it belongs to ("2026-10-21"); its own pad and
    * colour, a treasure for sure. Opened on another day it is just a pad. */
   daily?: string;
+  /** a 무지개 젤: a streak's gel of the day, painted in rainbow silicone (gel/Gel.ts) */
+  rainbow?: boolean;
 }
 
 /**

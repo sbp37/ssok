@@ -70,6 +70,15 @@ const wobbleP = springParams(0.19, 0.28);
 const shockP = springParams(0.16, 0.26);
 
 const socketCache = new BoundedCache<string, HTMLCanvasElement>(256);
+/** the rainbow gel's bands (pastel, translucent: the slab's own light still shows through) */
+const RAINBOW = [
+  "rgba(255,150,170,0.5)",
+  "rgba(255,196,140,0.5)",
+  "rgba(255,236,140,0.48)",
+  "rgba(160,232,170,0.48)",
+  "rgba(150,204,255,0.5)",
+  "rgba(196,166,255,0.52)",
+];
 
 /** A socket is relaxed silicone, not a cookie-cutter copy of a hard charm.
  * Keep the overall silhouette while rounding star points and the heart tip. */
@@ -779,6 +788,13 @@ export class Gel {
     }
     ctx.fillStyle = body;
     ctx.fill("evenodd");
+    if (this.pad.rainbow) {
+      // 무지개 젤: soft bands of colour across the slab, under the beads – the mesh warps them with the gel
+      const bands = ctx.createLinearGradient(-R, -R * 0.75, R, R * 0.75);
+      RAINBOW.forEach((c, i) => bands.addColorStop(i / (RAINBOW.length - 1), c));
+      ctx.fillStyle = bands;
+      ctx.fill("evenodd");
+    }
     ctx.save();
     ctx.clip("evenodd");
     // thickness band hugging the actual (lobed) outline: several inset strokes

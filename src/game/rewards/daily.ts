@@ -11,8 +11,15 @@ import { Rng } from "../util/math";
  *  도장판     one stamp a day for emptying a pad; a missed day costs nothing.
  *             Seven stamps → one plant ticket, and a fresh card.
  *  심기권     makes the "심기" door free (no ad). One more for a share, once a day.
+ *  연속 출석  days in a row with a visit. Every third day in a row, that day's gel is a
+ *             무지개 젤: the same pad in rainbow silicone, burying a treasure never found
+ *             before while its pad still hides one. A missed day starts the count again.
  */
 export const CARD_SIZE = 7;
+/** every this many days in a row, the gel of the day is a rainbow gel */
+export const STREAK_GOAL = 3;
+/** the rainbow gel's own silicone: a pale base the rainbow is painted over (gel/Gel.ts) */
+export const RAINBOW_BASE = { r: 244, g: 232, b: 250 };
 const KEY = "ssok.daily.v1";
 
 interface Save {
@@ -29,10 +36,17 @@ interface Save {
   dailyDay: string;
   /** a new player's first day – no gel of the day until the next one ("" = any day) */
   firstDay: string;
+  /** days in a row with a visit, up to `visitDay` */
+  streak: number;
+  visitDay: string;
+  /** the day whose gel of the day is a rainbow gel */
+  rainbowDay: string;
 }
 
 const count = (v: unknown, max = 9999) => (Number.isFinite(v) && (v as number) >= 0 ? Math.min(max, Math.floor(v as number)) : 0);
 const text = (v: unknown) => (typeof v === "string" ? v : "");
+/** a well-formed day ("2026-10-25" – compares as text in calendar order), else "" */
+const dayText = (v: unknown) => (typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : "");
 
 export class DailyStore {
   private s: Save;
@@ -55,8 +69,14 @@ export class DailyStore {
           shareDay: text(saved.shareDay),
           dailyDay: text(saved.dailyDay),
           firstDay: text(saved.firstDay),
+          streak: count(saved.streak),
+          visitDay: dayText(saved.visitDay),
+          rainbowDay: dayText(saved.rainbowDay),
         }
-      : { stamps: 0, cards: 0, stampDay: "", tickets: 0, shareDay: "", dailyDay: "", firstDay: newPlayer ? day : "" };
+      : {
+          stamps: 0, cards: 0, stampDay: "", tickets: 0, shareDay: "", dailyDay: "", firstDay: newPlayer ? day : "",
+          streak: 0, visitDay: "", rainbowDay: "",
+        };
     this.save();
   }
 
@@ -118,6 +138,31 @@ export class DailyStore {
     return true;
   }
 
+  /** days in a row with a visit (0 before the first) */
+  get streak() {
+    return this.s.streak;
+  }
+  /**
+   * The player is here on `day`: the streak goes on from yesterday or starts again, and every
+   * STREAK_GOAL-th day in a row makes that day's gel a rainbow gel. `first`: the day's first visit.
+   */
+  visit(day: string): { streak: number; first: boolean } {
+    if (this.s.visitDay === day) return { streak: this.s.streak, first: false };
+    // the clock went back a day (a time zone, an auto-corrected clock around midnight): nothing changes.
+    // Further back, the saved day was wrong – the count starts again, and a rainbow day ahead is gone.
+    if (this.s.visitDay > day && dayBefore(this.s.visitDay) === day) return { streak: this.s.streak, first: false };
+    this.s.streak = this.s.visitDay === dayBefore(day) ? this.s.streak + 1 : 1;
+    this.s.visitDay = day;
+    if (this.s.rainbowDay > day) this.s.rainbowDay = "";
+    if (this.s.streak % STREAK_GOAL === 0) this.s.rainbowDay = day;
+    this.save();
+    return { streak: this.s.streak, first: true };
+  }
+  /** is `day`'s gel a rainbow gel */
+  rainbowOn(day: string) {
+    return this.s.rainbowDay === day;
+  }
+
   /** today's gel has not been opened today (and today is not a new player's first day) */
   dailyDue(day: string) {
     return this.s.dailyDay !== day && this.s.firstDay !== day;
@@ -138,9 +183,18 @@ function seedOf(day: string) {
   return h >>> 0;
 }
 
-/** today's gel: the same everyday pad and colour for everyone on that date */
-export function dailyPad(day: string): PadType {
+/** the calendar day before `day` ("2026-11-01" → "2026-10-31"), in the format of `today()` */
+export function dayBefore(day: string) {
+  const [y, m, d] = day.split("-").map(Number);
+  const t = new Date(y, m - 1, d - 1);
+  return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`;
+}
+
+/** today's gel: the same everyday pad and colour for everyone on that date – on a rainbow day,
+ * the same pad in rainbow silicone */
+export function dailyPad(day: string, rainbow = false): PadType {
   const rng = new Rng(seedOf("ssok-daily-" + day));
   const pad = rng.pick(PADS);
-  return { ...tinted(pad, [], () => rng.next()), daily: day };
+  const gel = { ...tinted(pad, [], () => rng.next()), daily: day };
+  return rainbow ? { ...gel, gelColor: { ...RAINBOW_BASE }, rainbow: true } : gel;
 }
